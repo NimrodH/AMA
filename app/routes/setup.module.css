@@ -101,69 +101,42 @@
   margin-top: var(--space-1);
 }
 
-.sqlDetails {
-  border: 1px solid var(--color-neutral-6);
-  border-radius: var(--radius-3);
-  overflow: hidden;
-}
-
-.sqlSummary {
-  font: var(--font-body);
-  font-weight: 600;
-  color: var(--color-neutral-11);
-  padding: var(--space-3) var(--space-4);
-  cursor: pointer;
+.tableOverview {
   background: var(--color-neutral-3);
-  user-select: none;
-}
-
-.sqlSummary:hover {
-  background: var(--color-neutral-4);
-}
-
-.sqlBlock {
-  font: var(--font-code);
-  font-size: 0.8rem;
-  background: var(--color-neutral-2);
-  color: var(--color-neutral-12);
-  padding: var(--space-4);
-  margin: 0;
-  overflow-x: auto;
-  white-space: pre;
-  line-height: 1.6;
-  border-top: 1px solid var(--color-neutral-6);
-}
-
-.instructions {
-  background: var(--color-accent-2);
-  border: 1px solid var(--color-accent-6);
+  border: 1px solid var(--color-neutral-6);
   border-radius: var(--radius-3);
   padding: var(--space-4) var(--space-5);
 }
 
-.instructions h2 {
+.tableOverviewTitle {
   font: var(--font-subheading);
-  color: var(--color-accent-11);
+  color: var(--color-neutral-12);
   margin: 0 0 var(--space-3);
 }
 
-.instructions ol {
-  margin: 0;
-  padding-left: var(--space-5);
+.tableGrid {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
 }
 
-.instructions li {
-  font: var(--font-body);
-  color: var(--color-neutral-11);
+.tableItem {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: var(--space-2) var(--space-3);
+  background: var(--color-neutral-2);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--color-neutral-5);
 }
 
-.instructions li code {
-  font: var(--font-code);
-  background: var(--color-accent-3);
-  padding: 1px 5px;
-  border-radius: var(--radius-1);
-  font-size: 0.85em;
+.tableName {
+  font: var(--font-body);
+  font-weight: 600;
+  color: var(--color-neutral-12);
+}
+
+.tableRows {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
 }

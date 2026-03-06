@@ -9,6 +9,23 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 export const supabase = createClient(supabaseUrl, supabaseAnonKey);
 
+/**
+ * Creates a Supabase client for server-side operations (loaders/actions).
+ * Uses SUPABASE_PROJECT_URL and SUPABASE_API_KEY env vars.
+ */
+export function createServerClient() {
+  const url = process.env.SUPABASE_PROJECT_URL;
+  const key = process.env.SUPABASE_API_KEY;
+
+  if (!url || !key) {
+    throw new Error(
+      "Missing server-side Supabase environment variables (SUPABASE_PROJECT_URL / SUPABASE_API_KEY)"
+    );
+  }
+
+  return createClient(url, key);
+}
+
 export type Database = {
   public: {
     Tables: {
