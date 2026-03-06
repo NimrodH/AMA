@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Trash2, Bell, BookOpen, Code } from "lucide-react";
+import { Plus, Trash2, Bell, BookOpen, Code, X } from "lucide-react";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -13,33 +13,100 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "הגדרות - מערכת ניהול לימודים" }];
 }
 
+type Course = { id: string; course_id: string; course_name: string };
+type Reminder = { id: string; type: string; time: string; icon: "book" | "bell"; enabled: boolean };
+
+const INITIAL_REMINDERS: Reminder[] = [
+  { id: "r1", type: "תזכורת להוספת כרטיס סיכום", time: "כל יום ב-20:00", icon: "book", enabled: true },
+  { id: "r2", type: "תזכורת לביצוע מבחן אימון", time: "כל שבוע ביום ראשון ב-18:00", icon: "bell", enabled: true },
+];
+
 export default function Settings() {
   const [studentName, setStudentName] = React.useState(mockStudent.name);
+  const [courses, setCourses] = React.useState<Course[]>(mockCourses);
+  const [reminders, setReminders] = React.useState<Reminder[]>(INITIAL_REMINDERS);
+
+  // Add course form state
+  const [showAddCourse, setShowAddCourse] = React.useState(false);
+  const [newCourseId, setNewCourseId] = React.useState("");
+  const [newCourseName, setNewCourseName] = React.useState("");
+
+  // Add reminder form state
+  const [showAddReminder, setShowAddReminder] = React.useState(false);
+  const [newReminderType, setNewReminderType] = React.useState("");
+  const [newReminderTime, setNewReminderTime] = React.useState("");
+
+  function handleRemoveCourse(id: string) {
+    setCourses((prev) => prev.filter((c) => c.id !== id));
+  }
+
+  function handleAddCourse(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newCourseId.trim() || !newCourseName.trim()) return;
+    setCourses((prev) => [
+      ...prev,
+      { id: `course_${Date.now()}`, course_id: newCourseId.trim(), course_name: newCourseName.trim() },
+    ]);
+    setNewCourseId("");
+    setNewCourseName("");
+    setShowAddCourse(false);
+  }
+
+  function handleCancelAddCourse() {
+    setNewCourseId("");
+    setNewCourseName("");
+    setShowAddCourse(false);
+  }
+
+  function handleToggleReminder(id: string, enabled: boolean) {
+    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, enabled } : r)));
+  }
+
+  function handleRemoveReminder(id: string) {
+    setReminders((prev) => prev.filter((r) => r.id !== id));
+  }
+
+  function handleAddReminder(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newReminderType.trim() || !newReminderTime.trim()) return;
+    setReminders((prev) => [
+      ...prev,
+      { id: `rem_${Date.now()}`, type: newReminderType.trim(), time: newReminderTime.trim(), icon: "bell", enabled: true },
+    ]);
+    setNewReminderType("");
+    setNewReminderTime("");
+    setShowAddReminder(false);
+  }
+
+  function handleCancelAddReminder() {
+    setNewReminderType("");
+    setNewReminderTime("");
+    setShowAddReminder(false);
+  }
 
   return (
     <AppLayout title="הגדרות">
       <div className={styles.settings}>
+        {/* Personal Info */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>פרטים אישיים</h2>
             <p className={styles.sectionDescription}>עדכן את הפרטים האישיים שלך</p>
           </div>
-
           <form className={styles.form}>
             <div>
               <Label htmlFor="studentName">שם מלא</Label>
               <Input id="studentName" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
             </div>
-
             <div>
               <Label htmlFor="studentId">מספר תעודת זהות</Label>
               <Input id="studentId" value={mockStudent.id} disabled />
             </div>
-
             <Button type="submit">שמור שינויים</Button>
           </form>
         </div>
 
+        {/* Courses */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>הקורסים שלי</h2>
@@ -47,26 +114,56 @@ export default function Settings() {
           </div>
 
           <div className={styles.coursesList}>
-            {mockCourses.map((course) => (
+            {courses.map((course) => (
               <div key={course.id} className={styles.courseItem}>
                 <div className={styles.courseInfo}>
                   <h3 className={styles.courseName}>{course.course_name}</h3>
                   <p className={styles.courseId}>{course.course_id}</p>
                 </div>
-                <Button variant="outline" size="sm">
+                <Button variant="outline" size="sm" onClick={() => handleRemoveCourse(course.id)}>
                   <Trash2 style={{ marginLeft: "var(--space-2)" }} />
                   הסר
                 </Button>
               </div>
             ))}
+
+            {showAddCourse && (
+              <form className={styles.addCourseForm} onSubmit={handleAddCourse}>
+                <div className={styles.addCourseFields}>
+                  <Input
+                    placeholder="שם הקורס"
+                    value={newCourseName}
+                    onChange={(e) => setNewCourseName(e.target.value)}
+                    autoFocus
+                  />
+                  <Input
+                    placeholder="קוד קורס (לדוג׳ chem101)"
+                    value={newCourseId}
+                    onChange={(e) => setNewCourseId(e.target.value)}
+                  />
+                </div>
+                <div className={styles.addFormActions}>
+                  <Button type="submit" size="sm" disabled={!newCourseName.trim() || !newCourseId.trim()}>
+                    הוסף
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={handleCancelAddCourse}>
+                    <X style={{ marginLeft: "var(--space-2)" }} />
+                    ביטול
+                  </Button>
+                </div>
+              </form>
+            )}
           </div>
 
-          <Button variant="outline">
-            <Plus style={{ marginLeft: "var(--space-2)" }} />
-            הוסף קורס חדש
-          </Button>
+          {!showAddCourse && (
+            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddCourse(true)}>
+              <Plus style={{ marginLeft: "var(--space-2)" }} />
+              הוסף קורס חדש
+            </Button>
+          )}
         </div>
 
+        {/* Reminders */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>תזכורות</h2>
@@ -74,39 +171,66 @@ export default function Settings() {
           </div>
 
           <div className={styles.remindersList}>
-            <div className={styles.reminderItem}>
-              <div className={styles.reminderInfo}>
-                <div className={styles.reminderIcon}>
-                  <BookOpen />
+            {reminders.map((reminder) => (
+              <div key={reminder.id} className={styles.reminderItem}>
+                <div className={styles.reminderInfo}>
+                  <div className={styles.reminderIcon}>
+                    {reminder.icon === "book" ? <BookOpen /> : <Bell />}
+                  </div>
+                  <div className={styles.reminderDetails}>
+                    <h3 className={styles.reminderType}>{reminder.type}</h3>
+                    <p className={styles.reminderTime}>{reminder.time}</p>
+                  </div>
                 </div>
-                <div className={styles.reminderDetails}>
-                  <h3 className={styles.reminderType}>תזכורת להוספת כרטיס סיכום</h3>
-                  <p className={styles.reminderTime}>כל יום ב-20:00</p>
+                <div className={styles.reminderActions}>
+                  <Switch
+                    checked={reminder.enabled}
+                    onCheckedChange={(enabled) => handleToggleReminder(reminder.id, enabled)}
+                  />
+                  <Button variant="outline" size="sm" onClick={() => handleRemoveReminder(reminder.id)} className={styles.removeReminderBtn}>
+                    <X />
+                  </Button>
                 </div>
               </div>
-              <Switch defaultChecked />
-            </div>
+            ))}
 
-            <div className={styles.reminderItem}>
-              <div className={styles.reminderInfo}>
-                <div className={styles.reminderIcon}>
-                  <Bell />
+            {showAddReminder && (
+              <form className={styles.addCourseForm} onSubmit={handleAddReminder}>
+                <div className={styles.addCourseFields}>
+                  <Input
+                    placeholder="תיאור התזכורת"
+                    value={newReminderType}
+                    onChange={(e) => setNewReminderType(e.target.value)}
+                    autoFocus
+                  />
+                  <Input
+                    placeholder="זמן (לדוג׳ כל יום ב-19:00)"
+                    value={newReminderTime}
+                    onChange={(e) => setNewReminderTime(e.target.value)}
+                  />
                 </div>
-                <div className={styles.reminderDetails}>
-                  <h3 className={styles.reminderType}>תזכורת לביצוע מבחן אימון</h3>
-                  <p className={styles.reminderTime}>כל שבוע ביום ראשון ב-18:00</p>
+                <div className={styles.addFormActions}>
+                  <Button type="submit" size="sm" disabled={!newReminderType.trim() || !newReminderTime.trim()}>
+                    הוסף
+                  </Button>
+                  <Button type="button" variant="outline" size="sm" onClick={handleCancelAddReminder}>
+                    <X style={{ marginLeft: "var(--space-2)" }} />
+                    ביטול
+                  </Button>
                 </div>
-              </div>
-              <Switch defaultChecked />
-            </div>
+              </form>
+            )}
           </div>
 
-          <Button variant="outline">
-            <Plus style={{ marginLeft: "var(--space-2)" }} />
-            הוסף תזכורת חדשה
-          </Button>
+          {!showAddReminder && (
+            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddReminder(true)}>
+              <Plus style={{ marginLeft: "var(--space-2)" }} />
+              הוסף תזכורת חדשה
+            </Button>
+          )}
         </div>
 
+        {/* API Settings */}
         <div className={`${styles.section} ${styles.apiSection}`}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle} style={{ color: "var(--color-accent-12)" }}>
@@ -131,21 +255,11 @@ export default function Settings() {
               <li>
                 צור את הטבלאות הבאות בפרויקט שלך:
                 <ul style={{ marginTop: "var(--space-2)" }}>
-                  <li>
-                    <code>students</code> - פרטי סטודנטים
-                  </li>
-                  <li>
-                    <code>courses</code> - קורסים
-                  </li>
-                  <li>
-                    <code>sources</code> - מקורות לימוד
-                  </li>
-                  <li>
-                    <code>exams</code> - מבחנים
-                  </li>
-                  <li>
-                    <code>reminders</code> - תזכורות
-                  </li>
+                  <li><code>students</code> - פרטי סטודנטים</li>
+                  <li><code>courses</code> - קורסים</li>
+                  <li><code>sources</code> - מקורות לימוד</li>
+                  <li><code>exams</code> - מבחנים</li>
+                  <li><code>reminders</code> - תזכורות</li>
                 </ul>
               </li>
               <li>העתק את ה-URL וה-anon key מהגדרות הפרויקט</li>
