@@ -63,7 +63,7 @@
 
 .contentFloating {
   border-radius: var(--radius-3);
-  border: var(--border-size-1) solid red;
+  border: var(--border-size-1) solid var(--color-neutral-6);
   box-shadow: var(--shadow-3);
 }
 
@@ -127,7 +127,7 @@
   inset-block: 0;
   left: 50%;
   width: 2px;
-  background: red;
+  background: var(--color-neutral-6);
 }
 
 [data-side="left"] .rail {
@@ -155,7 +155,7 @@
 }
 
 [data-collapsible="offcanvas"] .rail:hover {
-  background: red;
+  background: var(--color-accent-4);
 }
 
 [data-side="left"][data-collapsible="offcanvas"] .rail {
@@ -173,7 +173,7 @@
   padding-inline: var(--space-4);
   font-size: var(--font-size-0);
   font-weight: 500;
-  color: red;
+  color: var(--color-neutral-10);
   transition:
     margin 200ms var(--ease),
     opacity 200ms var(--ease);
@@ -194,7 +194,7 @@
   align-items: center;
   justify-content: center;
   border-radius: var(--radius-1);
-  color: red;
+  color: var(--color-neutral-11);
   outline: none;
   transition: transform 150ms var(--ease);
 }
@@ -213,12 +213,12 @@
 }
 
 .groupAction:hover {
-  background: red;
-  color: red;
+  background: var(--color-neutral-4);
+  color: var(--color-neutral-12);
 }
 
 .groupAction:focus-visible {
-  box-shadow: 0 0 0 2px red;
+  box-shadow: 0 0 0 2px var(--color-accent-8);
 }
 
 [data-collapsible="icon"] .groupAction {
@@ -245,7 +245,7 @@
   gap: var(--space-4);
   padding: var(--space-4);
   font-size: var(--font-size-2);
-  color: red;
+  color: var(--color-neutral-11);
   border-radius: var(--radius-2);
   transition: background 150ms var(--ease);
   height: 64px;
@@ -255,26 +255,26 @@
 }
 
 .menuButton:hover {
-  background: red;
+  background: var(--color-neutral-4);
 }
 
 .menuButton:focus-visible {
-  box-shadow: 0 0 0 2px red;
+  box-shadow: 0 0 0 2px var(--color-accent-8);
 }
 
 .menuButtonActive {
-  background: red;
+  background: var(--color-accent-3);
   font-weight: 500;
 }
 
 .menuButtonOutline {
-  background: red;
-  box-shadow: 0 0 0 1px red;
+  background: transparent;
+  box-shadow: 0 0 0 1px var(--color-neutral-7);
 }
 
 .menuButtonOutline:hover {
-  background: red;
-  box-shadow: 0 0 0 1px red;
+  background: var(--color-neutral-4);
+  box-shadow: 0 0 0 1px var(--color-neutral-8);
 }
 
 .menuButtonSm {
@@ -306,7 +306,7 @@
   align-items: center;
   justify-content: center;
   padding: var(--space-2);
-  color: red;
+  color: var(--color-neutral-10);
   border-radius: var(--radius-1);
 }
 
@@ -323,8 +323,8 @@
 }
 
 .menuAction:hover {
-  background: red;
-  color: red;
+  background: var(--color-neutral-4);
+  color: var(--color-neutral-12);
 }
 
 [data-show-on-hover="true"] {
@@ -365,7 +365,7 @@
   padding-inline: var(--space-2);
   font-size: var(--font-size-0);
   font-weight: 500;
-  color: red;
+  color: var(--color-neutral-10);
   user-select: none;
   pointer-events: none;
 }
@@ -384,7 +384,7 @@
 
 .menuButton:hover + .menuBadge,
 [data-active="true"] + .menuBadge {
-  color: red;
+  color: var(--color-neutral-12);
 }
 
 [data-collapsible="icon"] .menuBadge {
@@ -419,7 +419,7 @@
   margin-left: 28px;
   padding-left: 20px;
   padding-block: var(--space-1);
-  border-left: 1px solid red;
+  border-left: 1px solid var(--color-neutral-6);
   min-width: 0;
   transform: translateX(1px);
 }
@@ -438,7 +438,7 @@
   gap: var(--space-4);
   padding: var(--space-2) var(--space-4);
   font-size: var(--font-size-2);
-  color: red;
+  color: var(--color-neutral-11);
   border-radius: var(--radius-2);
   transition: background 150ms var(--ease);
   height: 56px;
@@ -449,17 +449,17 @@
 }
 
 .menuSubButton:hover {
-  background: red;
-  color: red;
+  background: var(--color-neutral-4);
+  color: var(--color-neutral-12);
 }
 
 .menuSubButton:focus-visible {
-  box-shadow: 0 0 0 2px red;
+  box-shadow: 0 0 0 2px var(--color-accent-8);
 }
 
 .menuSubButtonActive {
-  background: red;
-  color: red;
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
   font-weight: 500;
 }
 
@@ -484,12 +484,12 @@
 .input {
   height: 64px;
   width: 100%;
-  background: red;
+  background: var(--color-neutral-3);
   box-shadow: none;
 }
 
 .input:focus-visible {
-  box-shadow: 0 0 0 2px red;
+  box-shadow: 0 0 0 2px var(--color-accent-8);
 }
 
 .inset {
@@ -517,9 +517,9 @@
 
 .mobileContent {
   width: var(--sidebar-width);
-  background: red;
+  background: var(--color-neutral-2);
   padding: 0;
-  color: red;
+  color: var(--color-neutral-11);
 }
 
 .mobileContent > button {
