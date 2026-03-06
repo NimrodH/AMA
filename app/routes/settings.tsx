@@ -1,30 +1,98 @@
 import * as React from "react";
 import { Plus, Trash2, Bell, BookOpen, Code, X } from "lucide-react";
+import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Switch } from "~/components/ui/switch/switch";
-import { mockStudent, mockCourses } from "~/data/mock-data";
+import {
+  getStudent,
+  getCourses,
+  getReminders,
+  updateStudentName,
+  addCourse,
+  deleteCourse,
+  addReminder,
+  toggleReminder,
+  deleteReminder,
+} from "~/services/settings.service";
 import styles from "./settings.module.css";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "הגדרות - מערכת ניהול לימודים" }];
 }
 
-type Course = { id: string; course_id: string; course_name: string };
-type Reminder = { id: string; type: string; time: string; icon: "book" | "bell"; enabled: boolean };
+// ─── Loader ──────────────────────────────────────────────────────────────────
 
-const INITIAL_REMINDERS: Reminder[] = [
-  { id: "r1", type: "תזכורת להוספת כרטיס סיכום", time: "כל יום ב-20:00", icon: "book", enabled: true },
-  { id: "r2", type: "תזכורת לביצוע מבחן אימון", time: "כל שבוע ביום ראשון ב-18:00", icon: "bell", enabled: true },
-];
+export async function loader() {
+  const student = await getStudent();
+  if (!student) return { student: null, courses: [], reminders: [] };
 
-export default function Settings() {
-  const [studentName, setStudentName] = React.useState(mockStudent.name);
-  const [courses, setCourses] = React.useState<Course[]>(mockCourses);
-  const [reminders, setReminders] = React.useState<Reminder[]>(INITIAL_REMINDERS);
+  const [courses, reminders] = await Promise.all([
+    getCourses(student.id),
+    getReminders(student.id),
+  ]);
+
+  return { student, courses, reminders };
+}
+
+// ─── Action ──────────────────────────────────────────────────────────────────
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+  const studentId = formData.get("student_id") as string;
+
+  switch (intent) {
+    case "update_name": {
+      const name = formData.get("name") as string;
+      if (name?.trim()) await updateStudentName(studentId, name.trim());
+      break;
+    }
+    case "add_course": {
+      const courseId = formData.get("course_id") as string;
+      const courseName = formData.get("course_name") as string;
+      if (courseId?.trim() && courseName?.trim()) {
+        await addCourse(studentId, courseId.trim(), courseName.trim());
+      }
+      break;
+    }
+    case "delete_course": {
+      const id = formData.get("id") as string;
+      if (id) await deleteCourse(id);
+      break;
+    }
+    case "add_reminder": {
+      const reminderType = formData.get("reminder_type") as string;
+      const reminderTime = formData.get("reminder_time") as string;
+      if (reminderType?.trim() && reminderTime?.trim()) {
+        await addReminder(studentId, reminderType.trim(), reminderTime.trim());
+      }
+      break;
+    }
+    case "toggle_reminder": {
+      const id = formData.get("id") as string;
+      const isActive = formData.get("is_active") === "true";
+      if (id) await toggleReminder(id, isActive);
+      break;
+    }
+    case "delete_reminder": {
+      const id = formData.get("id") as string;
+      if (id) await deleteReminder(id);
+      break;
+    }
+  }
+
+  return { ok: true };
+}
+
+// ─── Component ───────────────────────────────────────────────────────────────
+
+export default function Settings({ loaderData }: Route.ComponentProps) {
+  const { student, courses, reminders } = loaderData;
+  const fetcher = useFetcher();
 
   // Add course form state
   const [showAddCourse, setShowAddCourse] = React.useState(false);
@@ -36,74 +104,79 @@ export default function Settings() {
   const [newReminderType, setNewReminderType] = React.useState("");
   const [newReminderTime, setNewReminderTime] = React.useState("");
 
-  function handleRemoveCourse(id: string) {
-    setCourses((prev) => prev.filter((c) => c.id !== id));
+  // Close add-course form after successful submission
+  const prevFetcherState = React.useRef(fetcher.state);
+  React.useEffect(() => {
+    if (prevFetcherState.current !== "idle" && fetcher.state === "idle") {
+      setShowAddCourse(false);
+      setNewCourseId("");
+      setNewCourseName("");
+      setShowAddReminder(false);
+      setNewReminderType("");
+      setNewReminderTime("");
+    }
+    prevFetcherState.current = fetcher.state;
+  }, [fetcher.state]);
+
+  if (!student) {
+    return (
+      <AppLayout title="הגדרות">
+        <p style={{ padding: "var(--space-6)", color: "var(--color-error-11)" }}>
+          לא נמצא סטודנט במסד הנתונים.
+        </p>
+      </AppLayout>
+    );
+  }
+
+  function submitIntent(data: Record<string, string>) {
+    fetcher.submit({ student_id: student!.id, ...data }, { method: "POST" });
   }
 
   function handleAddCourse(e: React.FormEvent) {
     e.preventDefault();
     if (!newCourseId.trim() || !newCourseName.trim()) return;
-    setCourses((prev) => [
-      ...prev,
-      { id: `course_${Date.now()}`, course_id: newCourseId.trim(), course_name: newCourseName.trim() },
-    ]);
-    setNewCourseId("");
-    setNewCourseName("");
-    setShowAddCourse(false);
-  }
-
-  function handleCancelAddCourse() {
-    setNewCourseId("");
-    setNewCourseName("");
-    setShowAddCourse(false);
-  }
-
-  function handleToggleReminder(id: string, enabled: boolean) {
-    setReminders((prev) => prev.map((r) => (r.id === id ? { ...r, enabled } : r)));
-  }
-
-  function handleRemoveReminder(id: string) {
-    setReminders((prev) => prev.filter((r) => r.id !== id));
+    submitIntent({
+      intent: "add_course",
+      course_id: newCourseId,
+      course_name: newCourseName,
+    });
   }
 
   function handleAddReminder(e: React.FormEvent) {
     e.preventDefault();
     if (!newReminderType.trim() || !newReminderTime.trim()) return;
-    setReminders((prev) => [
-      ...prev,
-      { id: `rem_${Date.now()}`, type: newReminderType.trim(), time: newReminderTime.trim(), icon: "bell", enabled: true },
-    ]);
-    setNewReminderType("");
-    setNewReminderTime("");
-    setShowAddReminder(false);
-  }
-
-  function handleCancelAddReminder() {
-    setNewReminderType("");
-    setNewReminderTime("");
-    setShowAddReminder(false);
+    submitIntent({
+      intent: "add_reminder",
+      reminder_type: newReminderType,
+      reminder_time: newReminderTime,
+    });
   }
 
   return (
     <AppLayout title="הגדרות">
       <div className={styles.settings}>
+
         {/* Personal Info */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>פרטים אישיים</h2>
             <p className={styles.sectionDescription}>עדכן את הפרטים האישיים שלך</p>
           </div>
-          <form className={styles.form}>
+          <fetcher.Form method="POST" className={styles.form}>
+            <input type="hidden" name="intent" value="update_name" />
+            <input type="hidden" name="student_id" value={student.id} />
             <div>
               <Label htmlFor="studentName">שם מלא</Label>
-              <Input id="studentName" value={studentName} onChange={(e) => setStudentName(e.target.value)} />
+              <Input id="studentName" name="name" defaultValue={student.name} />
             </div>
             <div>
-              <Label htmlFor="studentId">מספר תעודת זהות</Label>
-              <Input id="studentId" value={mockStudent.id} disabled />
+              <Label htmlFor="studentId">מזהה סטודנט</Label>
+              <Input id="studentId" value={student.id} disabled />
             </div>
-            <Button type="submit">שמור שינויים</Button>
-          </form>
+            <Button type="submit" disabled={fetcher.state !== "idle"}>
+              שמור שינויים
+            </Button>
+          </fetcher.Form>
         </div>
 
         {/* Courses */}
@@ -120,7 +193,11 @@ export default function Settings() {
                   <h3 className={styles.courseName}>{course.course_name}</h3>
                   <p className={styles.courseId}>{course.course_id}</p>
                 </div>
-                <Button variant="outline" size="sm" onClick={() => handleRemoveCourse(course.id)}>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => submitIntent({ intent: "delete_course", id: course.id })}
+                >
                   <Trash2 style={{ marginLeft: "var(--space-2)" }} />
                   הסר
                 </Button>
@@ -143,10 +220,19 @@ export default function Settings() {
                   />
                 </div>
                 <div className={styles.addFormActions}>
-                  <Button type="submit" size="sm" disabled={!newCourseName.trim() || !newCourseId.trim()}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!newCourseName.trim() || !newCourseId.trim() || fetcher.state !== "idle"}
+                  >
                     הוסף
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleCancelAddCourse}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setShowAddCourse(false); setNewCourseId(""); setNewCourseName(""); }}
+                  >
                     <X style={{ marginLeft: "var(--space-2)" }} />
                     ביטול
                   </Button>
@@ -156,7 +242,11 @@ export default function Settings() {
           </div>
 
           {!showAddCourse && (
-            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddCourse(true)}>
+            <Button
+              variant="outline"
+              style={{ marginTop: "var(--space-4)" }}
+              onClick={() => setShowAddCourse(true)}
+            >
               <Plus style={{ marginLeft: "var(--space-2)" }} />
               הוסף קורס חדש
             </Button>
@@ -175,19 +265,26 @@ export default function Settings() {
               <div key={reminder.id} className={styles.reminderItem}>
                 <div className={styles.reminderInfo}>
                   <div className={styles.reminderIcon}>
-                    {reminder.icon === "book" ? <BookOpen /> : <Bell />}
+                    <Bell />
                   </div>
                   <div className={styles.reminderDetails}>
-                    <h3 className={styles.reminderType}>{reminder.type}</h3>
-                    <p className={styles.reminderTime}>{reminder.time}</p>
+                    <h3 className={styles.reminderType}>{reminder.reminder_type}</h3>
+                    <p className={styles.reminderTime}>{reminder.reminder_time}</p>
                   </div>
                 </div>
                 <div className={styles.reminderActions}>
                   <Switch
-                    checked={reminder.enabled}
-                    onCheckedChange={(enabled) => handleToggleReminder(reminder.id, enabled)}
+                    checked={reminder.is_active}
+                    onCheckedChange={(checked) =>
+                      submitIntent({ intent: "toggle_reminder", id: reminder.id, is_active: String(checked) })
+                    }
                   />
-                  <Button variant="outline" size="sm" onClick={() => handleRemoveReminder(reminder.id)} className={styles.removeReminderBtn}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => submitIntent({ intent: "delete_reminder", id: reminder.id })}
+                    className={styles.removeReminderBtn}
+                  >
                     <X />
                   </Button>
                 </div>
@@ -210,10 +307,19 @@ export default function Settings() {
                   />
                 </div>
                 <div className={styles.addFormActions}>
-                  <Button type="submit" size="sm" disabled={!newReminderType.trim() || !newReminderTime.trim()}>
+                  <Button
+                    type="submit"
+                    size="sm"
+                    disabled={!newReminderType.trim() || !newReminderTime.trim() || fetcher.state !== "idle"}
+                  >
                     הוסף
                   </Button>
-                  <Button type="button" variant="outline" size="sm" onClick={handleCancelAddReminder}>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => { setShowAddReminder(false); setNewReminderType(""); setNewReminderTime(""); }}
+                  >
                     <X style={{ marginLeft: "var(--space-2)" }} />
                     ביטול
                   </Button>
@@ -223,7 +329,11 @@ export default function Settings() {
           </div>
 
           {!showAddReminder && (
-            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddReminder(true)}>
+            <Button
+              variant="outline"
+              style={{ marginTop: "var(--space-4)" }}
+              onClick={() => setShowAddReminder(true)}
+            >
               <Plus style={{ marginLeft: "var(--space-2)" }} />
               הוסף תזכורת חדשה
             </Button>
@@ -266,9 +376,9 @@ export default function Settings() {
               <li>
                 הוסף אותם לקובץ <code>.env</code>:
                 <br />
-                <code>VITE_SUPABASE_URL=your-url</code>
+                <code>SUPABASE_PROJECT_URL=your-url</code>
                 <br />
-                <code>VITE_SUPABASE_ANON_KEY=your-key</code>
+                <code>SUPABASE_API_KEY=your-key</code>
               </li>
             </ol>
 
@@ -284,7 +394,7 @@ export default function Settings() {
               <li>
                 הוסף את המפתח לקובץ <code>.env</code>:
                 <br />
-                <code>VITE_OPENAI_API_KEY=your-api-key</code>
+                <code>OPENAI_API_KEY=your-api-key</code>
               </li>
             </ol>
 
