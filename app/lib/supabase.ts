@@ -1,19 +1,10 @@
-import { createClient } from "@supabase/supabase-js";
-
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
-
-if (!supabaseUrl || !supabaseAnonKey) {
-  throw new Error("Missing Supabase environment variables");
-}
-
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
  * Creates a Supabase client for server-side operations (loaders/actions).
- * Uses SUPABASE_PROJECT_URL and SUPABASE_API_KEY env vars.
+ * Uses SUPABASE_PROJECT_URL and SUPABASE_API_KEY env vars set by the Dazl integration.
  */
-export function createServerClient() {
+export function createServerClient(): SupabaseClient {
   const url = process.env.SUPABASE_PROJECT_URL;
   const key = process.env.SUPABASE_API_KEY;
 
