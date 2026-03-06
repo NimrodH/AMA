@@ -1,6 +1,6 @@
 import * as React from "react";
 import { NavLink } from "react-router";
-import { Home, FileText, BookOpen, GraduationCap, Settings, Menu } from "lucide-react";
+import { Home, FileText, BookOpen, GraduationCap, Settings } from "lucide-react";
 import classNames from "classnames";
 import {
   Sidebar,

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Upload, Filter } from "lucide-react";
+import { Upload } from "lucide-react";
 import type { Route } from "./+types/sources";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
