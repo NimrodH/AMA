@@ -1,0 +1,87 @@
+.cards {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.editor {
+  background: var(--color-neutral-2);
+  border-radius: var(--radius-4);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--color-neutral-6);
+}
+
+.editorHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-4);
+}
+
+.editorTitle {
+  font: var(--font-heading);
+  color: var(--color-neutral-12);
+  margin: 0;
+}
+
+.editorForm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.editorActions {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+
+.feedbackSection {
+  background: linear-gradient(135deg, var(--color-accent-1) 0%, var(--color-accent-2) 100%);
+  border-radius: var(--radius-3);
+  padding: var(--space-5);
+  border: 2px solid var(--color-accent-6);
+  margin-top: var(--space-4);
+}
+
+.feedbackTitle {
+  font: var(--font-subheading);
+  color: var(--color-accent-12);
+  margin: 0 0 var(--space-3) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.feedbackTitle svg {
+  width: 20px;
+  height: 20px;
+}
+
+.feedbackContent {
+  font: var(--font-body);
+  color: var(--color-accent-11);
+  line-height: 1.8;
+  white-space: pre-wrap;
+}
+
+.cardsList {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+@media (max-width: 480px) {
+  .editor {
+    padding: var(--space-4);
+  }
+
+  .editorActions {
+    flex-direction: column;
+  }
+
+  .cardsList {
+    grid-template-columns: 1fr;
+  }
+}

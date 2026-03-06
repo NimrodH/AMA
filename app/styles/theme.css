@@ -1,43 +1,43 @@
 /* Typography */
 html {
-  --font-display: 900 var(--font-size-fluid-3) var(--font-transitional);
-  --font-heading: 600 var(--font-size-fluid-2) var(--font-transitional);
-  --font-subheading: 400 var(--font-size-fluid-1) var(--font-system-ui);
-  --font-body: var(--font-size-fluid-0) var(--font-system-ui);
-  --font-caption: var(--font-size-fluid-0) var(--font-system-ui);
-  --font-code: var(--font-size-fluid-0) var(--font-monospace-code);
+  --font-display: 700 var(--font-size-fluid-3) / 1.2 "Rubik", var(--font-system-ui);
+  --font-heading: 600 var(--font-size-fluid-2) / 1.3 "Rubik", var(--font-system-ui);
+  --font-subheading: 500 var(--font-size-fluid-1) / 1.4 "Heebo", var(--font-system-ui);
+  --font-body: 400 var(--font-size-fluid-0) / 1.6 "Heebo", var(--font-system-ui);
+  --font-caption: 400 var(--font-size-fluid-0) / 1.5 "Heebo", var(--font-system-ui);
+  --font-code: var(--font-size-fluid-0) / 1.5 var(--font-monospace-code);
 }
 
 html {
-  /* Neutral colors */
-  --color-neutral-1: var(--slate-1);
-  --color-neutral-2: var(--slate-2);
-  --color-neutral-3: var(--slate-3);
-  --color-neutral-4: var(--slate-4);
-  --color-neutral-5: var(--slate-5);
-  --color-neutral-6: var(--slate-6);
-  --color-neutral-7: var(--slate-7);
-  --color-neutral-8: var(--slate-8);
-  --color-neutral-9: var(--slate-9);
-  --color-neutral-10: var(--slate-10);
-  --color-neutral-11: var(--slate-11);
-  --color-neutral-12: var(--slate-12);
-  --color-neutral-contrast: var(--slate-contrast);
+  /* Neutral colors - warm parchment foundation */
+  --color-neutral-1: var(--sand-1);
+  --color-neutral-2: var(--sand-2);
+  --color-neutral-3: var(--sand-3);
+  --color-neutral-4: var(--sand-4);
+  --color-neutral-5: var(--sand-5);
+  --color-neutral-6: var(--sand-6);
+  --color-neutral-7: var(--sand-7);
+  --color-neutral-8: var(--sand-8);
+  --color-neutral-9: var(--sand-9);
+  --color-neutral-10: var(--sand-10);
+  --color-neutral-11: var(--sand-11);
+  --color-neutral-12: var(--sand-12);
+  --color-neutral-contrast: var(--sand-contrast);
 
-  /* Accent colors */
-  --color-accent-1: var(--blue-1);
-  --color-accent-2: var(--blue-2);
-  --color-accent-3: var(--blue-3);
-  --color-accent-4: var(--blue-4);
-  --color-accent-5: var(--blue-5);
-  --color-accent-6: var(--blue-6);
-  --color-accent-7: var(--blue-7);
-  --color-accent-8: var(--blue-8);
-  --color-accent-9: var(--blue-9);
-  --color-accent-10: var(--blue-10);
-  --color-accent-11: var(--blue-11);
-  --color-accent-12: var(--blue-12);
-  --color-accent-contrast: var(--blue-contrast);
+  /* Accent colors - Knowledge Emerald for AI insights */
+  --color-accent-1: var(--teal-1);
+  --color-accent-2: var(--teal-2);
+  --color-accent-3: var(--teal-3);
+  --color-accent-4: var(--teal-4);
+  --color-accent-5: var(--teal-5);
+  --color-accent-6: var(--teal-6);
+  --color-accent-7: var(--teal-7);
+  --color-accent-8: var(--teal-8);
+  --color-accent-9: var(--teal-9);
+  --color-accent-10: var(--teal-10);
+  --color-accent-11: var(--teal-11);
+  --color-accent-12: var(--teal-12);
+  --color-accent-contrast: var(--teal-contrast);
 
   /* Error colors */
   --color-error-1: var(--red-1);
@@ -68,4 +68,17 @@ html {
   --color-success-11: var(--green-11);
   --color-success-12: var(--green-12);
   --color-success-contrast: var(--green-contrast);
+
+  /* Additional semantic colors for categorization */
+  --color-lecture-1: var(--blue-1);
+  --color-lecture-9: var(--blue-9);
+  --color-lecture-11: var(--blue-11);
+
+  --color-exam-1: var(--amber-1);
+  --color-exam-9: var(--amber-9);
+  --color-exam-11: var(--amber-11);
+
+  --color-card-1: var(--violet-1);
+  --color-card-9: var(--violet-9);
+  --color-card-11: var(--violet-11);
 }

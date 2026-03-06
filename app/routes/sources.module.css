@@ -1,0 +1,99 @@
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.filters {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: var(--space-4);
+}
+
+.uploadDialog {
+  max-width: 600px;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.fileInput {
+  border: 2px dashed var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  padding: var(--space-6);
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.2s var(--ease-out);
+  background: var(--color-neutral-2);
+}
+
+.fileInput:hover {
+  border-color: var(--color-accent-9);
+  background: var(--color-accent-1);
+}
+
+.fileInputActive {
+  border-color: var(--color-accent-9);
+  background: var(--color-accent-2);
+}
+
+.fileInputIcon {
+  width: 48px;
+  height: 48px;
+  margin: 0 auto var(--space-3);
+  color: var(--color-neutral-9);
+}
+
+.fileInputText {
+  font: var(--font-body);
+  color: var(--color-neutral-11);
+  margin: 0;
+}
+
+.fileName {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  margin-top: var(--space-2);
+  font-weight: 600;
+}
+
+@media (max-width: 480px) {
+  .header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .filters {
+    flex-direction: column;
+  }
+
+  .grid {
+    grid-template-columns: 1fr;
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+}

@@ -1,0 +1,174 @@
+.settings {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.section {
+  background: var(--color-neutral-2);
+  border-radius: var(--radius-4);
+  padding: var(--space-6);
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--color-neutral-6);
+}
+
+.sectionHeader {
+  margin-bottom: var(--space-5);
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--color-neutral-6);
+}
+
+.sectionTitle {
+  font: var(--font-heading);
+  color: var(--color-neutral-12);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.sectionDescription {
+  font: var(--font-body);
+  color: var(--color-neutral-10);
+  margin: 0;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-3);
+}
+
+.coursesList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.courseItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--color-neutral-1);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--color-neutral-5);
+}
+
+.courseInfo {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.courseName {
+  font: var(--font-subheading);
+  color: var(--color-neutral-12);
+  margin: 0;
+}
+
+.courseId {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+  margin: 0;
+}
+
+.remindersList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.reminderItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--color-neutral-1);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--color-neutral-5);
+}
+
+.reminderInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.reminderIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-2);
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.reminderDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.reminderType {
+  font: var(--font-subheading);
+  color: var(--color-neutral-12);
+  margin: 0;
+}
+
+.reminderTime {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+  margin: 0;
+}
+
+.apiSection {
+  background: linear-gradient(135deg, var(--color-accent-1) 0%, var(--color-accent-2) 100%);
+  border: 2px solid var(--color-accent-6);
+}
+
+.apiInstructions {
+  font: var(--font-body);
+  color: var(--color-accent-11);
+  line-height: 1.8;
+  margin: var(--space-4) 0 0 0;
+}
+
+.apiInstructions ol {
+  margin: var(--space-3) 0;
+  padding-right: var(--space-5);
+}
+
+.apiInstructions li {
+  margin-bottom: var(--space-2);
+}
+
+.apiInstructions code {
+  background: var(--color-accent-3);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-1);
+  font-family: var(--font-monospace-code);
+  font-size: 0.9em;
+}
+
+@media (max-width: 480px) {
+  .section {
+    padding: var(--space-4);
+  }
+
+  .formRow {
+    grid-template-columns: 1fr;
+  }
+
+  .courseItem,
+  .reminderItem {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-3);
+  }
+}
