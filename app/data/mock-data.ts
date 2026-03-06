@@ -5,7 +5,7 @@ type Course = Database["public"]["Tables"]["courses"]["Row"];
 
 export const mockStudent = {
   id: "stu_442",
-  name: "יעל כהן",
+  name: "Tali Huberman",
   created_at: new Date().toISOString(),
 };
 

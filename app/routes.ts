@@ -8,5 +8,6 @@ export default [
   route("cards", "routes/cards.tsx"),
   route("exams", "routes/exams.tsx"),
   route("settings", "routes/settings.tsx"),
+  route("setup", "routes/setup.tsx"),
   ...devRoutes,
 ] satisfies RouteConfig;
