@@ -13,7 +13,7 @@
 }
 
 .welcomeTitle {
-  font: var(--font-display);
+  font: var(--font-heading);
   color: var(--color-accent-12);
   margin: 0 0 var(--space-3) 0;
 }
