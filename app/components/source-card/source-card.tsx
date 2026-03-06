@@ -63,7 +63,11 @@ export function SourceCard({ source, onView, onDelete, className }: SourceCardPr
         )}
         <div className={styles.metadataItem}>
           <Calendar />
-          <span>{new Date(source.upload_date).toLocaleDateString("he-IL")}</span>
+          <span>
+            {source.upload_date
+              ? new Date(source.upload_date).toLocaleDateString("he-IL")
+              : "—"}
+          </span>
         </div>
         <div className={styles.metadataItem}>
           <BookOpen />
