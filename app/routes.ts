@@ -5,6 +5,7 @@ const devRoutes = import.meta.env.DEV ? prefix("dev", [route("components", "dev/
 export default [
   index("routes/home.tsx"),
   route("sources", "routes/sources.tsx"),
+  route("sources/:id/view", "routes/source-view.tsx"),
   route("cards", "routes/cards.tsx"),
   route("exams", "routes/exams.tsx"),
   route("settings", "routes/settings.tsx"),

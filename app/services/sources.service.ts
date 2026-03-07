@@ -7,6 +7,22 @@ export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 
 const BUCKET_NAME = "sources";
 
+/** Fetch a single source by ID (must belong to the student). */
+export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("sources")
+    .select(
+      "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, content, metadata, vector_store_file_id, created_at"
+    )
+    .eq("id", id)
+    .eq("student_id", studentId)
+    .single();
+
+  if (error) return null;
+  return data as SourceRow;
+}
+
 /** Fetch all sources for a student. */
 export async function getSources(studentId: string): Promise<SourceRow[]> {
   const db = createServerClient();

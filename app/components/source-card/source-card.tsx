@@ -1,6 +1,7 @@
 import * as React from "react";
-import { FileText, Calendar, Hash, BookOpen } from "lucide-react";
+import { FileText, Calendar, Hash, BookOpen, Eye } from "lucide-react";
 import classNames from "classnames";
+import { Link } from "react-router";
 import { Button } from "~/components/ui/button/button";
 import type { Database } from "~/lib/supabase";
 import styles from "./source-card.module.css";
@@ -86,9 +87,17 @@ export function SourceCard({ source, onView, onDelete, className }: SourceCardPr
       )}
 
       <div className={styles.footer}>
+        {source.file_url && (
+          <Button asChild variant="outline" size="sm" style={{ flex: 1 }}>
+            <Link to={`/sources/${source.id}/view`}>
+              <Eye style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
+              צפייה
+            </Link>
+          </Button>
+        )}
         {onView && (
-          <Button variant="outline" size="sm" onClick={() => onView(source)} style={{ flex: 1 }}>
-            צפייה
+          <Button variant="outline" size="sm" onClick={() => onView(source)}>
+            פרטים
           </Button>
         )}
         {onDelete && (
