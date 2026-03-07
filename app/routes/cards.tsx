@@ -8,6 +8,15 @@ import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from "~/components/ui/alert-dialog/alert-dialog";
 import { getStudent, getCourses } from "~/services/settings.service";
 import { getCards, addCard, updateCard } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -78,6 +87,37 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
 
+  // Unsaved-changes guard
+  const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
+  const pendingActionRef = React.useRef<(() => void) | null>(null);
+
+  /** Returns true when the form has unsaved content worth warning about */
+  const isFormDirty = React.useCallback(() => {
+    if (editingCard) {
+      return (
+        cardTitle !== editingCard.title ||
+        cardTopic !== editingCard.topic ||
+        cardContent !== editingCard.content ||
+        lectureNumber !== (editingCard.lecture_number != null ? String(editingCard.lecture_number) : "")
+      );
+    }
+    // Create mode: warn if any field has been touched
+    return cardTitle.trim() !== "" || cardTopic.trim() !== "" || cardContent.trim() !== "";
+  }, [editingCard, cardTitle, cardTopic, cardContent, lectureNumber]);
+
+  /** Runs the pending action if form is clean, otherwise shows the dialog */
+  const guardedAction = React.useCallback(
+    (action: () => void) => {
+      if (isFormDirty()) {
+        pendingActionRef.current = action;
+        setShowUnsavedDialog(true);
+      } else {
+        action();
+      }
+    },
+    [isFormDirty]
+  );
+
   const clearForm = () => {
     setEditingCard(null);
     setCardTitle("");
@@ -87,20 +127,47 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setFeedback(null);
   };
 
-  const handleCardClick = (card: CardRow) => {
-    setEditingCard(card);
-    setCardTitle(card.title);
-    setCardTopic(card.topic);
-    setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
-    setCardContent(card.content);
-    setFeedback(null);
-    window.scrollTo({ top: 0, behavior: "smooth" });
+  const handleSaveFromDialog = () => {
+    setShowUnsavedDialog(false);
+    // Submit the current form programmatically via fetcher
+    const form = document.getElementById("card-editor-form") as HTMLFormElement | null;
+    if (form) {
+      const fd = new FormData(form);
+      fetcher.submit(fd, { method: "post" });
+    }
+    // The pending action will run after the save effect fires
+    // We store it so the useEffect can pick it up
   };
 
-  // Reset form after successful save
+  const handleDiscardFromDialog = () => {
+    setShowUnsavedDialog(false);
+    const action = pendingActionRef.current;
+    pendingActionRef.current = null;
+    action?.();
+  };
+
+  const handleCardClick = (card: CardRow) => {
+    const doSwitch = () => {
+      setEditingCard(card);
+      setCardTitle(card.title);
+      setCardTopic(card.topic);
+      setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
+      setCardContent(card.content);
+      setFeedback(null);
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    };
+    // Don't guard if clicking the already-active card
+    if (editingCard?.id === card.id) return;
+    guardedAction(doSwitch);
+  };
+
+  // Reset form after successful save, then run any pending dialog action
   React.useEffect(() => {
     if (actionData?.ok) {
+      const pending = pendingActionRef.current;
+      pendingActionRef.current = null;
       clearForm();
+      pending?.();
     }
   }, [actionData]);
 
@@ -141,8 +208,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   };
 
   const handleCourseChange = (value: string) => {
-    setSelectedCourse(value);
-    clearForm();
+    guardedAction(() => {
+      setSelectedCourse(value);
+      clearForm();
+    });
   };
 
   const courseSelector = (
@@ -181,7 +250,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
               <Button
                 type="button"
                 variant="outline"
-                onClick={clearForm}
+                onClick={() => guardedAction(clearForm)}
                 className={styles.newCardBtn}
               >
                 + כרטיס חדש
@@ -189,7 +258,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
             )}
           </div>
 
-          <fetcher.Form method="post" className={styles.editorForm}>
+          <fetcher.Form id="card-editor-form" method="post" className={styles.editorForm}>
             <input type="hidden" name="courseId" value={selectedCourse} />
             <input type="hidden" name="intent" value={editingCard ? "edit" : "create"} />
             {editingCard && (
@@ -318,6 +387,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           )}
         </div>
       </div>
+      <AlertDialog open={showUnsavedDialog} onOpenChange={setShowUnsavedDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>יש שינויים שלא נשמרו</AlertDialogTitle>
+            <AlertDialogDescription>
+              האם ברצונך לשמור את השינויים לפני המעבר?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={handleDiscardFromDialog}>
+              בטל שינויים
+            </AlertDialogCancel>
+            <button
+              type="button"
+              className={styles.dialogSaveBtn}
+              onClick={handleSaveFromDialog}
+              disabled={!isFormValid}
+            >
+              <Save style={{ marginLeft: "var(--space-2)", width: 16, height: 16 }} />
+              שמור שינויים
+            </button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </AppLayout>
   );
 }

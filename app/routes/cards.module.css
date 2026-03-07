@@ -223,3 +223,27 @@
   margin-right: auto;
   font-size: 0.85rem;
 }
+
+.dialogSaveBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  background: var(--color-accent-9);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-3);
+  font: var(--font-body);
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.dialogSaveBtn:hover:not(:disabled) {
+  background: var(--color-accent-10);
+}
+
+.dialogSaveBtn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
