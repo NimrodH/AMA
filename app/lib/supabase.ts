@@ -165,6 +165,38 @@ export type Database = {
           created_at?: string;
         };
       };
+      cards: {
+        Row: {
+          id: string;
+          student_id: string;
+          course_id: string;
+          title: string;
+          topic: string;
+          lecture_number?: number;
+          content: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          student_id: string;
+          course_id: string;
+          title: string;
+          topic: string;
+          lecture_number?: number;
+          content: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          student_id?: string;
+          course_id?: string;
+          title?: string;
+          topic?: string;
+          lecture_number?: number;
+          content?: string;
+          created_at?: string;
+        };
+      };
     };
   };
 };

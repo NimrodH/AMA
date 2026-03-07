@@ -1,0 +1,62 @@
+import { createServerClient } from "~/lib/supabase";
+
+export type CardRow = {
+  id: string;
+  student_id: string;
+  course_id: string;
+  title: string;
+  topic: string;
+  lecture_number: number | null;
+  content: string;
+  created_at: string;
+};
+
+/** Fetch all cards for a student, newest first. */
+export async function getCards(studentId: string): Promise<CardRow[]> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("cards")
+    .select("id, student_id, course_id, title, topic, lecture_number, content, created_at")
+    .eq("student_id", studentId)
+    .order("created_at", { ascending: false });
+
+  if (error) return [];
+  return (data ?? []) as CardRow[];
+}
+
+interface AddCardParams {
+  studentId: string;
+  courseId: string;
+  title: string;
+  topic: string;
+  lectureNumber: number | null;
+  content: string;
+}
+
+/** Insert a new card into the database. */
+export async function addCard({
+  studentId,
+  courseId,
+  title,
+  topic,
+  lectureNumber,
+  content,
+}: AddCardParams): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient();
+
+  const { error } = await db.from("cards").insert({
+    student_id: studentId,
+    course_id: courseId,
+    title,
+    topic,
+    lecture_number: lectureNumber,
+    content,
+  });
+
+  if (error) {
+    console.error("Card insert error:", error);
+    return { ok: false, error: `שגיאה בשמירת הכרטיס: ${error.message}` };
+  }
+
+  return { ok: true };
+}
