@@ -171,27 +171,21 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
         </Select>
       </div>
 
-      <div className={selectedSourceType ? styles.formRow : undefined}>
+      <div className={styles.formRow}>
         <div>
           <Label htmlFor="topic">נושא</Label>
           <Input id="topic" name="topic" placeholder="לדוגמה: תרכובות ארומטיות" required />
         </div>
-        {selectedSourceType && (
-          <div>
-            <Label htmlFor="lectureNumber">
-              {selectedSourceType === "Lecture"
-                ? "מספר הרצאה (אופציונלי)"
-                : "הרצאה משויכת (אופציונלי)"}
-            </Label>
-            <Input
-              id="lectureNumber"
-              name="lectureNumber"
-              type="number"
-              min="1"
-              placeholder="5"
-            />
-          </div>
-        )}
+        <div>
+          <Label htmlFor="lectureNumber">מספר הרצאה (אופציונלי)</Label>
+          <Input
+            id="lectureNumber"
+            name="lectureNumber"
+            type="number"
+            min="1"
+            placeholder="5"
+          />
+        </div>
       </div>
 
       <div>
