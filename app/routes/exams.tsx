@@ -193,6 +193,7 @@ export default function Exams() {
                           onChange={(e) => handleAnswerChange(question.id, e.target.value)}
                           placeholder="כתוב את תשובתך כאן..."
                           rows={6}
+                          className={styles.textarea}
                         />
                       </div>
                     )}
