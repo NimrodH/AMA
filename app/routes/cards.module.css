@@ -31,6 +31,17 @@
   gap: var(--space-4);
 }
 
+.formRow {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: end;
+}
+
+.formRow > div:last-child {
+  min-width: 140px;
+}
+
 .editorActions {
   display: flex;
   gap: var(--space-3);

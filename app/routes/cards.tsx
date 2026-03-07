@@ -75,9 +75,15 @@ export default function Cards() {
               </Select>
             </div>
 
-            <div>
-              <Label htmlFor="cardTopic">נושא</Label>
-              <Input id="cardTopic" placeholder="לדוגמה: תרכובות ארומטיות" />
+            <div className={styles.formRow}>
+              <div>
+                <Label htmlFor="cardTopic">נושא</Label>
+                <Input id="cardTopic" placeholder="לדוגמה: תרכובות ארומטיות" />
+              </div>
+              <div>
+                <Label htmlFor="cardLecture">מספר הרצאה (אופציונלי)</Label>
+                <Input id="cardLecture" type="number" min={1} placeholder="לדוגמה: 3" />
+              </div>
             </div>
 
             <div>
