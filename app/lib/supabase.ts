@@ -73,6 +73,7 @@ export type Database = {
           file_url?: string;
           content?: string;
           metadata: Record<string, unknown>;
+          vector_store_file_id?: string;
           created_at: string;
         };
         Insert: {
@@ -87,6 +88,7 @@ export type Database = {
           file_url?: string;
           content?: string;
           metadata?: Record<string, unknown>;
+          vector_store_file_id?: string;
           created_at?: string;
         };
         Update: {
@@ -101,6 +103,7 @@ export type Database = {
           file_url?: string;
           content?: string;
           metadata?: Record<string, unknown>;
+          vector_store_file_id?: string;
           created_at?: string;
         };
       };

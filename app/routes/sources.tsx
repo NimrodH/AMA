@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Upload } from "lucide-react";
+import { Upload, Loader2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/sources";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -37,18 +37,31 @@ export async function loader() {
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
+
   const studentId = form.get("studentId") as string;
   const courseId = form.get("courseId") as string;
+  const courseName = form.get("courseName") as string;
   const sourceType = form.get("sourceType") as "Lecture" | "Card" | "Past exam";
   const topic = form.get("topic") as string;
   const lectureNumberRaw = form.get("lectureNumber") as string;
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+  const file = form.get("file") as File | null;
 
-  if (studentId && courseId && sourceType && topic) {
-    await addSource(studentId, courseId, sourceType, topic, lectureNumber);
+  if (!studentId || !courseId || !sourceType || !topic || !file || file.size === 0) {
+    return { ok: false, error: "יש למלא את כל השדות ולהעלות קובץ" };
   }
 
-  return { ok: true };
+  const result = await addSource({
+    studentId,
+    courseId,
+    courseName,
+    sourceType,
+    topic,
+    lectureNumber,
+    file,
+  });
+
+  return result;
 }
 
 // ─── Source type options ──────────────────────────────────────────────────────
@@ -72,13 +85,22 @@ interface UploadDialogProps {
 function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   const fetcher = useFetcher();
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string>("");
   const isSubmitting = fetcher.state !== "idle";
+  const actionError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
+
+  // Derive the course name from the selected course_id
+  const selectedCourseName = React.useMemo(() => {
+    const course = courses.find((c) => c.course_id === selectedCourseId);
+    return course?.course_name ?? "";
+  }, [courses, selectedCourseId]);
 
   // Close dialog after successful submission
   React.useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       onClose();
       setSelectedFile(null);
+      setSelectedCourseId("");
     }
   }, [fetcher.state, fetcher.data, onClose]);
 
@@ -87,8 +109,26 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
     if (file) setSelectedFile(file);
   };
 
+  const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+
+    // Append the actual file to FormData
+    if (selectedFile) {
+      formData.set("file", selectedFile);
+    }
+
+    // Append the resolved course name for metadata
+    formData.set("courseName", selectedCourseName);
+
+    fetcher.submit(formData, {
+      method: "post",
+      encType: "multipart/form-data",
+    });
+  };
+
   return (
-    <fetcher.Form method="post" className={styles.form}>
+    <form onSubmit={handleSubmit} className={styles.form}>
       <input type="hidden" name="studentId" value={studentId} />
 
       <div>
@@ -109,7 +149,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 
       <div>
         <Label htmlFor="courseId">קורס</Label>
-        <Select name="courseId" required>
+        <Select name="courseId" required value={selectedCourseId} onValueChange={setSelectedCourseId}>
           <SelectTrigger id="courseId">
             <SelectValue placeholder="בחר קורס" />
           </SelectTrigger>
@@ -162,15 +202,26 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
         </label>
       </div>
 
+      {actionError && (
+        <p className={styles.errorMessage}>{actionError}</p>
+      )}
+
       <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
         <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
           ביטול
         </Button>
-        <Button type="submit" disabled={isSubmitting}>
-          {isSubmitting ? "מעלה..." : "העלה"}
+        <Button type="submit" disabled={isSubmitting || !selectedFile}>
+          {isSubmitting ? (
+            <>
+              <Loader2 className={styles.spinner} />
+              מעלה...
+            </>
+          ) : (
+            "העלה"
+          )}
         </Button>
       </div>
-    </fetcher.Form>
+    </form>
   );
 }
 
