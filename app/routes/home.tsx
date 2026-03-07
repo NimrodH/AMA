@@ -5,7 +5,8 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { mockStudent, mockSources, mockCourses } from "~/data/mock-data";
+import { mockSources, mockCourses } from "~/data/mock-data";
+import { getStudent } from "~/services/settings.service";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -18,7 +19,13 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export default function Home() {
+export async function loader({}: Route.LoaderArgs) {
+  const student = await getStudent();
+  return { studentName: student?.name ?? null };
+}
+
+export default function Home({ loaderData }: Route.ComponentProps) {
+  const { studentName } = loaderData;
   const recentSources = mockSources.slice(0, 3);
 
   const stats = {
@@ -32,7 +39,7 @@ export default function Home() {
     <AppLayout title="דף הבית">
       <div className={styles.home}>
         <div className={styles.welcome}>
-          <h1 className={styles.welcomeTitle}>שלום, {mockStudent.name}!</h1>
+          <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
           <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
         </div>
 
