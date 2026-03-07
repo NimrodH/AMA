@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save, Send } from "lucide-react";
+import { Sparkles, Save } from "lucide-react";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
@@ -8,14 +8,23 @@ import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { mockSources, mockCourses } from "~/data/mock-data";
+import { mockSources } from "~/data/mock-data";
+import { getStudent, getCourses } from "~/services/settings.service";
 import styles from "./cards.module.css";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "כרטיסי סיכום - מערכת ניהול לימודים" }];
 }
 
-export default function Cards() {
+export async function loader() {
+  const student = await getStudent();
+  if (!student) return { courses: [] };
+  const courses = await getCourses(student.id);
+  return { courses };
+}
+
+export default function Cards({ loaderData }: Route.ComponentProps) {
+  const { courses } = loaderData;
   const [cardContent, setCardContent] = React.useState("");
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
@@ -66,11 +75,17 @@ export default function Cards() {
                   <SelectValue placeholder="בחר קורס" />
                 </SelectTrigger>
                 <SelectContent>
-                  {mockCourses.map((course) => (
-                    <SelectItem key={course.id} value={course.course_id}>
-                      {course.course_name}
+                  {courses.length === 0 ? (
+                    <SelectItem value="_none" disabled>
+                      אין קורסים — הוסף קורס בהגדרות
                     </SelectItem>
-                  ))}
+                  ) : (
+                    courses.map((course) => (
+                      <SelectItem key={course.id} value={course.course_id}>
+                        {course.course_name}
+                      </SelectItem>
+                    ))
+                  )}
                 </SelectContent>
               </Select>
             </div>
