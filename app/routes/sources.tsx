@@ -41,7 +41,7 @@ export async function action({ request }: Route.ActionArgs) {
   const studentId = form.get("studentId") as string;
   const courseId = form.get("courseId") as string;
   const courseName = form.get("courseName") as string;
-  const sourceType = form.get("sourceType") as "Lecture" | "Card" | "Past exam";
+  const sourceType = form.get("sourceType") as "Lecture" | "Past exam";
   const topic = form.get("topic") as string;
   const lectureNumberRaw = form.get("lectureNumber") as string;
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
@@ -68,7 +68,6 @@ export async function action({ request }: Route.ActionArgs) {
 
 const SOURCE_TYPES: { value: SourceRow["source_type"]; label: string }[] = [
   { value: "Lecture", label: "הרצאה" },
-  { value: "Card", label: "כרטיס סיכום" },
   { value: "Past exam", label: "מבחן עבר" },
 ];
 
