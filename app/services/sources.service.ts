@@ -51,8 +51,16 @@ export async function addSource({
   const db = createServerClient();
 
   // Build a unique storage path: studentId/courseId/timestamp_filename
+  // Supabase Storage only allows ASCII-safe key characters.
+  // Strip non-alphanumeric chars (keeps dots, hyphens, underscores) and collapse runs.
   const timestamp = Date.now();
-  const safeName = file.name.replace(/\s+/g, "_");
+  const ext = file.name.includes(".") ? "." + file.name.split(".").pop() : "";
+  const baseName = file.name
+    .replace(/\.[^.]+$/, "")         // remove extension
+    .replace(/[^a-zA-Z0-9_-]/g, "_") // replace non-ASCII & special chars
+    .replace(/_+/g, "_")             // collapse multiple underscores
+    .replace(/^_|_$/g, "");           // trim leading/trailing underscores
+  const safeName = (baseName || "file") + ext;
   const storagePath = `${studentId}/${courseId}/${timestamp}_${safeName}`;
 
   // ── 1. Upload file to Supabase Storage ──────────────────────────────────
