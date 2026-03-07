@@ -85,6 +85,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [lectureNumber, setLectureNumber] = React.useState("");
   const [cardContent, setCardContent] = React.useState("");
   const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [showSuccess, setShowSuccess] = React.useState(false);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
 
   // Unsaved-changes guard
@@ -125,6 +126,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setLectureNumber("");
     setCardContent("");
     setFeedback(null);
+    setShowSuccess(false);
   };
 
   const handleSaveFromDialog = () => {
@@ -154,6 +156,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
       setCardContent(card.content);
       setFeedback(null);
+      setShowSuccess(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
     };
     // Don't guard if clicking the already-active card
@@ -171,6 +174,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null }
           : prev
       );
+      setShowSuccess(true);
       const pending = pendingActionRef.current;
       pendingActionRef.current = null;
       pending?.();
@@ -277,7 +281,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 id="cardTitle"
                 name="title"
                 value={cardTitle}
-                onChange={(e) => setCardTitle(e.target.value)}
+                onChange={(e) => { setCardTitle(e.target.value); setShowSuccess(false); }}
                 placeholder="לדוגמה: סיכום הרצאה 5 - תרכובות ארומטיות"
               />
             </div>
@@ -289,7 +293,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   id="cardTopic"
                   name="topic"
                   value={cardTopic}
-                  onChange={(e) => setCardTopic(e.target.value)}
+                  onChange={(e) => { setCardTopic(e.target.value); setShowSuccess(false); }}
                   placeholder="לדוגמה: תרכובות ארומטיות"
                 />
               </div>
@@ -301,7 +305,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   type="number"
                   min={1}
                   value={lectureNumber}
-                  onChange={(e) => setLectureNumber(e.target.value)}
+                  onChange={(e) => { setLectureNumber(e.target.value); setShowSuccess(false); }}
                   placeholder="לדוגמה: 3"
                 />
               </div>
@@ -313,7 +317,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 id="cardContent"
                 name="content"
                 value={cardContent}
-                onChange={(e) => setCardContent(e.target.value)}
+                onChange={(e) => { setCardContent(e.target.value); setShowSuccess(false); }}
                 placeholder="כתוב את הסיכום שלך כאן..."
                 rows={12}
                 style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
@@ -340,7 +344,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
               <div className={styles.errorMessage}>{actionData.error}</div>
             )}
 
-            {actionData?.ok && (
+            {showSuccess && (
               <div className={styles.successMessage}>הכרטיס נשמר בהצלחה!</div>
             )}
 
