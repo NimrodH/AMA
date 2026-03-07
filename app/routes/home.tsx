@@ -5,7 +5,7 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { mockSources, mockCourses } from "~/data/mock-data";
+import { mockSources, mockCourses, mockStudent } from "~/data/mock-data";
 import { getStudent } from "~/services/settings.service";
 import styles from "./home.module.css";
 
@@ -99,7 +99,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {recentSources.length > 0 ? (
             <div className={styles.grid}>
               {recentSources.map((source) => (
-                <SourceCard key={source.id} source={source} />
+                <SourceCard key={source.id} source={source} studentId={mockStudent.id} />
               ))}
             </div>
           ) : (

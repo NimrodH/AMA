@@ -1,6 +1,6 @@
 import { createServerClient } from "~/lib/supabase";
 import type { Database } from "~/lib/supabase";
-import { uploadToVectorStore } from "~/lib/openai.server";
+import { uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
 import type { CourseRow } from "~/services/settings.service";
 
 export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
@@ -144,6 +144,57 @@ export async function addSource({
   if (insertError) {
     console.error("DB insert error:", insertError);
     return { ok: false, error: `שגיאה בשמירת המקור: ${insertError.message}` };
+  }
+
+  return { ok: true };
+}
+
+/**
+ * Full delete pipeline:
+ * 1. Fetch the source to get file_url and vector_store_file_id
+ * 2. Delete the file from Supabase Storage
+ * 3. Delete the vector store file from OpenAI
+ * 4. Delete the row from the database
+ */
+export async function deleteSource(
+  id: string,
+  studentId: string
+): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient();
+
+  // 1. Fetch source record
+  const source = await getSourceById(id, studentId);
+  if (!source) return { ok: false, error: "מקור לא נמצא" };
+
+  // 2. Delete from Supabase Storage (extract path from public URL)
+  if (source.file_url) {
+    try {
+      const url = new URL(source.file_url);
+      // Public URL format: .../storage/v1/object/public/<bucket>/<path>
+      const match = url.pathname.match(/\/object\/public\/[^/]+\/(.+)$/);
+      if (match?.[1]) {
+        const storagePath = decodeURIComponent(match[1]);
+        await db.storage.from(BUCKET_NAME).remove([storagePath]);
+      }
+    } catch (err) {
+      console.error("Storage delete error:", err);
+    }
+  }
+
+  // 3. Delete from OpenAI vector store
+  if (source.vector_store_file_id) {
+    try {
+      await deleteFromVectorStore(source.vector_store_file_id);
+    } catch (err) {
+      console.error("Vector store delete error:", err);
+    }
+  }
+
+  // 4. Delete the DB row
+  const { error } = await db.from("sources").delete().eq("id", id).eq("student_id", studentId);
+  if (error) {
+    console.error("DB delete error:", error);
+    return { ok: false, error: `שגיאה במחיקת המקור: ${error.message}` };
   }
 
   return { ok: true };

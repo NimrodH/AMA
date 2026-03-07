@@ -11,7 +11,7 @@ import { Input } from "~/components/ui/input/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudent } from "~/services/settings.service";
-import { getSources, getCoursesForStudent, addSource } from "~/services/sources.service";
+import { getSources, getCoursesForStudent, addSource, deleteSource } from "~/services/sources.service";
 import type { SourceRow } from "~/services/sources.service";
 import styles from "./sources.module.css";
 
@@ -37,7 +37,17 @@ export async function loader() {
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
+  const intent = form.get("intent") as string;
 
+  // ── Delete action ────────────────────────────────────────────────────────
+  if (intent === "delete") {
+    const sourceId = form.get("sourceId") as string;
+    const studentId = form.get("studentId") as string;
+    if (!sourceId || !studentId) return { ok: false, error: "חסרים פרמטרים" };
+    return deleteSource(sourceId, studentId);
+  }
+
+  // ── Upload action (default) ───────────────────────────────────────────────
   const studentId = form.get("studentId") as string;
   const courseId = form.get("courseId") as string;
   const courseName = form.get("courseName") as string;
@@ -301,7 +311,7 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
 
         <div className={styles.grid}>
           {filteredSources.map((source) => (
-            <SourceCard key={source.id} source={source} />
+            <SourceCard key={source.id} source={source} studentId={studentId} />
           ))}
           {filteredSources.length === 0 && (
             <p style={{ color: "var(--color-neutral-10)", gridColumn: "1/-1" }}>

@@ -70,3 +70,24 @@ export async function uploadToVectorStore({
 
   return vectorStoreFile.id;
 }
+
+/**
+ * Deletes a file from the OpenAI vector store and from OpenAI file storage.
+ * Silently succeeds if the file is not found.
+ */
+export async function deleteFromVectorStore(vectorStoreFileId: string): Promise<void> {
+  const client = getOpenAIClient();
+  const vectorStoreId = await getOrCreateVectorStore();
+
+  try {
+    // Remove the file from the vector store (fileId is the vector store file id = the OpenAI file id)
+    await client.vectorStores.files.delete(vectorStoreFileId, { vector_store_id: vectorStoreId });
+    // Also delete the underlying file object from OpenAI storage
+    await client.files.delete(vectorStoreFileId);
+  } catch (err: unknown) {
+    // Ignore 404 — file may have been manually deleted already
+    if ((err as { status?: number })?.status !== 404) {
+      throw err;
+    }
+  }
+}
