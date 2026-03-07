@@ -230,25 +230,47 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 export default function Sources({ loaderData }: Route.ComponentProps) {
   const { sources, courses, studentId } = loaderData;
   const [selectedType, setSelectedType] = React.useState<FilterType>("all");
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string>("all");
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
-  const filteredSources =
-    selectedType === "all" ? sources : sources.filter((s) => s.source_type === selectedType);
+  const filteredSources = React.useMemo(() => {
+    return sources.filter((s) => {
+      const typeMatch = selectedType === "all" || s.source_type === selectedType;
+      const courseMatch = selectedCourseId === "all" || s.course_id === selectedCourseId;
+      return typeMatch && courseMatch;
+    });
+  }, [sources, selectedType, selectedCourseId]);
 
   return (
     <AppLayout title="מקורות לימוד">
       <div className={styles.sources}>
         <div className={styles.header}>
-          <Tabs value={selectedType} onValueChange={(v) => setSelectedType(v as FilterType)}>
-            <TabsList>
-              <TabsTrigger value="all">הכל</TabsTrigger>
-              {SOURCE_TYPES.map((t) => (
-                <TabsTrigger key={t.value} value={t.value}>
-                  {t.label}
-                </TabsTrigger>
-              ))}
-            </TabsList>
-          </Tabs>
+          <div className={styles.filters}>
+            <Tabs value={selectedType} onValueChange={(v) => setSelectedType(v as FilterType)}>
+              <TabsList>
+                <TabsTrigger value="all">הכל</TabsTrigger>
+                {SOURCE_TYPES.map((t) => (
+                  <TabsTrigger key={t.value} value={t.value}>
+                    {t.label}
+                  </TabsTrigger>
+                ))}
+              </TabsList>
+            </Tabs>
+
+            <Select value={selectedCourseId} onValueChange={setSelectedCourseId}>
+              <SelectTrigger className={styles.courseFilter}>
+                <SelectValue placeholder="כל הקורסים" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">כל הקורסים</SelectItem>
+                {courses.map((course) => (
+                  <SelectItem key={course.id} value={course.course_id}>
+                    {course.course_name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
