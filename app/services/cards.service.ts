@@ -64,6 +64,17 @@ export async function updateCard({
   return { ok: true };
 }
 
+/** Delete a card by id. */
+export async function deleteCard(id: string): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient();
+  const { error } = await db.from("cards").delete().eq("id", id);
+  if (error) {
+    console.error("Card delete error:", error);
+    return { ok: false, error: `שגיאה במחיקת הכרטיס: ${error.message}` };
+  }
+  return { ok: true };
+}
+
 /** Insert a new card into the database. */
 export async function addCard({
   studentId,

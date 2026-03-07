@@ -125,6 +125,7 @@
   text-align: right;
   width: 100%;
   font-family: inherit;
+  box-sizing: border-box;
 }
 
 .savedCard:hover {
@@ -165,10 +166,48 @@
   line-height: 1.6;
 }
 
+.savedCardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: var(--space-2);
+}
+
 .savedCardDate {
   font: var(--font-caption);
   color: var(--color-neutral-9);
-  margin-top: var(--space-2);
+}
+
+.deleteCardBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-2);
+  color: var(--color-neutral-9);
+  cursor: pointer;
+  transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+  flex-shrink: 0;
+}
+
+.deleteCardBtn:hover:not(:disabled) {
+  background: var(--color-error-3);
+  border-color: var(--color-error-6);
+  color: var(--color-error-11);
+}
+
+.deleteCardBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.savedCardDeleting {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 .emptyState {

@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save } from "lucide-react";
+import { Sparkles, Save, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -18,7 +18,7 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import { getStudent, getCourses } from "~/services/settings.service";
-import { getCards, addCard, updateCard } from "~/services/cards.service";
+import { getCards, addCard, updateCard, deleteCard } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import styles from "./cards.module.css";
 
@@ -50,6 +50,12 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+
+  if (intent === "delete") {
+    const cardId = formData.get("cardId") as string;
+    if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
+    return deleteCard(cardId);
+  }
 
   if (intent === "edit") {
     const cardId = formData.get("cardId") as string;
@@ -180,6 +186,16 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       pending?.();
     }
   }, [actionData]);
+
+  const deleteFetcher = useFetcher<typeof action>();
+
+  // When a delete succeeds, clear the editor if we were editing that card
+  const deletingCardId = deleteFetcher.formData?.get("cardId") as string | undefined;
+  React.useEffect(() => {
+    if (deleteFetcher.data?.ok && deletingCardId && editingCard?.id === deletingCardId) {
+      clearForm();
+    }
+  }, [deleteFetcher.data]);
 
   const filteredCards = selectedCourse
     ? cards.filter((c) => c.course_id === selectedCourse)
@@ -375,24 +391,48 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
             </p>
           ) : (
             <div className={styles.cardsList}>
-              {filteredCards.map((card) => (
-                <button
-                  key={card.id}
-                  type="button"
-                  className={`${styles.savedCard} ${editingCard?.id === card.id ? styles.savedCardActive : ""}`}
-                  onClick={() => handleCardClick(card)}
-                >
-                  <h3 className={styles.savedCardTitle}>{card.title}</h3>
-                  <p className={styles.savedCardMeta}>
-                    {card.topic}
-                    {card.lecture_number ? ` · הרצאה ${card.lecture_number}` : ""}
-                  </p>
-                  <p className={styles.savedCardContent}>{card.content}</p>
-                  <span className={styles.savedCardDate}>
-                    {new Date(card.created_at).toLocaleDateString("he-IL")}
-                  </span>
-                </button>
-              ))}
+              {filteredCards.map((card) => {
+                const isDeleting =
+                  deleteFetcher.state !== "idle" && deletingCardId === card.id;
+                return (
+                  <div
+                    key={card.id}
+                    className={`${styles.savedCard} ${editingCard?.id === card.id ? styles.savedCardActive : ""} ${isDeleting ? styles.savedCardDeleting : ""}`}
+                    onClick={() => handleCardClick(card)}
+                    role="button"
+                    tabIndex={0}
+                    onKeyDown={(e) => e.key === "Enter" && handleCardClick(card)}
+                  >
+                    <h3 className={styles.savedCardTitle}>{card.title}</h3>
+                    <p className={styles.savedCardMeta}>
+                      {card.topic}
+                      {card.lecture_number ? ` · הרצאה ${card.lecture_number}` : ""}
+                    </p>
+                    <p className={styles.savedCardContent}>{card.content}</p>
+                    <div className={styles.savedCardFooter}>
+                      <span className={styles.savedCardDate}>
+                        {new Date(card.created_at).toLocaleDateString("he-IL")}
+                      </span>
+                      <deleteFetcher.Form
+                        method="post"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <input type="hidden" name="intent" value="delete" />
+                        <input type="hidden" name="cardId" value={card.id} />
+                        <button
+                          type="submit"
+                          className={styles.deleteCardBtn}
+                          disabled={isDeleting}
+                          title="מחק כרטיס"
+                          aria-label="מחק כרטיס"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </deleteFetcher.Form>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
