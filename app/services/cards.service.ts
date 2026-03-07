@@ -33,6 +33,37 @@ interface AddCardParams {
   content: string;
 }
 
+interface UpdateCardParams {
+  id: string;
+  title: string;
+  topic: string;
+  lectureNumber: number | null;
+  content: string;
+}
+
+/** Update an existing card. */
+export async function updateCard({
+  id,
+  title,
+  topic,
+  lectureNumber,
+  content,
+}: UpdateCardParams): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient();
+
+  const { error } = await db
+    .from("cards")
+    .update({ title, topic, lecture_number: lectureNumber, content })
+    .eq("id", id);
+
+  if (error) {
+    console.error("Card update error:", error);
+    return { ok: false, error: `שגיאה בעדכון הכרטיס: ${error.message}` };
+  }
+
+  return { ok: true };
+}
+
 /** Insert a new card into the database. */
 export async function addCard({
   studentId,

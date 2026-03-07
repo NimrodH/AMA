@@ -9,7 +9,8 @@ import { Input } from "~/components/ui/input/input";
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudent, getCourses } from "~/services/settings.service";
-import { getCards, addCard } from "~/services/cards.service";
+import { getCards, addCard, updateCard } from "~/services/cards.service";
+import type { CardRow } from "~/services/cards.service";
 import styles from "./cards.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -28,6 +29,7 @@ export async function loader() {
 
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
+  const intent = formData.get("intent") as string;
   const courseId = formData.get("courseId") as string;
   const title = formData.get("title") as string;
   const topic = formData.get("topic") as string;
@@ -38,12 +40,18 @@ export async function action({ request }: Route.ActionArgs) {
     return { ok: false, error: "יש למלא את כל השדות הנדרשים" };
   }
 
+  const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+
+  if (intent === "edit") {
+    const cardId = formData.get("cardId") as string;
+    if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
+    return updateCard({ id: cardId, title, topic, lectureNumber, content });
+  }
+
   const student = await getStudent();
   if (!student) {
     return { ok: false, error: "לא נמצא סטודנט — הגדר סטודנט בהגדרות" };
   }
-
-  const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
 
   return addCard({
     studentId: student.id,
@@ -61,6 +69,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const isSaving = fetcher.state !== "idle";
   const actionData = fetcher.data;
 
+  const [editingCard, setEditingCard] = React.useState<CardRow | null>(null);
   const [cardTitle, setCardTitle] = React.useState("");
   const [selectedCourse, setSelectedCourse] = React.useState(courses[0]?.course_id ?? "");
   const [cardTopic, setCardTopic] = React.useState("");
@@ -69,14 +78,29 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
 
-  // Reset form (except course) after successful save
+  const clearForm = () => {
+    setEditingCard(null);
+    setCardTitle("");
+    setCardTopic("");
+    setLectureNumber("");
+    setCardContent("");
+    setFeedback(null);
+  };
+
+  const handleCardClick = (card: CardRow) => {
+    setEditingCard(card);
+    setCardTitle(card.title);
+    setCardTopic(card.topic);
+    setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
+    setCardContent(card.content);
+    setFeedback(null);
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  };
+
+  // Reset form after successful save
   React.useEffect(() => {
     if (actionData?.ok) {
-      setCardTitle("");
-      setCardTopic("");
-      setLectureNumber("");
-      setCardContent("");
-      setFeedback(null);
+      clearForm();
     }
   }, [actionData]);
 
@@ -142,15 +166,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       <div className={styles.cards}>
         <div className={styles.editor}>
           <div className={styles.editorHeader}>
-            <h2 className={styles.editorTitle}>כתוב כרטיס סיכום חדש</h2>
+            <h2 className={styles.editorTitle}>
+              {editingCard ? "ערוך כרטיס" : "כרטיס סיכום חדש"}
+            </h2>
             {selectedCourseName && (
               <span className={styles.editorCourseTag}>{selectedCourseName}</span>
+            )}
+            {editingCard && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={clearForm}
+                className={styles.newCardBtn}
+              >
+                + כרטיס חדש
+              </Button>
             )}
           </div>
 
           <fetcher.Form method="post" className={styles.editorForm}>
-            {/* Hidden field so the action still receives courseId */}
             <input type="hidden" name="courseId" value={selectedCourse} />
+            <input type="hidden" name="intent" value={editingCard ? "edit" : "create"} />
+            {editingCard && (
+              <input type="hidden" name="cardId" value={editingCard.id} />
+            )}
 
             <div>
               <Label htmlFor="cardTitle">כותרת</Label>
@@ -205,7 +244,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
             <div className={styles.editorActions}>
               <Button type="submit" variant="outline" disabled={!isFormValid || isSaving}>
                 <Save style={{ marginLeft: "var(--space-2)" }} />
-                {isSaving ? "שומר..." : "שמור כרטיס"}
+                {isSaving ? "שומר..." : editingCard ? "שמור שינויים" : "שמור כרטיס"}
               </Button>
               <Button
                 type="button"
@@ -253,7 +292,12 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           ) : (
             <div className={styles.cardsList}>
               {filteredCards.map((card) => (
-                <div key={card.id} className={styles.savedCard}>
+                <button
+                  key={card.id}
+                  type="button"
+                  className={`${styles.savedCard} ${editingCard?.id === card.id ? styles.savedCardActive : ""}`}
+                  onClick={() => handleCardClick(card)}
+                >
                   <h3 className={styles.savedCardTitle}>{card.title}</h3>
                   <p className={styles.savedCardMeta}>
                     {card.topic}
@@ -263,7 +307,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   <span className={styles.savedCardDate}>
                     {new Date(card.created_at).toLocaleDateString("he-IL")}
                   </span>
-                </div>
+                </button>
               ))}
             </div>
           )}

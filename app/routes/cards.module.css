@@ -120,11 +120,22 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
-  transition: border-color 0.15s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  text-align: right;
+  width: 100%;
+  font-family: inherit;
 }
 
 .savedCard:hover {
   border-color: var(--color-accent-7);
+  background: var(--color-accent-1);
+}
+
+.savedCardActive {
+  border-color: var(--color-accent-8) !important;
+  background: var(--color-accent-2) !important;
+  box-shadow: 0 0 0 2px var(--color-accent-6);
 }
 
 .savedCardTitle {
@@ -206,4 +217,9 @@
 .headerCourseSelect {
   min-width: 200px;
   max-width: 280px;
+}
+
+.newCardBtn {
+  margin-right: auto;
+  font-size: 0.85rem;
 }
