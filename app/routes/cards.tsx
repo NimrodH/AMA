@@ -140,8 +140,13 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     }, 2000);
   };
 
+  const handleCourseChange = (value: string) => {
+    setSelectedCourse(value);
+    clearForm();
+  };
+
   const courseSelector = (
-    <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+    <Select value={selectedCourse} onValueChange={handleCourseChange}>
       <SelectTrigger className={styles.headerCourseSelect}>
         <SelectValue placeholder="בחר קורס" />
       </SelectTrigger>
