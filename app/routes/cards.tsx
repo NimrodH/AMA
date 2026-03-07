@@ -95,6 +95,7 @@ export default function Cards() {
                 placeholder="כתוב את הסיכום שלך כאן..."
                 rows={12}
                 style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
+                className={styles.textarea}
               />
             </div>
 
