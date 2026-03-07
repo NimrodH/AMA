@@ -161,12 +161,18 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     guardedAction(doSwitch);
   };
 
-  // Reset form after successful save, then run any pending dialog action
+  // After a successful save, sync editingCard snapshot so dirty-check resets,
+  // then run any pending dialog action (without clearing the form).
   React.useEffect(() => {
     if (actionData?.ok) {
+      // Keep the form as-is; just update the snapshot so isFormDirty() → false
+      setEditingCard((prev) =>
+        prev
+          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null }
+          : prev
+      );
       const pending = pendingActionRef.current;
       pendingActionRef.current = null;
-      clearForm();
       pending?.();
     }
   }, [actionData]);
