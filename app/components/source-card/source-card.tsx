@@ -58,7 +58,11 @@ export function SourceCard({ source, onView, onDelete, className }: SourceCardPr
         {source.lecture_number && (
           <div className={styles.metadataItem}>
             <Hash />
-            <span>הרצאה {source.lecture_number}</span>
+            <span>
+              {source.source_type === "Lecture"
+                ? `הרצאה ${source.lecture_number}`
+                : `משויך להרצאה ${source.lecture_number}`}
+            </span>
           </div>
         )}
         <div className={styles.metadataItem}>

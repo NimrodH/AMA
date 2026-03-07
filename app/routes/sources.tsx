@@ -86,6 +86,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   const fetcher = useFetcher();
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>("");
+  const [selectedSourceType, setSelectedSourceType] = React.useState<string>("");
   const isSubmitting = fetcher.state !== "idle";
   const actionError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
 
@@ -101,6 +102,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
       onClose();
       setSelectedFile(null);
       setSelectedCourseId("");
+      setSelectedSourceType("");
     }
   }, [fetcher.state, fetcher.data, onClose]);
 
@@ -133,7 +135,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 
       <div>
         <Label htmlFor="sourceType">סוג המקור</Label>
-        <Select name="sourceType" required>
+        <Select name="sourceType" required value={selectedSourceType} onValueChange={setSelectedSourceType}>
           <SelectTrigger id="sourceType">
             <SelectValue placeholder="בחר סוג מקור" />
           </SelectTrigger>
@@ -169,15 +171,27 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
         </Select>
       </div>
 
-      <div className={styles.formRow}>
+      <div className={selectedSourceType ? styles.formRow : undefined}>
         <div>
           <Label htmlFor="topic">נושא</Label>
           <Input id="topic" name="topic" placeholder="לדוגמה: תרכובות ארומטיות" required />
         </div>
-        <div>
-          <Label htmlFor="lectureNumber">מספר הרצאה (אופציונלי)</Label>
-          <Input id="lectureNumber" name="lectureNumber" type="number" placeholder="5" />
-        </div>
+        {selectedSourceType && (
+          <div>
+            <Label htmlFor="lectureNumber">
+              {selectedSourceType === "Lecture"
+                ? "מספר הרצאה (אופציונלי)"
+                : "הרצאה משויכת (אופציונלי)"}
+            </Label>
+            <Input
+              id="lectureNumber"
+              name="lectureNumber"
+              type="number"
+              min="1"
+              placeholder="5"
+            />
+          </div>
+        )}
       </div>
 
       <div>
