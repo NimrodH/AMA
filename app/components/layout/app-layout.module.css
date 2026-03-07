@@ -21,10 +21,23 @@
   gap: var(--space-4);
 }
 
+.headerTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex: 1;
+}
+
 .headerTitle {
   font: var(--font-heading);
   color: var(--color-neutral-12);
   margin: 0;
+  white-space: nowrap;
+}
+
+.headerExtra {
+  display: flex;
+  align-items: center;
 }
 
 .headerActions {

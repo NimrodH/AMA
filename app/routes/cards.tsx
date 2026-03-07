@@ -62,24 +62,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const actionData = fetcher.data;
 
   const [cardTitle, setCardTitle] = React.useState("");
-  const [selectedCourse, setSelectedCourse] = React.useState("");
+  const [selectedCourse, setSelectedCourse] = React.useState(courses[0]?.course_id ?? "");
   const [cardTopic, setCardTopic] = React.useState("");
   const [lectureNumber, setLectureNumber] = React.useState("");
   const [cardContent, setCardContent] = React.useState("");
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
 
-  // Reset form after successful save
+  // Reset form (except course) after successful save
   React.useEffect(() => {
     if (actionData?.ok) {
       setCardTitle("");
-      setSelectedCourse("");
       setCardTopic("");
       setLectureNumber("");
       setCardContent("");
       setFeedback(null);
     }
   }, [actionData]);
+
+  const filteredCards = selectedCourse
+    ? cards.filter((c) => c.course_id === selectedCourse)
+    : cards;
+
+  const selectedCourseName =
+    courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
 
   const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && cardContent.trim();
 
@@ -110,15 +116,42 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     }, 2000);
   };
 
+  const courseSelector = (
+    <Select value={selectedCourse} onValueChange={setSelectedCourse}>
+      <SelectTrigger className={styles.headerCourseSelect}>
+        <SelectValue placeholder="בחר קורס" />
+      </SelectTrigger>
+      <SelectContent>
+        {courses.length === 0 ? (
+          <SelectItem value="_none" disabled>
+            אין קורסים — הוסף קורס בהגדרות
+          </SelectItem>
+        ) : (
+          courses.map((course) => (
+            <SelectItem key={course.id} value={course.course_id}>
+              {course.course_name}
+            </SelectItem>
+          ))
+        )}
+      </SelectContent>
+    </Select>
+  );
+
   return (
-    <AppLayout title="כרטיסי סיכום">
+    <AppLayout title="כרטיסי סיכום" headerExtra={courseSelector}>
       <div className={styles.cards}>
         <div className={styles.editor}>
           <div className={styles.editorHeader}>
             <h2 className={styles.editorTitle}>כתוב כרטיס סיכום חדש</h2>
+            {selectedCourseName && (
+              <span className={styles.editorCourseTag}>{selectedCourseName}</span>
+            )}
           </div>
 
           <fetcher.Form method="post" className={styles.editorForm}>
+            {/* Hidden field so the action still receives courseId */}
+            <input type="hidden" name="courseId" value={selectedCourse} />
+
             <div>
               <Label htmlFor="cardTitle">כותרת</Label>
               <Input
@@ -128,28 +161,6 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 onChange={(e) => setCardTitle(e.target.value)}
                 placeholder="לדוגמה: סיכום הרצאה 5 - תרכובות ארומטיות"
               />
-            </div>
-
-            <div>
-              <Label htmlFor="cardCourse">קורס</Label>
-              <Select value={selectedCourse} onValueChange={setSelectedCourse} name="courseId">
-                <SelectTrigger id="cardCourse">
-                  <SelectValue placeholder="בחר קורס" />
-                </SelectTrigger>
-                <SelectContent>
-                  {courses.length === 0 ? (
-                    <SelectItem value="_none" disabled>
-                      אין קורסים — הוסף קורס בהגדרות
-                    </SelectItem>
-                  ) : (
-                    courses.map((course) => (
-                      <SelectItem key={course.id} value={course.course_id}>
-                        {course.course_name}
-                      </SelectItem>
-                    ))
-                  )}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className={styles.formRow}>
@@ -227,14 +238,21 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         </div>
 
         <div>
-          <h2 style={{ font: "var(--font-heading)", color: "var(--color-neutral-12)", marginBottom: "var(--space-4)" }}>
+          <h2 className={styles.sectionTitle}>
             הכרטיסים שלי
+            {selectedCourseName && (
+              <span className={styles.sectionCourse}>{selectedCourseName}</span>
+            )}
           </h2>
-          {cards.length === 0 ? (
-            <p className={styles.emptyState}>אין כרטיסים עדיין — צור כרטיס סיכום חדש למעלה</p>
+          {filteredCards.length === 0 ? (
+            <p className={styles.emptyState}>
+              {selectedCourse
+                ? `אין כרטיסים לקורס זה עדיין — צור כרטיס סיכום חדש למעלה`
+                : `אין כרטיסים עדיין — בחר קורס וצור כרטיס סיכום`}
+            </p>
           ) : (
             <div className={styles.cardsList}>
-              {cards.map((card) => (
+              {filteredCards.map((card) => (
                 <div key={card.id} className={styles.savedCard}>
                   <h3 className={styles.savedCardTitle}>{card.title}</h3>
                   <p className={styles.savedCardMeta}>

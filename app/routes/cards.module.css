@@ -15,7 +15,7 @@
 .editorHeader {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  gap: var(--space-3);
   margin-bottom: var(--space-4);
 }
 
@@ -23,6 +23,35 @@
   font: var(--font-heading);
   color: var(--color-neutral-12);
   margin: 0;
+}
+
+.editorCourseTag {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  background: var(--color-accent-3);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-round);
+  padding: 2px var(--space-3);
+  white-space: nowrap;
+}
+
+.sectionTitle {
+  font: var(--font-heading);
+  color: var(--color-neutral-12);
+  margin: 0 0 var(--space-4) 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.sectionCourse {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  background: var(--color-accent-3);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-round);
+  padding: 2px var(--space-3);
+  white-space: nowrap;
 }
 
 .editorForm {
@@ -172,4 +201,9 @@
 
 .textarea {
   width: stretch;
+}
+
+.headerCourseSelect {
+  min-width: 200px;
+  max-width: 280px;
 }

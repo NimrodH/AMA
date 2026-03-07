@@ -29,6 +29,10 @@ interface AppLayoutProps {
    * @important
    */
   title?: string;
+  /**
+   * Extra content rendered inline with the header title (e.g., a course selector)
+   */
+  headerExtra?: React.ReactNode;
 }
 
 const navigationItems = [
@@ -59,7 +63,7 @@ const navigationItems = [
   },
 ];
 
-export function AppLayout({ children, title = "מערכת ניהול לימודים" }: AppLayoutProps) {
+export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra }: AppLayoutProps) {
   return (
     <SidebarProvider>
       <div className={styles.layout}>
@@ -98,7 +102,10 @@ export function AppLayout({ children, title = "מערכת ניהול לימוד�
               <ColorSchemeToggle />
               <SidebarTrigger />
             </div>
-            <h1 className={styles.headerTitle}>{title}</h1>
+            <div className={styles.headerTitleRow}>
+              <h1 className={styles.headerTitle}>{title}</h1>
+              {headerExtra && <div className={styles.headerExtra}>{headerExtra}</div>}
+            </div>
           </header>
           <div className={styles.content}>{children}</div>
         </main>
