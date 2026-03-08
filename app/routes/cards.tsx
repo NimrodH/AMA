@@ -39,6 +39,15 @@ export async function loader() {
 export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
+
+  // Handle delete first — it doesn't need the full form fields
+  if (intent === "delete") {
+    const cardId = formData.get("cardId") as string;
+    if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
+    return deleteCard(cardId);
+  }
+
+  // For create / edit, all fields are required
   const courseId = formData.get("courseId") as string;
   const title = formData.get("title") as string;
   const topic = formData.get("topic") as string;
@@ -50,12 +59,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
-
-  if (intent === "delete") {
-    const cardId = formData.get("cardId") as string;
-    if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
-    return deleteCard(cardId);
-  }
 
   if (intent === "edit") {
     const cardId = formData.get("cardId") as string;

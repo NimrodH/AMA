@@ -8,9 +8,19 @@ import { getSourceById } from "~/services/sources.service";
 import { getStudent, getCourses } from "~/services/settings.service";
 import styles from "./source-view.module.css";
 
-// Lazy-load PdfViewer so pdfjs-dist (which references browser-only globals like
-// DOMMatrix) is never evaluated during SSR — it only runs in the browser.
-const PdfViewer = React.lazy(() => import("~/components/pdf-viewer/pdf-viewer"));
+/**
+ * ClientOnly wrapper — renders children only on the client side.
+ * During SSR this renders the fallback instead.
+ */
+function ClientOnly({ children, fallback }: { children: React.ReactNode; fallback: React.ReactNode }) {
+  const [mounted, setMounted] = React.useState(false);
+  React.useEffect(() => setMounted(true), []);
+  return <>{mounted ? children : fallback}</>;
+}
+
+// Use .client.tsx so pdfjs-dist (browser-only globals like DOMMatrix) is
+// completely excluded from the SSR bundle.
+const PdfViewer = React.lazy(() => import("~/components/pdf-viewer/pdf-viewer.client"));
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
@@ -73,7 +83,7 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
         </div>
 
         {isPdf && source.file_url ? (
-          <React.Suspense
+          <ClientOnly
             fallback={
               <div className={styles.loadingFallback}>
                 <div className={styles.loadingSpinner} aria-hidden="true" />
@@ -81,8 +91,17 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
               </div>
             }
           >
-            <PdfViewer fileUrl={source.file_url} topic={source.topic} />
-          </React.Suspense>
+            <React.Suspense
+              fallback={
+                <div className={styles.loadingFallback}>
+                  <div className={styles.loadingSpinner} aria-hidden="true" />
+                  <p className={styles.loadingText}>טוען מציג PDF...</p>
+                </div>
+              }
+            >
+              <PdfViewer fileUrl={source.file_url} topic={source.topic} />
+            </React.Suspense>
+          </ClientOnly>
         ) : (
           <div className={styles.errorState}>
             <p className={styles.errorText}>
