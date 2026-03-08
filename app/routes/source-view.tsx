@@ -1,11 +1,11 @@
 import * as React from "react";
 import { Link, redirect } from "react-router";
-import { ChevronLeft } from "lucide-react";
+import { ChevronLeft, BookOpen, Hash } from "lucide-react";
 import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { getSourceById } from "~/services/sources.service";
-import { getStudent } from "~/services/settings.service";
+import { getStudent, getCourses } from "~/services/settings.service";
 import styles from "./source-view.module.css";
 
 // Lazy-load PdfViewer so pdfjs-dist (which references browser-only globals like
@@ -25,16 +25,22 @@ export async function loader({ params }: Route.LoaderArgs) {
   const student = await getStudent();
   if (!student) return redirect("/setup");
 
-  const source = await getSourceById(params.id, student.id);
+  const [source, courses] = await Promise.all([
+    getSourceById(params.id, student.id),
+    getCourses(student.id),
+  ]);
   if (!source) throw new Response("Not Found", { status: 404 });
 
-  return { source };
+  const courseName =
+    courses.find((c) => c.course_id === source.course_id)?.course_name ?? null;
+
+  return { source, courseName };
 }
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function SourceView({ loaderData }: Route.ComponentProps) {
-  const { source } = loaderData;
+  const { source, courseName } = loaderData;
   const isPdf = source.file_url?.toLowerCase().endsWith(".pdf") ?? false;
 
   return (
@@ -47,6 +53,23 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
               חזרה למקורות
             </Link>
           </Button>
+
+          {(courseName || source.lecture_number != null) && (
+            <div className={styles.metaChips}>
+              {courseName && (
+                <span className={styles.metaChip}>
+                  <BookOpen style={{ width: 14, height: 14 }} />
+                  {courseName}
+                </span>
+              )}
+              {source.lecture_number != null && (
+                <span className={styles.metaChip}>
+                  <Hash style={{ width: 14, height: 14 }} />
+                  שיעור {source.lecture_number}
+                </span>
+              )}
+            </div>
+          )}
         </div>
 
         {isPdf && source.file_url ? (
