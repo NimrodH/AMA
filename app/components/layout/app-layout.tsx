@@ -1,6 +1,6 @@
 import * as React from "react";
 import { NavLink } from "react-router";
-import { Home, FileText, BookOpen, GraduationCap, Settings } from "lucide-react";
+import { Home, FileText, BookOpen, GraduationCap, Settings, Layers } from "lucide-react";
 import classNames from "classnames";
 import {
   Sidebar,
@@ -50,6 +50,11 @@ const navigationItems = [
     title: "כרטיסי סיכום",
     url: "/cards",
     icon: BookOpen,
+  },
+  {
+    title: "למד בכרטיסים",
+    url: "/learn",
+    icon: Layers,
   },
   {
     title: "מבחנים",

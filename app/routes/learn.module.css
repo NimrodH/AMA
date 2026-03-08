@@ -1,0 +1,137 @@
+.learn {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  max-width: 720px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.courseSelect {
+  min-width: 200px;
+}
+
+.showTitleBtn,
+.showContentBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.cardDisplay {
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-4);
+  background: var(--color-neutral-2);
+  padding: var(--space-6);
+  min-height: 220px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  position: relative;
+  animation: var(--animation-fade-in) 0.25s var(--ease);
+}
+
+.cardMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+}
+
+.metaChip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-round);
+  font: var(--font-caption);
+  font-size: 0.8rem;
+  background: var(--color-neutral-3);
+  color: var(--color-neutral-11);
+}
+
+.cardTitle {
+  font: var(--font-heading);
+  color: var(--color-neutral-12);
+  margin: 0;
+  animation: var(--animation-fade-in) 0.3s var(--ease);
+}
+
+.divider {
+  height: 1px;
+  background: var(--color-neutral-5);
+  border: none;
+  margin: 0;
+}
+
+.cardContent {
+  font: var(--font-body);
+  color: var(--color-neutral-11);
+  white-space: pre-wrap;
+  line-height: 1.7;
+  animation: var(--animation-fade-in) 0.3s var(--ease);
+}
+
+.emptyState {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 220px;
+  gap: var(--space-3);
+  border: 2px dashed var(--color-neutral-5);
+  border-radius: var(--radius-4);
+  padding: var(--space-6);
+}
+
+.emptyIcon {
+  color: var(--color-neutral-8);
+}
+
+.emptyText {
+  font: var(--font-body);
+  color: var(--color-neutral-9);
+  text-align: center;
+  margin: 0;
+}
+
+.revealHint {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  text-align: center;
+  padding: var(--space-4);
+  border: 1px dashed var(--color-accent-6);
+  border-radius: var(--radius-3);
+  background: var(--color-accent-2);
+  margin: 0;
+  animation: var(--animation-fade-in) 0.3s var(--ease);
+}
+
+.counter {
+  font: var(--font-caption);
+  font-size: 0.8rem;
+  color: var(--color-neutral-9);
+  margin-right: auto;
+}
+
+@media (max-width: 480px) {
+  .controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .courseSelect {
+    min-width: 0;
+    width: 100%;
+  }
+
+  .counter {
+    margin-right: 0;
+    text-align: center;
+  }
+}
