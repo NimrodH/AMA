@@ -54,12 +54,28 @@
   margin: 0 auto;
 }
 
-@media (max-width: 480px) {
+@media (max-width: 768px) {
   .content {
     padding: var(--space-4);
   }
 
   .header {
     padding: var(--space-3) var(--space-4);
+    flex-wrap: wrap;
+  }
+
+  .headerTitleRow {
+    flex-wrap: wrap;
+    min-width: 0;
+    width: 100%;
+  }
+
+  .headerTitle {
+    white-space: normal;
+    word-break: break-word;
+  }
+
+  .headerExtra {
+    width: 100%;
   }
 }
