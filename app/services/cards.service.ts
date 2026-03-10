@@ -27,7 +27,9 @@ export async function getCards(studentId: string): Promise<CardRow[]> {
 
 /**
  * Returns the next available card_number for a given course:
- * max(card_number) + 1, or 1 if no cards with a number exist yet.
+ * Math.floor(max(card_number)) + 1 — the smallest integer strictly greater
+ * than the largest card number in the course (so 1.1 → 2, 3 → 4).
+ * Returns 1 if no numbered cards exist yet.
  */
 export async function getNextCardNumber(courseId: string): Promise<number> {
   const db = createServerClient();
@@ -40,7 +42,7 @@ export async function getNextCardNumber(courseId: string): Promise<number> {
     .limit(1);
 
   const max = data?.[0]?.card_number ?? 0;
-  return (max as number) + 1;
+  return Math.floor(Number(max)) + 1;
 }
 
 interface AddCardParams {

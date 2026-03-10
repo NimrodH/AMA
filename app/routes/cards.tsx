@@ -60,7 +60,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
-  const cardNumber = cardNumberRaw ? parseInt(cardNumberRaw, 10) : null;
+  const cardNumber = cardNumberRaw ? parseFloat(cardNumberRaw) : null;
 
   if (intent === "edit") {
     const cardId = formData.get("cardId") as string;
@@ -204,7 +204,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       // Keep the form as-is; just update the snapshot so isFormDirty() → false
       setEditingCard((prev) =>
         prev
-          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null, card_number: cardNumber ? parseInt(cardNumber, 10) : null }
+          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null, card_number: cardNumber ? parseFloat(cardNumber) : null }
           : prev
       );
       setShowSuccess(true);
@@ -358,11 +358,11 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   <Input
                     id="cardNumber"
                     name="cardNumber"
-                    type="number"
-                    min={1}
+                    type="text"
+                    inputMode="decimal"
                     value={cardNumber}
                     onChange={(e) => { setCardNumber(e.target.value); setShowSuccess(false); }}
-                    placeholder="לדוגמה: 12"
+                    placeholder="לדוגמה: 1.1"
                   />
                   <button
                     type="button"
