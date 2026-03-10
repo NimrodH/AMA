@@ -6,6 +6,7 @@
  *
  * DAY_CODE options:
  *   "daily"         — every day
+ *   "weekdays"       — Sunday through Thursday (ימים א-ה)
  *   "sun"|"mon"|"tue"|"wed"|"thu"|"fri"|"sat" — specific weekday
  *
  * Example values:
@@ -15,8 +16,9 @@
  */
 
 export const DAY_OPTIONS = [
-  { value: "daily", label: "כל יום" },
-  { value: "sun",   label: "כל ראשון" },
+  { value: "daily",    label: "כל יום" },
+  { value: "weekdays", label: "ימים א-ה" },
+  { value: "sun",      label: "כל ראשון" },
   { value: "mon",   label: "כל שני" },
   { value: "tue",   label: "כל שלישי" },
   { value: "wed",   label: "כל רביעי" },
@@ -69,6 +71,9 @@ export function isReminderDueToday(reminderTime: string): boolean {
   if (dayCode === "daily") return true;
 
   const todayJs = new Date().getDay(); // 0=Sun … 6=Sat
+  // ימים א-ה = Sunday(0) through Thursday(4)
+  if (dayCode === "weekdays") return todayJs >= 0 && todayJs <= 4;
+
   return DAY_CODE_TO_JS[dayCode] === todayJs;
 }
 
