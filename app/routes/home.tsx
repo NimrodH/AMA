@@ -5,8 +5,8 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { mockSources, mockCourses, mockStudent } from "~/data/mock-data";
 import { getStudent } from "~/services/settings.service";
+import { getSources } from "~/services/sources.service";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -21,19 +21,17 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  return { studentName: student?.name ?? null };
+  const sources = student ? await getSources(student.id) : [];
+  const recentSources = sources.slice(0, 3);
+  return {
+    studentId: student?.id ?? null,
+    studentName: student?.name ?? null,
+    recentSources,
+  };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { studentName } = loaderData;
-  const recentSources = mockSources.slice(0, 3);
-
-  const stats = {
-    lectures: mockSources.filter((s) => s.source_type === "Lecture").length,
-    cards: mockSources.filter((s) => s.source_type === "Card").length,
-    exams: mockSources.filter((s) => s.source_type === "Past exam").length,
-    courses: mockCourses.length,
-  };
+  const { studentName, studentId, recentSources } = loaderData;
 
   return (
     <AppLayout title="דף הבית">
@@ -76,7 +74,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           {recentSources.length > 0 ? (
             <div className={styles.grid}>
               {recentSources.map((source) => (
-                <SourceCard key={source.id} source={source} studentId={mockStudent.id} />
+                <SourceCard key={source.id} source={source} studentId={studentId ?? ""} />
               ))}
             </div>
           ) : (
@@ -99,7 +97,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>הרצאות</p>
             </div>
-            <p className={styles.statValue}>{stats.lectures}</p>
+            <p className={styles.statValue}>
+              {recentSources.filter((s) => s.source_type === "Lecture").length}
+            </p>
           </div>
 
           <div className={styles.statCard}>
@@ -109,7 +109,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>כרטיסי סיכום</p>
             </div>
-            <p className={styles.statValue}>{stats.cards}</p>
+            <p className={styles.statValue}>
+              {recentSources.filter((s) => s.source_type === "Card").length}
+            </p>
           </div>
 
           <div className={styles.statCard}>
@@ -119,7 +121,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>מבחני עבר</p>
             </div>
-            <p className={styles.statValue}>{stats.exams}</p>
+            <p className={styles.statValue}>
+              {recentSources.filter((s) => s.source_type === "Past exam").length}
+            </p>
           </div>
 
           <div className={styles.statCard}>
@@ -127,9 +131,9 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <div className={styles.statIcon}>
                 <TrendingUp />
               </div>
-              <p className={styles.statLabel}>קורסים פעילים</p>
+              <p className={styles.statLabel}>סה״כ מקורות</p>
             </div>
-            <p className={styles.statValue}>{stats.courses}</p>
+            <p className={styles.statValue}>{recentSources.length}</p>
           </div>
         </div>
       </div>
