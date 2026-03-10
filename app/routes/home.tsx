@@ -42,6 +42,54 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
           <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
         </div>
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>פעולות מהירות</h2>
+          </div>
+          <div className={styles.grid}>
+            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
+              <Link to="/cards">
+                <BookOpen style={{ marginLeft: "var(--space-2)" }} />
+                כתוב כרטיס סיכום חדש
+              </Link>
+            </Button>
+            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
+              <Link to="/exams">
+                <GraduationCap style={{ marginLeft: "var(--space-2)" }} />
+                צור מבחן אימון
+              </Link>
+            </Button>
+          </div>
+        </div>
+
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>מקורות אחרונים</h2>
+            <Button asChild variant="outline">
+              <Link to="/sources">
+                <Plus style={{ marginLeft: "var(--space-2)" }} />
+                הוסף מקור חדש
+              </Link>
+            </Button>
+          </div>
+
+          {recentSources.length > 0 ? (
+            <div className={styles.grid}>
+              {recentSources.map((source) => (
+                <SourceCard key={source.id} source={source} studentId={mockStudent.id} />
+              ))}
+            </div>
+          ) : (
+            <div className={styles.emptyState}>
+              <FileText className={styles.emptyStateIcon} />
+              <h3 className={styles.emptyStateTitle}>אין מקורות עדיין</h3>
+              <p className={styles.emptyStateText}>התחל להעלות חומרי לימוד, כרטיסי סיכום ומבחני עבר</p>
+              <Button asChild>
+                <Link to="/sources">הוסף מקור ראשון</Link>
+              </Button>
+            </div>
+          )}
+        </div>
 
         <div className={styles.stats}>
           <div className={styles.statCard}>
@@ -82,55 +130,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <p className={styles.statLabel}>קורסים פעילים</p>
             </div>
             <p className={styles.statValue}>{stats.courses}</p>
-          </div>
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>מקורות אחרונים</h2>
-            <Button asChild variant="outline">
-              <Link to="/sources">
-                <Plus style={{ marginLeft: "var(--space-2)" }} />
-                הוסף מקור חדש
-              </Link>
-            </Button>
-          </div>
-
-          {recentSources.length > 0 ? (
-            <div className={styles.grid}>
-              {recentSources.map((source) => (
-                <SourceCard key={source.id} source={source} studentId={mockStudent.id} />
-              ))}
-            </div>
-          ) : (
-            <div className={styles.emptyState}>
-              <FileText className={styles.emptyStateIcon} />
-              <h3 className={styles.emptyStateTitle}>אין מקורות עדיין</h3>
-              <p className={styles.emptyStateText}>התחל להעלות חומרי לימוד, כרטיסי סיכום ומבחני עבר</p>
-              <Button asChild>
-                <Link to="/sources">הוסף מקור ראשון</Link>
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>פעולות מהירות</h2>
-          </div>
-          <div className={styles.grid}>
-            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
-              <Link to="/cards">
-                <BookOpen style={{ marginLeft: "var(--space-2)" }} />
-                כתוב כרטיס סיכום חדש
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
-              <Link to="/exams">
-                <GraduationCap style={{ marginLeft: "var(--space-2)" }} />
-                צור מבחן אימון
-              </Link>
-            </Button>
           </div>
         </div>
       </div>
