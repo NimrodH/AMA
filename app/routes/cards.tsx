@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save, Trash2 } from "lucide-react";
+import { Sparkles, Save, Trash2, Hash } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -18,7 +18,7 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import { getStudent, getCourses } from "~/services/settings.service";
-import { getCards, addCard, updateCard, deleteCard } from "~/services/cards.service";
+import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import styles from "./cards.module.css";
 
@@ -52,6 +52,7 @@ export async function action({ request }: Route.ActionArgs) {
   const title = formData.get("title") as string;
   const topic = formData.get("topic") as string;
   const lectureNumberRaw = formData.get("lectureNumber") as string;
+  const cardNumberRaw = formData.get("cardNumber") as string;
   const content = formData.get("content") as string;
 
   if (!courseId || !title || !topic || !content) {
@@ -59,11 +60,12 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+  const cardNumber = cardNumberRaw ? parseInt(cardNumberRaw, 10) : null;
 
   if (intent === "edit") {
     const cardId = formData.get("cardId") as string;
     if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
-    return updateCard({ id: cardId, title, topic, lectureNumber, content });
+    return updateCard({ id: cardId, title, topic, lectureNumber, cardNumber, content });
   }
 
   const student = await getStudent();
@@ -77,6 +79,7 @@ export async function action({ request }: Route.ActionArgs) {
     title,
     topic,
     lectureNumber,
+    cardNumber,
     content,
   });
 }
@@ -92,6 +95,8 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [selectedCourse, setSelectedCourse] = React.useState(courses[0]?.course_id ?? "");
   const [cardTopic, setCardTopic] = React.useState("");
   const [lectureNumber, setLectureNumber] = React.useState("");
+  const [cardNumber, setCardNumber] = React.useState("");
+  const [isAutoFilling, setIsAutoFilling] = React.useState(false);
   const [cardContent, setCardContent] = React.useState("");
   const [feedback, setFeedback] = React.useState<string | null>(null);
   const [showSuccess, setShowSuccess] = React.useState(false);
@@ -108,12 +113,13 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         cardTitle !== editingCard.title ||
         cardTopic !== editingCard.topic ||
         cardContent !== editingCard.content ||
-        lectureNumber !== (editingCard.lecture_number != null ? String(editingCard.lecture_number) : "")
+        lectureNumber !== (editingCard.lecture_number != null ? String(editingCard.lecture_number) : "") ||
+        cardNumber !== (editingCard.card_number != null ? String(editingCard.card_number) : "")
       );
     }
     // Create mode: warn if any field has been touched
     return cardTitle.trim() !== "" || cardTopic.trim() !== "" || cardContent.trim() !== "";
-  }, [editingCard, cardTitle, cardTopic, cardContent, lectureNumber]);
+  }, [editingCard, cardTitle, cardTopic, cardContent, lectureNumber, cardNumber]);
 
   /** Runs the pending action if form is clean, otherwise shows the dialog */
   const guardedAction = React.useCallback(
@@ -133,6 +139,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setCardTitle("");
     setCardTopic("");
     setLectureNumber("");
+    setCardNumber("");
     setCardContent("");
     setFeedback(null);
     setShowSuccess(false);
@@ -157,12 +164,29 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     action?.();
   };
 
+  const handleAutoFillCardNumber = async () => {
+    if (!selectedCourse) return;
+    setIsAutoFilling(true);
+    try {
+      const res = await fetch(`/api/next-card-number?courseId=${encodeURIComponent(selectedCourse)}`);
+      if (res.ok) {
+        const { nextNumber } = await res.json() as { nextNumber: number };
+        setCardNumber(String(nextNumber));
+      }
+    } catch {
+      // silently fail — user can type manually
+    } finally {
+      setIsAutoFilling(false);
+    }
+  };
+
   const handleCardClick = (card: CardRow) => {
     const doSwitch = () => {
       setEditingCard(card);
       setCardTitle(card.title);
       setCardTopic(card.topic);
       setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
+      setCardNumber(card.card_number != null ? String(card.card_number) : "");
       setCardContent(card.content);
       setFeedback(null);
       setShowSuccess(false);
@@ -180,7 +204,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       // Keep the form as-is; just update the snapshot so isFormDirty() → false
       setEditingCard((prev) =>
         prev
-          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null }
+          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null, card_number: cardNumber ? parseInt(cardNumber, 10) : null }
           : prev
       );
       setShowSuccess(true);
@@ -328,6 +352,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   placeholder="לדוגמה: 3"
                 />
               </div>
+              <div>
+                <Label htmlFor="cardNumber">מספר כרטיס (אופציונלי)</Label>
+                <div className={styles.cardNumberRow}>
+                  <Input
+                    id="cardNumber"
+                    name="cardNumber"
+                    type="number"
+                    min={1}
+                    value={cardNumber}
+                    onChange={(e) => { setCardNumber(e.target.value); setShowSuccess(false); }}
+                    placeholder="לדוגמה: 12"
+                  />
+                  <button
+                    type="button"
+                    className={styles.autoFillBtn}
+                    onClick={handleAutoFillCardNumber}
+                    disabled={isAutoFilling || !selectedCourse}
+                    title="מלא אוטומטית את המספר הבא בקורס"
+                    aria-label="מספר כרטיס הבא"
+                  >
+                    <Hash size={15} />
+                  </button>
+                </div>
+              </div>
             </div>
 
             <div>
@@ -408,6 +456,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   >
                     <h3 className={styles.savedCardTitle}>{card.title}</h3>
                     <p className={styles.savedCardMeta}>
+                      {card.card_number ? `#${card.card_number} · ` : ""}
                       {card.topic}
                       {card.lecture_number ? ` · הרצאה ${card.lecture_number}` : ""}
                     </p>

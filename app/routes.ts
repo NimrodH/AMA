@@ -11,5 +11,6 @@ export default [
   route("exams", "routes/exams.tsx"),
   route("settings", "routes/settings.tsx"),
   route("setup", "routes/setup.tsx"),
+  route("api/next-card-number", "routes/api.next-card-number.ts"),
   ...devRoutes,
 ] satisfies RouteConfig;

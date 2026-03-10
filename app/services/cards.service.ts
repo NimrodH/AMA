@@ -7,6 +7,7 @@ export type CardRow = {
   title: string;
   topic: string;
   lecture_number: number | null;
+  card_number: number | null;
   content: string;
   created_at: string;
 };
@@ -16,12 +17,30 @@ export async function getCards(studentId: string): Promise<CardRow[]> {
   const db = createServerClient();
   const { data, error } = await db
     .from("cards")
-    .select("id, student_id, course_id, title, topic, lecture_number, content, created_at")
+    .select("id, student_id, course_id, title, topic, lecture_number, card_number, content, created_at")
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
 
   if (error) return [];
   return (data ?? []) as CardRow[];
+}
+
+/**
+ * Returns the next available card_number for a given course:
+ * max(card_number) + 1, or 1 if no cards with a number exist yet.
+ */
+export async function getNextCardNumber(courseId: string): Promise<number> {
+  const db = createServerClient();
+  const { data } = await db
+    .from("cards")
+    .select("card_number")
+    .eq("course_id", courseId)
+    .not("card_number", "is", null)
+    .order("card_number", { ascending: false })
+    .limit(1);
+
+  const max = data?.[0]?.card_number ?? 0;
+  return (max as number) + 1;
 }
 
 interface AddCardParams {
@@ -30,6 +49,7 @@ interface AddCardParams {
   title: string;
   topic: string;
   lectureNumber: number | null;
+  cardNumber: number | null;
   content: string;
 }
 
@@ -38,6 +58,7 @@ interface UpdateCardParams {
   title: string;
   topic: string;
   lectureNumber: number | null;
+  cardNumber: number | null;
   content: string;
 }
 
@@ -47,13 +68,14 @@ export async function updateCard({
   title,
   topic,
   lectureNumber,
+  cardNumber,
   content,
 }: UpdateCardParams): Promise<{ ok: boolean; error?: string }> {
   const db = createServerClient();
 
   const { error } = await db
     .from("cards")
-    .update({ title, topic, lecture_number: lectureNumber, content })
+    .update({ title, topic, lecture_number: lectureNumber, card_number: cardNumber, content })
     .eq("id", id);
 
   if (error) {
@@ -82,6 +104,7 @@ export async function addCard({
   title,
   topic,
   lectureNumber,
+  cardNumber,
   content,
 }: AddCardParams): Promise<{ ok: boolean; error?: string }> {
   const db = createServerClient();
@@ -92,6 +115,7 @@ export async function addCard({
     title,
     topic,
     lecture_number: lectureNumber,
+    card_number: cardNumber,
     content,
   });
 

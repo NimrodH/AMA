@@ -65,13 +65,47 @@
 
 .formRow {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: 1fr auto auto;
   gap: var(--space-3);
   align-items: end;
 }
 
-.formRow > div:last-child {
+.formRow > div:nth-child(2),
+.formRow > div:nth-child(3) {
   min-width: 140px;
+}
+
+.cardNumberRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.autoFillBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  background: var(--color-accent-3);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-3);
+  color: var(--color-accent-11);
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease, color 0.15s ease;
+}
+
+.autoFillBtn:hover:not(:disabled) {
+  background: var(--color-accent-4);
+  border-color: var(--color-accent-8);
+  color: var(--color-accent-12);
+}
+
+.autoFillBtn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
 }
 
 .editorActions {
@@ -255,7 +289,8 @@
     grid-template-columns: 1fr;
   }
 
-  .formRow > div:last-child {
+  .formRow > div:nth-child(2),
+  .formRow > div:nth-child(3) {
     min-width: unset;
   }
 
