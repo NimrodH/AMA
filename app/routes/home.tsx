@@ -1,12 +1,13 @@
 import * as React from "react";
-import { Link } from "react-router";
-import { FileText, BookOpen, GraduationCap, Plus, TrendingUp } from "lucide-react";
+import { Link, useFetcher } from "react-router";
+import { FileText, BookOpen, GraduationCap, Plus, TrendingUp, Bell, CheckCircle2 } from "lucide-react";
 import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { getStudent } from "~/services/settings.service";
+import { getStudent, getReminders, deleteReminder } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
+import { isReminderDueToday, formatReminderTime } from "~/lib/reminder-utils";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -22,11 +23,19 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
   const sources = student ? await getSources(student.id) : [];
+  const allReminders = student ? await getReminders(student.id) : [];
+
+  // Only surface active reminders that are due today
+  const dueReminders = allReminders.filter(
+    (r) => r.is_active && isReminderDueToday(r.reminder_time)
+  );
+
   const recentSources = sources.slice(0, 3);
   return {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
     recentSources,
+    dueReminders,
     totalSources: sources.length,
     totalLectures: sources.filter((s) => s.source_type === "Lecture").length,
     totalCards: sources.filter((s) => s.source_type === "Card").length,
@@ -34,8 +43,64 @@ export async function loader({}: Route.LoaderArgs) {
   };
 }
 
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "dismiss_reminder") {
+    const id = formData.get("id") as string;
+    if (id) await deleteReminder(id);
+  }
+
+  return { ok: true };
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function ReminderBanner({ reminder }: { reminder: { id: string; reminder_type: string; reminder_time: string } }) {
+  const fetcher = useFetcher();
+  const isDismissing = fetcher.state !== "idle";
+
+  return (
+    <div className={styles.reminderBanner}>
+      <div className={styles.reminderBannerIcon}>
+        <Bell />
+      </div>
+      <div className={styles.reminderBannerContent}>
+        <p className={styles.reminderBannerTitle}>{reminder.reminder_type}</p>
+        <p className={styles.reminderBannerTime}>{formatReminderTime(reminder.reminder_time)}</p>
+      </div>
+      <fetcher.Form method="POST">
+        <input type="hidden" name="intent" value="dismiss_reminder" />
+        <input type="hidden" name="id" value={reminder.id} />
+        <Button
+          type="submit"
+          size="sm"
+          variant="outline"
+          disabled={isDismissing}
+          className={styles.reminderBannerBtn}
+        >
+          <CheckCircle2 style={{ marginLeft: "var(--space-2)" }} />
+          בוצע
+        </Button>
+      </fetcher.Form>
+    </div>
+  );
+}
+
+// ─── Page ─────────────────────────────────────────────────────────────────────
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { studentName, studentId, recentSources, totalSources, totalLectures, totalCards, totalExams } = loaderData;
+  const {
+    studentName,
+    studentId,
+    recentSources,
+    dueReminders,
+    totalSources,
+    totalLectures,
+    totalCards,
+    totalExams,
+  } = loaderData;
 
   return (
     <AppLayout title="דף הבית">
@@ -44,6 +109,24 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
           <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
         </div>
+
+        {/* Due Reminders — shown before Quick Actions */}
+        {dueReminders.length > 0 && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>
+                <Bell className={styles.sectionTitleIcon} />
+                תזכורות להיום
+              </h2>
+            </div>
+            <div className={styles.remindersList}>
+              {dueReminders.map((reminder) => (
+                <ReminderBanner key={reminder.id} reminder={reminder} />
+              ))}
+            </div>
+          </div>
+        )}
+
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>פעולות מהירות</h2>
@@ -101,9 +184,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>הרצאות</p>
             </div>
-            <p className={styles.statValue}>
-              {totalLectures}
-            </p>
+            <p className={styles.statValue}>{totalLectures}</p>
           </div>
 
           <div className={styles.statCard}>
@@ -113,9 +194,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>כרטיסי סיכום</p>
             </div>
-            <p className={styles.statValue}>
-              {totalCards}
-            </p>
+            <p className={styles.statValue}>{totalCards}</p>
           </div>
 
           <div className={styles.statCard}>
@@ -125,9 +204,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>מבחני עבר</p>
             </div>
-            <p className={styles.statValue}>
-              {totalExams}
-            </p>
+            <p className={styles.statValue}>{totalExams}</p>
           </div>
 
           <div className={styles.statCard}>

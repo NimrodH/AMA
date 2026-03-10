@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Trash2, Bell, BookOpen, Code, X } from "lucide-react";
+import { Plus, Trash2, Bell, Code, X } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -18,6 +18,7 @@ import {
   toggleReminder,
   deleteReminder,
 } from "~/services/settings.service";
+import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import styles from "./settings.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -102,9 +103,10 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   // Add reminder form state
   const [showAddReminder, setShowAddReminder] = React.useState(false);
   const [newReminderType, setNewReminderType] = React.useState("");
-  const [newReminderTime, setNewReminderTime] = React.useState("");
+  const [newReminderDay, setNewReminderDay] = React.useState("daily");
+  const [newReminderHour, setNewReminderHour] = React.useState("08:00");
 
-  // Close add-course form after successful submission
+  // Reset forms after successful submission
   const prevFetcherState = React.useRef(fetcher.state);
   React.useEffect(() => {
     if (prevFetcherState.current !== "idle" && fetcher.state === "idle") {
@@ -113,7 +115,8 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
       setNewCourseName("");
       setShowAddReminder(false);
       setNewReminderType("");
-      setNewReminderTime("");
+      setNewReminderDay("daily");
+      setNewReminderHour("08:00");
     }
     prevFetcherState.current = fetcher.state;
   }, [fetcher.state]);
@@ -144,11 +147,13 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
 
   function handleAddReminder(e: React.FormEvent) {
     e.preventDefault();
-    if (!newReminderType.trim() || !newReminderTime.trim()) return;
+    if (!newReminderType.trim() || !newReminderHour.trim()) return;
+    // Store as structured "DAY_CODE|HH:MM" string
+    const reminderTime = `${newReminderDay}|${newReminderHour}`;
     submitIntent({
       intent: "add_reminder",
       reminder_type: newReminderType,
-      reminder_time: newReminderTime,
+      reminder_time: reminderTime,
     });
   }
 
@@ -269,7 +274,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   </div>
                   <div className={styles.reminderDetails}>
                     <h3 className={styles.reminderType}>{reminder.reminder_type}</h3>
-                    <p className={styles.reminderTime}>{reminder.reminder_time}</p>
+                    <p className={styles.reminderTime}>{formatReminderTime(reminder.reminder_time)}</p>
                   </div>
                 </div>
                 <div className={styles.reminderActions}>
@@ -295,22 +300,35 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
               <form className={styles.addCourseForm} onSubmit={handleAddReminder}>
                 <div className={styles.addCourseFields}>
                   <Input
-                    placeholder="תיאור התזכורת"
+                    placeholder="תיאור התזכורת (למשל: לחזור על חומר)"
                     value={newReminderType}
                     onChange={(e) => setNewReminderType(e.target.value)}
                     autoFocus
                   />
-                  <Input
-                    placeholder="זמן (לדוג׳ כל יום ב-19:00)"
-                    value={newReminderTime}
-                    onChange={(e) => setNewReminderTime(e.target.value)}
-                  />
+                  <div className={styles.reminderTimeRow}>
+                    <select
+                      className={styles.reminderSelect}
+                      value={newReminderDay}
+                      onChange={(e) => setNewReminderDay(e.target.value)}
+                    >
+                      {DAY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    <span className={styles.reminderTimeLabel}>בשעה</span>
+                    <input
+                      type="time"
+                      className={styles.reminderSelect}
+                      value={newReminderHour}
+                      onChange={(e) => setNewReminderHour(e.target.value)}
+                    />
+                  </div>
                 </div>
                 <div className={styles.addFormActions}>
                   <Button
                     type="submit"
                     size="sm"
-                    disabled={!newReminderType.trim() || !newReminderTime.trim() || fetcher.state !== "idle"}
+                    disabled={!newReminderType.trim() || fetcher.state !== "idle"}
                   >
                     הוסף
                   </Button>
@@ -318,7 +336,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => { setShowAddReminder(false); setNewReminderType(""); setNewReminderTime(""); }}
+                    onClick={() => { setShowAddReminder(false); setNewReminderType(""); setNewReminderDay("daily"); setNewReminderHour("08:00"); }}
                   >
                     <X style={{ marginLeft: "var(--space-2)" }} />
                     ביטול
