@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Shuffle, Eye, Layers } from "lucide-react";
+import { Shuffle, Eye, Layers, ArrowRight } from "lucide-react";
 import type { Route } from "./+types/learn";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -35,6 +35,8 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
   const [selectedCourse, setSelectedCourse] = React.useState("__all__");
   const [currentCard, setCurrentCard] = React.useState<CardRow | null>(null);
   const [showContent, setShowContent] = React.useState(false);
+  const [orderMode, setOrderMode] = React.useState<"random" | "ordered">("random");
+  const [orderedIndex, setOrderedIndex] = React.useState(0);
 
   const filteredCards = React.useMemo(
     () =>
@@ -44,15 +46,31 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
     [selectedCourse, cards]
   );
 
-  const pickRandomCard = () => {
+  const sortedCards = React.useMemo(() => {
+    if (orderMode !== "ordered") return filteredCards;
+    return [...filteredCards].sort((a, b) => {
+      if (a.card_number == null && b.card_number == null) return 0;
+      if (a.card_number == null) return 1;
+      if (b.card_number == null) return -1;
+      return Number(a.card_number) - Number(b.card_number);
+    });
+  }, [filteredCards, orderMode]);
+
+  const pickNextCard = () => {
     if (filteredCards.length === 0) return;
-    // Avoid picking the same card twice in a row if possible
-    let pool = filteredCards;
-    if (pool.length > 1 && currentCard) {
-      pool = pool.filter((c) => c.id !== currentCard.id);
+    if (orderMode === "ordered") {
+      const nextIndex = orderedIndex % sortedCards.length;
+      setCurrentCard(sortedCards[nextIndex]);
+      setOrderedIndex(nextIndex + 1);
+    } else {
+      // Avoid picking the same card twice in a row if possible
+      let pool = filteredCards;
+      if (pool.length > 1 && currentCard) {
+        pool = pool.filter((c) => c.id !== currentCard.id);
+      }
+      const randomIndex = Math.floor(Math.random() * pool.length);
+      setCurrentCard(pool[randomIndex]);
     }
-    const randomIndex = Math.floor(Math.random() * pool.length);
-    setCurrentCard(pool[randomIndex]);
     setShowContent(false);
   };
 
@@ -64,6 +82,15 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
     setSelectedCourse(value);
     setCurrentCard(null);
     setShowContent(false);
+    setOrderedIndex(0);
+    if (value === "__all__") setOrderMode("random");
+  };
+
+  const handleOrderModeChange = (value: "random" | "ordered") => {
+    setOrderMode(value);
+    setCurrentCard(null);
+    setShowContent(false);
+    setOrderedIndex(0);
   };
 
   const courseName = React.useMemo(() => {
@@ -89,14 +116,46 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
             </SelectContent>
           </Select>
 
+          {selectedCourse !== "__all__" && (
+            <div className={styles.orderModeGroup}>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="orderMode"
+                  value="random"
+                  checked={orderMode === "random"}
+                  onChange={() => handleOrderModeChange("random")}
+                  className={styles.radioInput}
+                />
+                <Shuffle size={14} />
+                אקראי
+              </label>
+              <label className={styles.radioLabel}>
+                <input
+                  type="radio"
+                  name="orderMode"
+                  value="ordered"
+                  checked={orderMode === "ordered"}
+                  onChange={() => handleOrderModeChange("ordered")}
+                  className={styles.radioInput}
+                />
+                <ArrowRight size={14} />
+                לפי סדר
+              </label>
+            </div>
+          )}
+
           <Button
-            onClick={pickRandomCard}
+            onClick={pickNextCard}
             disabled={filteredCards.length === 0}
             variant="outline"
             className={styles.showTitleBtn}
           >
-            <Shuffle size={16} />
-            הצג כותרת
+            {orderMode === "ordered" ? (
+              <><ArrowRight size={16} />הבא</>  
+            ) : (
+              <><Shuffle size={16} />הצג כותרת</>
+            )}
           </Button>
 
           <Button

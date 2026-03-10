@@ -119,6 +119,43 @@
   margin-right: auto;
 }
 
+.orderModeGroup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  background: var(--color-neutral-2);
+}
+
+.radioLabel {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-2);
+  font: var(--font-caption);
+  font-size: 0.8rem;
+  color: var(--color-neutral-10);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  user-select: none;
+}
+
+.radioLabel:has(.radioInput:checked) {
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+}
+
+.radioLabel:hover:not(:has(.radioInput:checked)) {
+  background: var(--color-neutral-3);
+}
+
+.radioInput {
+  display: none;
+}
+
 @media (max-width: 480px) {
   .controls {
     flex-direction: column;
