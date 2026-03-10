@@ -27,11 +27,15 @@ export async function loader({}: Route.LoaderArgs) {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
     recentSources,
+    totalSources: sources.length,
+    totalLectures: sources.filter((s) => s.source_type === "Lecture").length,
+    totalCards: sources.filter((s) => s.source_type === "Card").length,
+    totalExams: sources.filter((s) => s.source_type === "Past exam").length,
   };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { studentName, studentId, recentSources } = loaderData;
+  const { studentName, studentId, recentSources, totalSources, totalLectures, totalCards, totalExams } = loaderData;
 
   return (
     <AppLayout title="דף הבית">
@@ -98,7 +102,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <p className={styles.statLabel}>הרצאות</p>
             </div>
             <p className={styles.statValue}>
-              {recentSources.filter((s) => s.source_type === "Lecture").length}
+              {totalLectures}
             </p>
           </div>
 
@@ -110,7 +114,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <p className={styles.statLabel}>כרטיסי סיכום</p>
             </div>
             <p className={styles.statValue}>
-              {recentSources.filter((s) => s.source_type === "Card").length}
+              {totalCards}
             </p>
           </div>
 
@@ -122,7 +126,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               <p className={styles.statLabel}>מבחני עבר</p>
             </div>
             <p className={styles.statValue}>
-              {recentSources.filter((s) => s.source_type === "Past exam").length}
+              {totalExams}
             </p>
           </div>
 
@@ -133,7 +137,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </div>
               <p className={styles.statLabel}>סה״כ מקורות</p>
             </div>
-            <p className={styles.statValue}>{recentSources.length}</p>
+            <p className={styles.statValue}>{totalSources}</p>
           </div>
         </div>
       </div>
