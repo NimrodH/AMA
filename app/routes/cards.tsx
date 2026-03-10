@@ -29,10 +29,7 @@ export function meta({}: Route.MetaArgs) {
 export async function loader() {
   const student = await getStudent();
   if (!student) return { courses: [], cards: [] };
-  const [courses, cards] = await Promise.all([
-    getCourses(student.id),
-    getCards(student.id),
-  ]);
+  const [courses, cards] = await Promise.all([getCourses(student.id), getCards(student.id)]);
   return { courses, cards };
 }
 
@@ -131,7 +128,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         action();
       }
     },
-    [isFormDirty]
+    [isFormDirty],
   );
 
   const clearForm = () => {
@@ -170,7 +167,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     try {
       const res = await fetch(`/api/next-card-number?courseId=${encodeURIComponent(selectedCourse)}`);
       if (res.ok) {
-        const { nextNumber } = await res.json() as { nextNumber: number };
+        const { nextNumber } = (await res.json()) as { nextNumber: number };
         setCardNumber(String(nextNumber));
       }
     } catch {
@@ -204,8 +201,15 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       // Keep the form as-is; just update the snapshot so isFormDirty() → false
       setEditingCard((prev) =>
         prev
-          ? { ...prev, title: cardTitle, topic: cardTopic, content: cardContent, lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null, card_number: cardNumber ? parseFloat(cardNumber) : null }
-          : prev
+          ? {
+              ...prev,
+              title: cardTitle,
+              topic: cardTopic,
+              content: cardContent,
+              lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null,
+              card_number: cardNumber ? parseFloat(cardNumber) : null,
+            }
+          : prev,
       );
       setShowSuccess(true);
       const pending = pendingActionRef.current;
@@ -224,12 +228,9 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     }
   }, [deleteFetcher.data]);
 
-  const filteredCards = selectedCourse
-    ? cards.filter((c) => c.course_id === selectedCourse)
-    : cards;
+  const filteredCards = selectedCourse ? cards.filter((c) => c.course_id === selectedCourse) : cards;
 
-  const selectedCourseName =
-    courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
+  const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
 
   const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && cardContent.trim();
 
@@ -293,12 +294,8 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       <div className={styles.cards}>
         <div className={styles.editor}>
           <div className={styles.editorHeader}>
-            <h2 className={styles.editorTitle}>
-              {editingCard ? "ערוך כרטיס" : "כרטיס סיכום חדש"}
-            </h2>
-            {selectedCourseName && (
-              <span className={styles.editorCourseTag}>{selectedCourseName}</span>
-            )}
+            <h2 className={styles.editorTitle}>{editingCard ? "ערוך כרטיס" : "כרטיס סיכום חדש"}</h2>
+            {selectedCourseName && <span className={styles.editorCourseTag}>{selectedCourseName}</span>}
             {editingCard && (
               <Button
                 type="button"
@@ -314,9 +311,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           <fetcher.Form id="card-editor-form" method="post" className={styles.editorForm}>
             <input type="hidden" name="courseId" value={selectedCourse} />
             <input type="hidden" name="intent" value={editingCard ? "edit" : "create"} />
-            {editingCard && (
-              <input type="hidden" name="cardId" value={editingCard.id} />
-            )}
+            {editingCard && <input type="hidden" name="cardId" value={editingCard.id} />}
 
             <div>
               <Label htmlFor="cardTitle">כותרת</Label>
@@ -324,7 +319,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 id="cardTitle"
                 name="title"
                 value={cardTitle}
-                onChange={(e) => { setCardTitle(e.target.value); setShowSuccess(false); }}
+                onChange={(e) => {
+                  setCardTitle(e.target.value);
+                  setShowSuccess(false);
+                }}
                 placeholder="לדוגמה: סיכום הרצאה 5 - תרכובות ארומטיות"
               />
             </div>
@@ -336,24 +334,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   id="cardTopic"
                   name="topic"
                   value={cardTopic}
-                  onChange={(e) => { setCardTopic(e.target.value); setShowSuccess(false); }}
+                  onChange={(e) => {
+                    setCardTopic(e.target.value);
+                    setShowSuccess(false);
+                  }}
                   placeholder="לדוגמה: תרכובות ארומטיות"
                 />
               </div>
               <div>
-                <Label htmlFor="cardLecture">מספר הרצאה (אופציונלי)</Label>
+                <Label htmlFor="cardLecture">מס. הרצאה</Label>
                 <Input
                   id="cardLecture"
                   name="lectureNumber"
                   type="number"
                   min={1}
                   value={lectureNumber}
-                  onChange={(e) => { setLectureNumber(e.target.value); setShowSuccess(false); }}
+                  onChange={(e) => {
+                    setLectureNumber(e.target.value);
+                    setShowSuccess(false);
+                  }}
                   placeholder="לדוגמה: 3"
                 />
               </div>
               <div>
-                <Label htmlFor="cardNumber">מספר כרטיס (אופציונלי)</Label>
+                <Label htmlFor="cardNumber">מס. כרטיס </Label>
                 <div className={styles.cardNumberRow}>
                   <Input
                     id="cardNumber"
@@ -361,7 +365,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                     type="text"
                     inputMode="decimal"
                     value={cardNumber}
-                    onChange={(e) => { setCardNumber(e.target.value); setShowSuccess(false); }}
+                    onChange={(e) => {
+                      setCardNumber(e.target.value);
+                      setShowSuccess(false);
+                    }}
                     placeholder="לדוגמה: 1.1"
                   />
                   <button
@@ -384,7 +391,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 id="cardContent"
                 name="content"
                 value={cardContent}
-                onChange={(e) => { setCardContent(e.target.value); setShowSuccess(false); }}
+                onChange={(e) => {
+                  setCardContent(e.target.value);
+                  setShowSuccess(false);
+                }}
                 placeholder="כתוב את הסיכום שלך כאן..."
                 rows={12}
                 style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
@@ -397,11 +407,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 <Save style={{ marginLeft: "var(--space-2)" }} />
                 {isSaving ? "שומר..." : editingCard ? "שמור שינויים" : "שמור כרטיס"}
               </Button>
-              <Button
-                type="button"
-                onClick={handleGetFeedback}
-                disabled={!cardContent || isLoadingFeedback}
-              >
+              <Button type="button" onClick={handleGetFeedback} disabled={!cardContent || isLoadingFeedback}>
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isLoadingFeedback ? "מקבל משוב..." : "קבל משוב מה-AI"}
               </Button>
@@ -411,9 +417,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
               <div className={styles.errorMessage}>{actionData.error}</div>
             )}
 
-            {showSuccess && (
-              <div className={styles.successMessage}>הכרטיס נשמר בהצלחה!</div>
-            )}
+            {showSuccess && <div className={styles.successMessage}>הכרטיס נשמר בהצלחה!</div>}
 
             {feedback && (
               <div className={styles.feedbackSection}>
@@ -430,9 +434,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         <div>
           <h2 className={styles.sectionTitle}>
             הכרטיסים שלי
-            {selectedCourseName && (
-              <span className={styles.sectionCourse}>{selectedCourseName}</span>
-            )}
+            {selectedCourseName && <span className={styles.sectionCourse}>{selectedCourseName}</span>}
           </h2>
           {filteredCards.length === 0 ? (
             <p className={styles.emptyState}>
@@ -443,8 +445,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           ) : (
             <div className={styles.cardsList}>
               {filteredCards.map((card) => {
-                const isDeleting =
-                  deleteFetcher.state !== "idle" && deletingCardId === card.id;
+                const isDeleting = deleteFetcher.state !== "idle" && deletingCardId === card.id;
                 return (
                   <div
                     key={card.id}
@@ -465,10 +466,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                       <span className={styles.savedCardDate}>
                         {new Date(card.created_at).toLocaleDateString("he-IL")}
                       </span>
-                      <deleteFetcher.Form
-                        method="post"
-                        onClick={(e) => e.stopPropagation()}
-                      >
+                      <deleteFetcher.Form method="post" onClick={(e) => e.stopPropagation()}>
                         <input type="hidden" name="intent" value="delete" />
                         <input type="hidden" name="cardId" value={card.id} />
                         <button
@@ -493,14 +491,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>יש שינויים שלא נשמרו</AlertDialogTitle>
-            <AlertDialogDescription>
-              האם ברצונך לשמור את השינויים לפני המעבר?
-            </AlertDialogDescription>
+            <AlertDialogDescription>האם ברצונך לשמור את השינויים לפני המעבר?</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel onClick={handleDiscardFromDialog}>
-              בטל שינויים
-            </AlertDialogCancel>
+            <AlertDialogCancel onClick={handleDiscardFromDialog}>בטל שינויים</AlertDialogCancel>
             <button
               type="button"
               className={styles.dialogSaveBtn}
