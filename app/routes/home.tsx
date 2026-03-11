@@ -1,11 +1,11 @@
 import * as React from "react";
-import { Link, useFetcher } from "react-router";
+import { Link } from "react-router";
 import { FileText, BookOpen, GraduationCap, Plus, TrendingUp, Bell, CheckCircle2 } from "lucide-react";
 import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { getStudent, getReminders, deleteReminder } from "~/services/settings.service";
+import { getStudent, getReminders } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
 import { isReminderDueToday, formatReminderTime } from "~/lib/reminder-utils";
 import styles from "./home.module.css";
@@ -43,24 +43,15 @@ export async function loader({}: Route.LoaderArgs) {
   };
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const intent = formData.get("intent") as string;
-
-  if (intent === "dismiss_reminder") {
-    const id = formData.get("id") as string;
-    if (id) await deleteReminder(id);
-  }
-
-  return { ok: true };
-}
-
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
-function ReminderBanner({ reminder }: { reminder: { id: string; reminder_type: string; reminder_time: string } }) {
-  const fetcher = useFetcher();
-  const isDismissing = fetcher.state !== "idle";
-
+function ReminderBanner({
+  reminder,
+  onDismiss,
+}: {
+  reminder: { id: string; reminder_type: string; reminder_time: string };
+  onDismiss: (id: string) => void;
+}) {
   return (
     <div className={styles.reminderBanner}>
       <div className={styles.reminderBannerIcon}>
@@ -70,20 +61,16 @@ function ReminderBanner({ reminder }: { reminder: { id: string; reminder_type: s
         <p className={styles.reminderBannerTitle}>{reminder.reminder_type}</p>
         <p className={styles.reminderBannerTime}>{formatReminderTime(reminder.reminder_time)}</p>
       </div>
-      <fetcher.Form method="POST">
-        <input type="hidden" name="intent" value="dismiss_reminder" />
-        <input type="hidden" name="id" value={reminder.id} />
-        <Button
-          type="submit"
-          size="sm"
-          variant="outline"
-          disabled={isDismissing}
-          className={styles.reminderBannerBtn}
-        >
-          <CheckCircle2 style={{ marginLeft: "var(--space-2)" }} />
-          בוצע
-        </Button>
-      </fetcher.Form>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        className={styles.reminderBannerBtn}
+        onClick={() => onDismiss(reminder.id)}
+      >
+        <CheckCircle2 style={{ marginLeft: "var(--space-2)" }} />
+        בוצע
+      </Button>
     </div>
   );
 }
@@ -102,6 +89,14 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     totalExams,
   } = loaderData;
 
+  // Client-side dismissal — does NOT delete from DB so recurring reminders reappear next time
+  const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(new Set());
+  const visibleReminders = dueReminders.filter((r) => !dismissedIds.has(r.id));
+
+  function handleDismiss(id: string) {
+    setDismissedIds((prev) => new Set(prev).add(id));
+  }
+
   return (
     <AppLayout title="דף הבית">
       <div className={styles.home}>
@@ -111,7 +106,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
 
         {/* Due Reminders — shown before Quick Actions */}
-        {dueReminders.length > 0 && (
+        {visibleReminders.length > 0 && (
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>
@@ -120,8 +115,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               </h2>
             </div>
             <div className={styles.remindersList}>
-              {dueReminders.map((reminder) => (
-                <ReminderBanner key={reminder.id} reminder={reminder} />
+              {visibleReminders.map((reminder) => (
+                <ReminderBanner key={reminder.id} reminder={reminder} onDismiss={handleDismiss} />
               ))}
             </div>
           </div>
