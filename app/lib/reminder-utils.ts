@@ -77,6 +77,48 @@ export function isReminderDueToday(reminderTime: string): boolean {
   return DAY_CODE_TO_JS[dayCode] === todayJs;
 }
 
+// ─── Daily-dismissal persistence via localStorage ────────────────────────────
+
+const DISMISSED_KEY = "reminders_dismissed";
+
+/** Returns today's date string in YYYY-MM-DD format (local time). */
+function todayKey(): string {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * Loads the set of reminder IDs dismissed **today** from localStorage.
+ * Entries from previous days are automatically discarded.
+ */
+export function loadDismissedToday(): Set<string> {
+  if (typeof window === "undefined") return new Set();
+  try {
+    const raw = localStorage.getItem(DISMISSED_KEY);
+    if (!raw) return new Set();
+    const parsed = JSON.parse(raw) as { date: string; ids: string[] };
+    if (parsed.date !== todayKey()) return new Set(); // stale — new day
+    return new Set(parsed.ids);
+  } catch {
+    return new Set();
+  }
+}
+
+/**
+ * Persists the full set of dismissed reminder IDs for today to localStorage.
+ */
+export function saveDismissedToday(ids: Set<string>): void {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.setItem(
+      DISMISSED_KEY,
+      JSON.stringify({ date: todayKey(), ids: Array.from(ids) })
+    );
+  } catch {
+    // localStorage quota exceeded — fail silently
+  }
+}
+
 /** Heuristic parser for old free-text reminder_time values. */
 function isLegacyDueToday(reminderTime: string): boolean {
   const today = new Date().getDay();

@@ -7,7 +7,7 @@ import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
 import { getStudent, getReminders } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
-import { isReminderDueToday, formatReminderTime } from "~/lib/reminder-utils";
+import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -89,12 +89,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     totalExams,
   } = loaderData;
 
-  // Client-side dismissal — does NOT delete from DB so recurring reminders reappear next time
-  const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(new Set());
+  // Load dismissed IDs from localStorage (today only — auto-resets at midnight)
+  const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => loadDismissedToday());
   const visibleReminders = dueReminders.filter((r) => !dismissedIds.has(r.id));
 
   function handleDismiss(id: string) {
-    setDismissedIds((prev) => new Set(prev).add(id));
+    setDismissedIds((prev) => {
+      const next = new Set(prev).add(id);
+      saveDismissedToday(next);
+      return next;
+    });
   }
 
   return (
