@@ -4,10 +4,11 @@ import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 
 export async function action({ request }: Route.ActionArgs) {
-  const { courseId, lectureNumber, cardContent } = (await request.json()) as {
+  const { courseId, lectureNumber, cardContent, additionalInstruction } = (await request.json()) as {
     courseId: string;
     lectureNumber: string | null;
     cardContent: string;
+    additionalInstruction?: string | null;
   };
 
   if (!courseId || !cardContent) {
@@ -101,6 +102,9 @@ export async function action({ request }: Route.ActionArgs) {
     "4. \ud83d\udca1 \u05e0\u05d9\u05e1\u05d5\u05d7 \u05de\u05e9\u05d5\u05e4\u05e8 \u2014 \u05d4\u05e6\u05e2 \u05db\u05d9\u05e6\u05d3 \u05dc\u05e0\u05e1\u05d7 \u05de\u05d7\u05d3\u05e9 \u05d0\u05ea \u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05db\u05da \u05e9\u05d9\u05e9\u05e7\u05e3 \u05e0\u05d0\u05de\u05e0\u05d4 \u05d0\u05ea \u05d4\u05d2\u05d3\u05e8\u05ea/\u05d4\u05e1\u05d1\u05e8 \u05d4\u05de\u05e7\u05d5\u05e8",
     "",
     "\u05d4\u05e6\u05d2 \u05d0\u05ea \u05d4\u05de\u05e9\u05d5\u05d1 \u05d1\u05e4\u05d5\u05e8\u05de\u05d8 \u05de\u05d5\u05d1\u05e0\u05d4 \u05d5\u05d1\u05e8\u05d5\u05e8 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea.",
+    additionalInstruction
+      ? `\n\u05d4\u05d5\u05e8\u05d0\u05d5\u05ea \u05e0\u05d5\u05e1\u05e4\u05d5\u05ea \u05de\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8:\n${additionalInstruction}`
+      : null,
   ]
     .filter((line) => line !== null)
     .join("\n");
