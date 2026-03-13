@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Sparkles, GraduationCap, Send, RotateCcw } from "lucide-react";
+import { Sparkles, GraduationCap, Send, RotateCcw, Loader2, ClipboardList } from "lucide-react";
+import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -13,6 +14,8 @@ import styles from "./exams.module.css";
 export function meta({}: Route.MetaArgs) {
   return [{ title: "מבחנים - מערכת ניהול לימודים" }];
 }
+
+// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface Question {
   id: number;
@@ -28,39 +31,20 @@ interface ExamData {
   questions: Question[];
 }
 
-const mockExam: ExamData = {
-  title: "מבחן אימון - כימיה אורגנית 1",
-  instructions: "ענה על כל השאלות. זמן המבחן: 90 דקות. בהצלחה!",
-  questions: [
-    {
-      id: 1,
-      type: "multiple_choice",
-      question: "מהו מספר האלקטרונים המצומדים בבנזן?",
-      options: ["4", "6", "8", "10"],
-      points: 10,
-    },
-    {
-      id: 2,
-      type: "true_false",
-      question: "כל התרכובות המחזוריות הן תרכובות ארומטיות",
-      options: ["נכון", "לא נכון"],
-      points: 5,
-    },
-    {
-      id: 3,
-      type: "open",
-      question: "הסבר מהי תופעת הרזוננס בתרכובות ארומטיות ומדוע היא מקנה יציבות למולקולה.",
-      points: 15,
-    },
-    {
-      id: 4,
-      type: "multiple_choice",
-      question: "איזו מהתרכובות הבאות אינה ארומטית?",
-      options: ["בנזן", "טולואן", "ציקלוהקסן", "נפתלן"],
-      points: 10,
-    },
-  ],
-};
+interface GradingResult {
+  total_grade: number;
+  question_grades: {
+    question_id: number;
+    grade: number;
+    max_points: number;
+    feedback: string;
+    correct_answer?: string;
+  }[];
+  overall_feedback: string;
+  recommendations: string[];
+}
+
+// ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader() {
   const student = await getStudent();
@@ -69,14 +53,20 @@ export async function loader() {
   return { courses };
 }
 
+// ─── Page component ───────────────────────────────────────────────────────────
+
 export default function Exams({ loaderData }: Route.ComponentProps) {
   const { courses } = loaderData;
+  const [searchParams] = useSearchParams();
+  const sourceIdParam = searchParams.get("sourceId");
+
   const [selectedCourse, setSelectedCourse] = React.useState(() => {
     if (courses.length === 0) return "_empty";
     const stored = readSelectedCourse();
     if (stored && courses.some((c) => c.course_id === stored)) return stored;
     return courses[0].course_id;
   });
+
   // Sync selected course when courses list changes (e.g. after hydration)
   React.useEffect(() => {
     if (courses.length === 0) {
@@ -95,43 +85,126 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
 
   const [exam, setExam] = React.useState<ExamData | null>(null);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
-  const [results, setResults] = React.useState<any>(null);
+  const [results, setResults] = React.useState<GradingResult | null>(null);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [isGrading, setIsGrading] = React.useState(false);
+  const [generateError, setGenerateError] = React.useState<string | null>(null);
+  const [gradeError, setGradeError] = React.useState<string | null>(null);
+  // Track which course the currently displayed exam belongs to
+  const [examCourseId, setExamCourseId] = React.useState<string>("");
 
-  const handleGenerateExam = () => {
+  // Auto-generate exam from source when sourceId is in URL
+  React.useEffect(() => {
+    if (!sourceIdParam) return;
+    generateFromSource(sourceIdParam);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sourceIdParam]);
+
+  const generateFromSource = async (sourceId: string) => {
     setIsGenerating(true);
-    setTimeout(() => {
-      setExam(mockExam);
-      setAnswers({});
-      setResults(null);
+    setGenerateError(null);
+    setExam(null);
+    setAnswers({});
+    setResults(null);
+
+    try {
+      const res = await fetch("/api/generate-exam-from-source", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourceId }),
+      });
+      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+
+      if (!data.ok || !data.exam) {
+        setGenerateError(data.error ?? "שגיאה בייצור המבחן");
+        return;
+      }
+
+      setExam(data.exam);
+      setExamCourseId(selectedCourse);
+    } catch {
+      setGenerateError("שגיאת רשת — נסה שוב");
+    } finally {
       setIsGenerating(false);
-    }, 2000);
+    }
   };
 
-  const handleSubmitExam = () => {
+  const handleGenerateExam = async () => {
+    setIsGenerating(true);
+    setGenerateError(null);
+    setExam(null);
+    setAnswers({});
+    setResults(null);
+
+    // For now, generating a new AI exam from course material still uses a short delay
+    // (real AI generation from course vector store can be wired here later)
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    setGenerateError("ייצור מבחן מחומרי הלימוד עדיין בפיתוח. השתמש בכפתור \"הצג כבחינה\" על מבחן עבר.");
+    setIsGenerating(false);
+  };
+
+  const handleSubmitExam = async () => {
+    if (!exam) return;
     setIsGrading(true);
-    setTimeout(() => {
-      setResults({
-        total_grade: 85,
-        overall_feedback: `ביצוע מצוין! הראית הבנה טובה של החומר.
+    setGradeError(null);
 
-נקודות חוזק:
-- תשובות מדויקות בשאלות הרב-ברירה
-- הסבר מפורט ומובנה בשאלה הפתוחה
-
-תחומים לשיפור:
-- הרחב את ההסבר על תופעת הרזוננס
-- הוסף דוגמאות נוספות`,
-        recommendations: ["חזור על פרק 3 בספר", "תרגל שאלות נוספות על ארומטיות", "צפה בהרצאה מספר 5 שוב"],
+    try {
+      const res = await fetch("/api/grade-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          exam,
+          answers,
+          courseId: examCourseId || selectedCourse,
+        }),
       });
+      const data = (await res.json()) as { ok: boolean; results?: GradingResult; error?: string };
+
+      if (!data.ok || !data.results) {
+        setGradeError(data.error ?? "שגיאה בבדיקת המבחן");
+        return;
+      }
+
+      setResults(data.results);
+    } catch {
+      setGradeError("שגיאת רשת — נסה שוב");
+    } finally {
       setIsGrading(false);
-    }, 2000);
+    }
   };
 
   const handleAnswerChange = (questionId: number, answer: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
+
+  const handleReset = () => {
+    setExam(null);
+    setAnswers({});
+    setResults(null);
+    setGenerateError(null);
+    setGradeError(null);
+  };
+
+  // Loading state — generating exam from source
+  if (isGenerating) {
+    return (
+      <AppLayout title="מבחנים">
+        <div className={styles.exams}>
+          <div className={styles.loadingState}>
+            <Loader2 className={styles.loadingSpinner} />
+            <h2 className={styles.loadingTitle}>
+              {sourceIdParam ? "טוען מבחן מהקובץ..." : "מייצר מבחן אימון..."}
+            </h2>
+            <p className={styles.loadingSubtitle}>
+              {sourceIdParam
+                ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
+                : "מנתח חומרי לימוד ויוצר שאלות מותאמות"}
+            </p>
+          </div>
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout title="מבחנים">
@@ -144,6 +217,12 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
               </div>
               <h2 className={styles.generatorTitle}>צור מבחן אימון חדש</h2>
             </div>
+
+            {generateError && (
+              <div className={styles.generateError}>
+                <p>{generateError}</p>
+              </div>
+            )}
 
             <form className={styles.generatorForm}>
               <div>
@@ -182,8 +261,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">כל הנושאים</SelectItem>
-                    <SelectItem value="aromatic">תרכובות ארומטיות</SelectItem>
-                    <SelectItem value="alkanes">אלקנים</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -192,6 +269,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isGenerating ? "מייצר מבחן..." : "צור מבחן עם AI"}
               </Button>
+
+              <div className={styles.fromSourceHint}>
+                <ClipboardList style={{ width: 16, height: 16, flexShrink: 0 }} />
+                <span>
+                  כדי לתרגל מבחן עבר ספציפי, עבור למקורות לימוד ולחץ על{" "}
+                  <strong>הצג כבחינה</strong> על מבחן עבר
+                </span>
+              </div>
             </form>
           </div>
         ) : (
@@ -199,60 +284,111 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
             <div className={styles.exam}>
               <div className={styles.examHeader}>
                 <h1 className={styles.examTitle}>{exam.title}</h1>
-                <p className={styles.examInstructions}>{exam.instructions}</p>
+                {exam.instructions && (
+                  <p className={styles.examInstructions}>{exam.instructions}</p>
+                )}
               </div>
 
               <div className={styles.questions}>
-                {exam.questions.map((question) => (
-                  <div key={question.id} className={styles.question}>
-                    <div className={styles.questionHeader}>
-                      <span className={styles.questionNumber}>שאלה {question.id}</span>
-                      <p className={styles.questionText}>{question.question}</p>
-                      <span className={styles.questionPoints}>{question.points} נקודות</span>
-                    </div>
+                {exam.questions.map((question) => {
+                  const questionGrade = results?.question_grades?.find(
+                    (g) => g.question_id === question.id
+                  );
 
-                    {question.type === "multiple_choice" || question.type === "true_false" ? (
-                      <div className={styles.options}>
-                        {question.options?.map((option, idx) => (
-                          <label
-                            key={idx}
-                            className={`${styles.option} ${answers[question.id] === option ? styles.optionSelected : ""}`}
-                          >
-                            <input
-                              type="radio"
-                              name={`question-${question.id}`}
-                              value={option}
-                              checked={answers[question.id] === option}
-                              onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                            />
-                            <span>{option}</span>
-                          </label>
-                        ))}
+                  return (
+                    <div key={question.id} className={styles.question}>
+                      <div className={styles.questionHeader}>
+                        <span className={styles.questionNumber}>שאלה {question.id}</span>
+                        <p className={styles.questionText}>{question.question}</p>
+                        <span className={styles.questionPoints}>
+                          {results
+                            ? `${questionGrade?.grade ?? 0}/${question.points}`
+                            : `${question.points} נקודות`}
+                        </span>
                       </div>
-                    ) : (
-                      <div className={styles.answerArea}>
-                        <Textarea
-                          value={answers[question.id] || ""}
-                          onChange={(e) => handleAnswerChange(question.id, e.target.value)}
-                          placeholder="כתוב את תשובתך כאן..."
-                          rows={6}
-                          className={styles.textarea}
-                        />
-                      </div>
-                    )}
-                  </div>
-                ))}
+
+                      {question.type === "multiple_choice" || question.type === "true_false" ? (
+                        <div className={styles.options}>
+                          {question.options?.map((option, idx) => {
+                            const isSelected = answers[question.id] === option;
+                            const isCorrect =
+                              results && questionGrade?.correct_answer === option;
+                            const isWrong =
+                              results && isSelected && questionGrade?.correct_answer !== option;
+
+                            return (
+                              <label
+                                key={idx}
+                                className={`${styles.option} ${isSelected ? styles.optionSelected : ""} ${isCorrect ? styles.optionCorrect : ""} ${isWrong ? styles.optionWrong : ""}`}
+                              >
+                                <input
+                                  type="radio"
+                                  name={`question-${question.id}`}
+                                  value={option}
+                                  checked={isSelected}
+                                  onChange={(e) =>
+                                    !results && handleAnswerChange(question.id, e.target.value)
+                                  }
+                                  disabled={!!results}
+                                />
+                                <span>{option}</span>
+                              </label>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className={styles.answerArea}>
+                          <Textarea
+                            value={answers[question.id] || ""}
+                            onChange={(e) =>
+                              !results && handleAnswerChange(question.id, e.target.value)
+                            }
+                            placeholder={results ? "" : "כתוב את תשובתך כאן..."}
+                            rows={6}
+                            className={styles.textarea}
+                            readOnly={!!results}
+                          />
+                        </div>
+                      )}
+
+                      {/* Per-question feedback after grading */}
+                      {results && questionGrade && (
+                        <div className={styles.questionFeedback}>
+                          <span className={styles.questionFeedbackScore}>
+                            {questionGrade.grade}/{questionGrade.max_points}
+                          </span>
+                          <span>{questionGrade.feedback}</span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
 
+              {gradeError && (
+                <div className={styles.gradeError}>
+                  <p>{gradeError}</p>
+                </div>
+              )}
+
               <div className={styles.examActions}>
-                <Button variant="outline" onClick={() => setExam(null)}>
+                <Button variant="outline" onClick={handleReset}>
                   <RotateCcw style={{ marginLeft: "var(--space-2)" }} />
-                  צור מבחן חדש
+                  {results ? "מבחן חדש" : "חזור"}
                 </Button>
-                <Button onClick={handleSubmitExam} disabled={isGrading} size="lg">
-                  <Send style={{ marginLeft: "var(--space-2)" }} />
-                  {isGrading ? "בודק תשובות..." : "שלח לבדיקה"}
-                </Button>
+                {!results && (
+                  <Button onClick={handleSubmitExam} disabled={isGrading} size="lg">
+                    <Send style={{ marginLeft: "var(--space-2)" }} />
+                    {isGrading ? (
+                      <>
+                        <Loader2 style={{ width: 16, height: 16, marginLeft: "var(--space-2)", animation: "var(--animation-spin)" }} />
+                        בודק תשובות...
+                      </>
+                    ) : (
+                      "שלח לבדיקה"
+                    )}
+                  </Button>
+                )}
               </div>
             </div>
 
@@ -263,6 +399,13 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                   <p className={styles.resultsLabel}>הציון שלך</p>
                 </div>
                 <div className={styles.resultsFeedback}>{results.overall_feedback}</div>
+                {results.recommendations?.length > 0 && (
+                  <ul className={styles.recommendations}>
+                    {results.recommendations.map((rec, i) => (
+                      <li key={i}>{rec}</li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
           </>

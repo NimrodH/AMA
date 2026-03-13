@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
+import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2, ClipboardList } from "lucide-react";
 import classNames from "classnames";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/button/button";
@@ -210,8 +210,24 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
 
       {/* ── Footer: view + re-upload + delete ── */}
       <div className={styles.footer}>
-        {source.file_url && (
+        {source.source_type === "Past exam" && (
+          <Button asChild variant="outline" size="sm" className={styles.examBtn} style={{ flex: 1 }}>
+            <Link to={`/exams?sourceId=${source.id}`}>
+              <ClipboardList style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
+              הצג כבחינה
+            </Link>
+          </Button>
+        )}
+        {source.file_url && source.source_type !== "Past exam" && (
           <Button asChild variant="outline" size="sm" style={{ flex: 1 }}>
+            <Link to={`/sources/${source.id}/view`}>
+              <Eye style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
+              צפייה
+            </Link>
+          </Button>
+        )}
+        {source.file_url && source.source_type === "Past exam" && (
+          <Button asChild variant="outline" size="sm">
             <Link to={`/sources/${source.id}/view`}>
               <Eye style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
               צפייה

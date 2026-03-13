@@ -152,6 +152,16 @@
   border-color: var(--color-accent-8) !important;
 }
 
+.examBtn {
+  color: var(--color-success-11) !important;
+  border-color: var(--color-success-7) !important;
+}
+
+.examBtn:hover {
+  background: var(--color-success-3) !important;
+  border-color: var(--color-success-8) !important;
+}
+
 /* ── Re-upload status banner ────────────────────────────────────────────── */
 
 .reuploadStatus {
