@@ -1,7 +1,5 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
 import mammoth from "mammoth";
-// eslint-disable-next-line @typescript-eslint/no-require-imports
-const pdfParse = require("pdf-parse") as (buffer: Buffer) => Promise<{ text: string }>;
 import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
@@ -79,6 +77,7 @@ async function extractText(buffer: Buffer, url: string): Promise<string> {
   }
 
   if (lower.endsWith(".pdf")) {
+    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
     const data = await pdfParse(buffer);
     return data.text;
   }
