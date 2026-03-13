@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FileText, Trash2, Eye } from "lucide-react";
+import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
 import classNames from "classnames";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/button/button";
@@ -22,7 +22,17 @@ const TYPE_LABELS: Record<Source["source_type"], string> = {
 
 export function SourceCard({ source, studentId, className }: SourceCardProps) {
   const fetcher = useFetcher();
+  const reuploadFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string }>();
   const isDeleting = fetcher.state !== "idle";
+  const isReuploading = reuploadFetcher.state !== "idle";
+  const reuploadResult = reuploadFetcher.data;
+
+  const handleReupload = () => {
+    reuploadFetcher.submit(
+      JSON.stringify({ sourceId: source.id }),
+      { method: "post", action: "/api/reupload-source", encType: "application/json" }
+    );
+  };
 
   const typeClass =
     source.source_type === "Lecture"
@@ -86,7 +96,18 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
         </div>
       )}
 
-      {/* ── Footer: view + delete ── */}
+      {/* ── Re-upload status ── */}
+      {reuploadResult && (
+        <div className={classNames(styles.reuploadStatus, reuploadResult.ok ? styles.reuploadOk : styles.reuploadErr)}>
+          {reuploadResult.ok ? (
+            <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש ({reuploadResult.fileStatus})</>
+          ) : (
+            <><AlertCircle style={{ width: 13, height: 13 }} /> {reuploadResult.error}</>
+          )}
+        </div>
+      )}
+
+      {/* ── Footer: view + re-upload + delete ── */}
       <div className={styles.footer}>
         {source.file_url && (
           <Button asChild variant="outline" size="sm" style={{ flex: 1 }}>
@@ -96,6 +117,17 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             </Link>
           </Button>
         )}
+        <Button
+          variant="outline"
+          size="sm"
+          className={styles.reuploadBtn}
+          onClick={handleReupload}
+          disabled={isReuploading}
+          title="העלה מחדש ל-OpenAI"
+        >
+          <RefreshCw style={{ width: 14, height: 14, animation: isReuploading ? "var(--animation-spin)" : "none" }} />
+          {isReuploading ? "מעלה..." : "סנכרן"}
+        </Button>
         <Button
           variant="outline"
           size="sm"
