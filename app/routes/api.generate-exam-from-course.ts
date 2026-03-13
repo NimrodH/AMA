@@ -71,8 +71,13 @@ async function fetchFileBuffer(url: string): Promise<Buffer> {
 async function extractText(buffer: Buffer, url: string): Promise<string> {
   const lower = url.toLowerCase();
   if (lower.endsWith(".docx")) {
-    const result = await mammoth.extractRawText({ buffer });
-    return result.value;
+    // extractRawText misses text inside shapes/text-boxes — fall back to HTML conversion
+    const rawResult = await mammoth.extractRawText({ buffer });
+    if (rawResult.value.trim()) return rawResult.value;
+    // Fallback: strip HTML tags from the full conversion
+    const htmlResult = await mammoth.convertToHtml({ buffer });
+    const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return plainText;
   }
   if (lower.endsWith(".pdf")) {
     const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
