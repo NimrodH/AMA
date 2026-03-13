@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle } from "lucide-react";
+import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2 } from "lucide-react";
 import classNames from "classnames";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/button/button";
@@ -20,19 +20,87 @@ const TYPE_LABELS: Record<Source["source_type"], string> = {
   "Past exam": "מבחן עבר",
 };
 
+const POLL_INTERVAL_MS = 3000;
+const MAX_POLL_ATTEMPTS = 20;
+
 export function SourceCard({ source, studentId, className }: SourceCardProps) {
   const fetcher = useFetcher();
-  const reuploadFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string }>();
+  const reuploadFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string; newVectorStoreFileId?: string }>();
   const isDeleting = fetcher.state !== "idle";
   const isReuploading = reuploadFetcher.state !== "idle";
   const reuploadResult = reuploadFetcher.data;
 
-  const handleReupload = () => {
-    reuploadFetcher.submit(
-      JSON.stringify({ sourceId: source.id }),
-      { method: "post", action: "/api/reupload-source", encType: "application/json" }
-    );
-  };
+  // Polling state — tracks the live file status after a successful reupload
+  const [polledStatus, setPolledStatus] = React.useState<string | null>(null);
+  const [isPolling, setIsPolling] = React.useState(false);
+  const pollAttemptsRef = React.useRef(0);
+  const pollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Start polling when the reupload finishes with in_progress status
+  React.useEffect(() => {
+    const fileId = reuploadResult?.newVectorStoreFileId;
+    const initialStatus = reuploadResult?.fileStatus;
+
+    if (!reuploadResult?.ok || !fileId) return;
+
+    // Reset polled status each time a new reupload completes
+    setPolledStatus(initialStatus ?? null);
+
+    if (initialStatus === "in_progress") {
+      startPolling(fileId);
+    }
+
+    return () => stopPolling();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [reuploadResult]);
+
+  // Cleanup on unmount
+  React.useEffect(() => () => stopPolling(), []);
+
+  function stopPolling() {
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+    setIsPolling(false);
+    pollAttemptsRef.current = 0;
+  }
+
+  function startPolling(fileId: string) {
+    setIsPolling(true);
+    pollAttemptsRef.current = 0;
+    schedulePoll(fileId);
+  }
+
+  function schedulePoll(fileId: string) {
+    pollTimerRef.current = setTimeout(() => poll(fileId), POLL_INTERVAL_MS);
+  }
+
+  async function poll(fileId: string) {
+    pollAttemptsRef.current += 1;
+
+    try {
+      const res = await fetch(`/api/file-status?fileId=${encodeURIComponent(fileId)}`);
+      const data = (await res.json()) as { status?: string; error?: string };
+
+      if (data.status) {
+        setPolledStatus(data.status);
+
+        if (data.status !== "in_progress" || pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
+          stopPolling();
+          return;
+        }
+      }
+    } catch {
+      // Network hiccup — keep polling
+    }
+
+    if (pollAttemptsRef.current < MAX_POLL_ATTEMPTS) {
+      schedulePoll(fileId);
+    } else {
+      stopPolling();
+    }
+  }
 
   const typeClass =
     source.source_type === "Lecture"
@@ -60,6 +128,15 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
     fetcher.submit(formData, { method: "post" });
   };
 
+  const handleReupload = () => {
+    stopPolling();
+    setPolledStatus(null);
+    reuploadFetcher.submit(
+      JSON.stringify({ sourceId: source.id }),
+      { method: "post", action: "/api/reupload-source", encType: "application/json" }
+    );
+  };
+
   if (isDeleting) {
     return (
       <div className={classNames(styles.card, typeClass, styles.cardDeleting, className)}>
@@ -67,6 +144,11 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
       </div>
     );
   }
+
+  // Derive the display status — polledStatus overrides the initial fileStatus
+  const displayStatus = polledStatus ?? reuploadResult?.fileStatus;
+  const statusIsCompleted = displayStatus === "completed";
+  const statusIsFailed = displayStatus === "failed";
 
   return (
     <div className={classNames(styles.card, typeClass, className)}>
@@ -98,9 +180,28 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
 
       {/* ── Re-upload status ── */}
       {reuploadResult && (
-        <div className={classNames(styles.reuploadStatus, reuploadResult.ok ? styles.reuploadOk : styles.reuploadErr)}>
+        <div
+          className={classNames(
+            styles.reuploadStatus,
+            reuploadResult.ok
+              ? statusIsFailed
+                ? styles.reuploadErr
+                : statusIsCompleted
+                  ? styles.reuploadOk
+                  : styles.reuploadPending
+              : styles.reuploadErr
+          )}
+        >
           {reuploadResult.ok ? (
-            <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש ({reuploadResult.fileStatus})</>
+            isPolling ? (
+              <><Loader2 style={{ width: 13, height: 13, animation: "var(--animation-spin)" }} /> מאנדקס... ({displayStatus})</>
+            ) : statusIsCompleted ? (
+              <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש בהצלחה</>
+            ) : statusIsFailed ? (
+              <><AlertCircle style={{ width: 13, height: 13 }} /> האינדוקס נכשל</>
+            ) : (
+              <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש ({displayStatus})</>
+            )
           ) : (
             <><AlertCircle style={{ width: 13, height: 13 }} /> {reuploadResult.error}</>
           )}
@@ -122,11 +223,11 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
           size="sm"
           className={styles.reuploadBtn}
           onClick={handleReupload}
-          disabled={isReuploading}
+          disabled={isReuploading || isPolling}
           title="העלה מחדש ל-OpenAI"
         >
-          <RefreshCw style={{ width: 14, height: 14, animation: isReuploading ? "var(--animation-spin)" : "none" }} />
-          {isReuploading ? "מעלה..." : "סנכרן"}
+          <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || isPolling) ? "var(--animation-spin)" : "none" }} />
+          {isReuploading ? "מעלה..." : isPolling ? "מאנדקס..." : "סנכרן"}
         </Button>
         <Button
           variant="outline"
