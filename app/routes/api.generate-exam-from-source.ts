@@ -84,12 +84,11 @@ export async function action({ request }: Route.ActionArgs) {
       {
         type: "file_search",
         vector_store_ids: [vectorStoreId],
+        // Fix #1: filter by the specific file, not all Past exam files
         filters: {
-          type: "and",
-          filters: [
-            { type: "eq" as const, key: "student_id", value: student.id },
-            { type: "eq" as const, key: "source_type", value: "Past exam" },
-          ],
+          type: "eq" as const,
+          key: "vector_store_file_id",
+          value: source.vector_store_file_id,
         },
       },
     ],
@@ -99,16 +98,33 @@ export async function action({ request }: Route.ActionArgs) {
     ],
   });
 
+  // Fix #2: handle empty output_text (model ran file_search but returned no text)
   const rawText = response.output_text?.trim() ?? "";
+  if (!rawText) {
+    return Response.json(
+      { ok: false, error: "OpenAI לא החזיר תוכן — ייתכן שהקובץ לא נמצא ב-Vector Store. נסה לסנכרן שוב." },
+      { status: 500 }
+    );
+  }
 
-  // Extract JSON from the response (may be wrapped in markdown code blocks)
-  const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/) ?? null;
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawText;
+  // Fix #3: robustly extract JSON — try markdown block first, then bare JSON object
+  const extractJson = (text: string): string => {
+    // Try ```json ... ``` or ``` ... ```
+    const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlock) return codeBlock[1].trim();
+    // Try bare JSON object { ... }
+    const bareObject = text.match(/\{[\s\S]*\}/);
+    if (bareObject) return bareObject[0].trim();
+    return text;
+  };
+
+  const jsonStr = extractJson(rawText);
 
   let examData: unknown;
   try {
     examData = JSON.parse(jsonStr);
   } catch {
+    console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
     return Response.json(
       { ok: false, error: "לא ניתן לפרסר את המבחן. נסה שוב." },
       { status: 500 }
