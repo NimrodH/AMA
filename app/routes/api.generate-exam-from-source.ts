@@ -1,4 +1,5 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
+import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
@@ -55,6 +56,40 @@ function extractJson(text: string): string {
   return text;
 }
 
+/** Download a file from a public URL and return it as a Buffer. */
+async function fetchFileBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+/**
+ * Extract plain text from a file buffer.
+ * Supports DOCX (via mammoth) and plain text files.
+ * For PDF or other types, falls back to a UTF-8 decode attempt.
+ */
+async function extractText(buffer: Buffer, url: string): Promise<string> {
+  const lower = url.toLowerCase();
+
+  if (lower.endsWith(".docx")) {
+    // extractRawText misses text inside shapes/text-boxes — fall back to HTML conversion
+    const rawResult = await mammoth.extractRawText({ buffer });
+    if (rawResult.value.trim()) return rawResult.value;
+    // Fallback: strip HTML tags from the full conversion
+    const htmlResult = await mammoth.convertToHtml({ buffer });
+    const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return plainText;
+  }
+
+  if (lower.endsWith(".pdf")) {
+    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
+    const data = await pdfParse(buffer);
+    return data.text;
+  }
+
+  return buffer.toString("utf-8");
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const { sourceId } = (await request.json()) as { sourceId: string };
 
@@ -76,16 +111,41 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "המקור אינו מבחן עבר" }, { status: 400 });
   }
 
-  // ── 1. Get exam text from stored DB content ──────────────────────────────────
-  const examText = source.content?.trim() ?? "";
-  if (!examText) {
+  if (!source.file_url) {
+    return Response.json({ ok: false, error: "אין קישור לקובץ — נסה לעלות מחדש" }, { status: 400 });
+  }
+
+  // ── 1. Download the file from Supabase Storage ──────────────────────────────
+  let fileBuffer: Buffer;
+  try {
+    fileBuffer = await fetchFileBuffer(source.file_url);
+  } catch (err) {
+    console.error("[generate-exam] Failed to download file:", err);
     return Response.json(
-      { ok: false, error: "הקובץ ריק או לא ניתן לחלץ ממנו טקסט. נסה להעלות מחדש." },
+      { ok: false, error: "לא ניתן להוריד את הקובץ מ-Supabase Storage" },
+      { status: 502 }
+    );
+  }
+
+  // ── 2. Extract text from the file ───────────────────────────────────────────
+  let examText: string;
+  try {
+    examText = await extractText(fileBuffer, source.file_url);
+    if (!examText.trim()) {
+      return Response.json(
+        { ok: false, error: "הקובץ ריק או לא ניתן לחלץ ממנו טקסט" },
+        { status: 422 }
+      );
+    }
+  } catch (err) {
+    console.error("[generate-exam] Failed to extract text from file:", err);
+    return Response.json(
+      { ok: false, error: "לא ניתן לחלץ טקסט מהקובץ" },
       { status: 422 }
     );
   }
 
-  // ── 2. Run chat completion with the extracted text ───────────────────────────
+  // ── 3. Run chat completion with the extracted text ───────────────────────────
   const client = getOpenAIClient();
   let rawText: string;
   try {
@@ -121,7 +181,7 @@ ${examText}`,
     );
   }
 
-  // ── 3. Parse and return the JSON ─────────────────────────────────────────────
+  // ── 4. Parse and return the JSON ─────────────────────────────────────────────
   const jsonStr = extractJson(rawText);
   let examData: unknown;
   try {

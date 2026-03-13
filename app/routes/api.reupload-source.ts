@@ -2,23 +2,6 @@ import type { Route } from "./+types/api.reupload-source";
 import { getOpenAIClient, getOrCreateVectorStore, uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
-import mammoth from "mammoth";
-
-async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<string> {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".docx")) {
-    const rawResult = await mammoth.extractRawText({ buffer });
-    if (rawResult.value.trim()) return rawResult.value.trim();
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-    return htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text.trim();
-  }
-  return buffer.toString("utf-8").trim();
-}
 
 /**
  * POST /api/reupload-source
@@ -132,17 +115,10 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 5. Extract text content and update DB ──────────────────────────────────
-  let content: string | undefined;
-  try {
-    content = await extractTextFromBuffer(fileBuffer, fileName);
-  } catch (err) {
-    console.warn("Text extraction failed (non-blocking):", err);
-  }
-
+  // ── 5. Update DB with new vector_store_file_id ────────────────────────────
   const { error: updateError } = await db
     .from("sources")
-    .update({ vector_store_file_id: newVectorStoreFileId, content: content ?? null })
+    .update({ vector_store_file_id: newVectorStoreFileId })
     .eq("id", sourceId)
     .eq("student_id", student.id);
 

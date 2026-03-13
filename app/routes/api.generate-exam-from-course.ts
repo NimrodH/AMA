@@ -1,4 +1,5 @@
 import type { Route } from "./+types/api.generate-exam-from-course";
+import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
@@ -61,6 +62,31 @@ function extractJson(text: string): string {
   return text;
 }
 
+async function fetchFileBuffer(url: string): Promise<Buffer> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
+  return Buffer.from(await res.arrayBuffer());
+}
+
+async function extractText(buffer: Buffer, url: string): Promise<string> {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".docx")) {
+    // extractRawText misses text inside shapes/text-boxes — fall back to HTML conversion
+    const rawResult = await mammoth.extractRawText({ buffer });
+    if (rawResult.value.trim()) return rawResult.value;
+    // Fallback: strip HTML tags from the full conversion
+    const htmlResult = await mammoth.convertToHtml({ buffer });
+    const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+    return plainText;
+  }
+  if (lower.endsWith(".pdf")) {
+    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
+    const data = await pdfParse(buffer);
+    return data.text;
+  }
+  return buffer.toString("utf-8");
+}
+
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -95,35 +121,47 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Build past exam texts from DB content ─────────────────────────────────
+  // ── 2. Extract text from past exams ─────────────────────────────────────────
   const pastExamTexts: string[] = [];
   for (const source of pastExams) {
-    const text = source.content?.trim();
-    if (text) pastExamTexts.push(`--- מבחן עבר: ${source.topic} ---\n${text}`);
+    if (!source.file_url) continue;
+    try {
+      const buffer = await fetchFileBuffer(source.file_url);
+      const text = await extractText(buffer, source.file_url);
+      if (text.trim()) pastExamTexts.push(`--- מבחן עבר: ${source.topic} ---\n${text}`);
+    } catch (err) {
+      console.error(`[generate-exam-from-course] Failed to load past exam ${source.id}:`, err);
+    }
   }
 
   if (pastExamTexts.length === 0) {
     return Response.json(
-      { ok: false, error: "לא ניתן לחלץ טקסט ממבחני העבר. נסה להעלות מחדש את הקובץ." },
+      { ok: false, error: "לא ניתן לחלץ טקסט ממבחני העבר. נסה להעלות מחדש." },
       { status: 422 }
     );
   }
 
-  // ── 3. Build lecture texts from DB content ────────────────────────────────────
+  // ── 3. Extract text from lecture sources ─────────────────────────────────────
   const lectureTexts: string[] = [];
   for (const source of lectures) {
-    const text = source.content?.trim();
-    if (text) {
-      const label = source.lecture_number
-        ? `הרצאה ${source.lecture_number} — ${source.topic}`
-        : source.topic;
-      lectureTexts.push(`--- ${label} ---\n${text}`);
+    if (!source.file_url) continue;
+    try {
+      const buffer = await fetchFileBuffer(source.file_url);
+      const text = await extractText(buffer, source.file_url);
+      if (text.trim()) {
+        const label = source.lecture_number
+          ? `הרצאה ${source.lecture_number} — ${source.topic}`
+          : source.topic;
+        lectureTexts.push(`--- ${label} ---\n${text}`);
+      }
+    } catch (err) {
+      console.error(`[generate-exam-from-course] Failed to load lecture ${source.id}:`, err);
     }
   }
 
   if (lectureTexts.length === 0) {
     return Response.json(
-      { ok: false, error: "לא ניתן לחלץ טקסט מהרצאות הקורס. נסה להעלות מחדש את הקבצים." },
+      { ok: false, error: "לא ניתן לחלץ טקסט מהרצאות הקורס. נסה להעלות מחדש." },
       { status: 422 }
     );
   }

@@ -243,35 +243,6 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   );
 }
 
-// ─── Backfill button ─────────────────────────────────────────────────────────
-
-function BackfillButton() {
-  const fetcher = useFetcher<{ ok: boolean; succeeded: number; failed: number }>();
-  const isLoading = fetcher.state !== "idle";
-
-  const handleBackfill = () => {
-    fetcher.submit({}, { method: "post", action: "/api/backfill-content", encType: "application/json" });
-  };
-
-  const result = fetcher.data;
-
-  return (
-    <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
-      {result && (
-        <span style={{ fontSize: "var(--font-size-0)", color: result.ok ? "var(--color-success-11)" : "var(--color-error-11)" }}>
-          {result.ok
-            ? `✓ עודכנו ${result.succeeded} קבצים${result.failed > 0 ? ` (${result.failed} נכשלו)` : ""}`
-            : "שגיאה בסנכרון"}
-        </span>
-      )}
-      <Button variant="outline" onClick={handleBackfill} disabled={isLoading}>
-        {isLoading ? <Loader2 className={styles.spinner} /> : null}
-        {isLoading ? "מסנכרן..." : "סנכרן תוכן קבצים"}
-      </Button>
-    </div>
-  );
-}
-
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function Sources({ loaderData }: Route.ComponentProps) {
@@ -328,8 +299,6 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
               </SelectContent>
             </Select>
           </div>
-
-          <BackfillButton />
 
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>

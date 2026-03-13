@@ -1,4 +1,3 @@
-import mammoth from "mammoth";
 import { createServerClient } from "~/lib/supabase";
 import type { Database } from "~/lib/supabase";
 import { uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
@@ -7,24 +6,6 @@ import type { CourseRow } from "~/services/settings.service";
 export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 
 const BUCKET_NAME = "sources";
-
-/** Extract plain text from a file buffer. Supports DOCX and PDF. */
-async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<string> {
-  const lower = fileName.toLowerCase();
-  if (lower.endsWith(".docx")) {
-    const rawResult = await mammoth.extractRawText({ buffer });
-    if (rawResult.value.trim()) return rawResult.value.trim();
-    // Fallback: strip HTML from full conversion (captures text boxes, tables, etc.)
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-    return htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-  }
-  if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text.trim();
-  }
-  return buffer.toString("utf-8").trim();
-}
 
 /** Fetch a single source by ID (must belong to the student). */
 export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
@@ -170,15 +151,7 @@ export async function addSource({
     console.error("OpenAI vector store upload error:", err);
   }
 
-  // ── 4. Extract text content from the file ────────────────────────────────
-  let content: string | undefined;
-  try {
-    content = await extractTextFromBuffer(fileBuffer, file.name);
-  } catch (err) {
-    console.error("Text extraction error (non-blocking):", err);
-  }
-
-  // ── 5. Insert source record into the database ───────────────────────────
+  // ── 4. Insert source record into the database ───────────────────────────
   const { error: insertError } = await db.from("sources").insert({
     student_id: studentId,
     course_id: courseId,
@@ -188,7 +161,6 @@ export async function addSource({
     upload_date: new Date().toISOString().split("T")[0],
     language: "he",
     file_url: fileUrl,
-    content: content ?? null,
     vector_store_file_id: vectorStoreFileId,
     metadata,
   });
