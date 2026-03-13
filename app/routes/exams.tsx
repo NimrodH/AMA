@@ -64,7 +64,7 @@ const mockExam: ExamData = {
 
 export async function loader() {
   const student = await getStudent();
-  if (!student) return { courses: [] };
+  if (!student) return { courses: [] as Awaited<ReturnType<typeof getCourses>> };
   const courses = await getCourses(student.id);
   return { courses };
 }
@@ -72,10 +72,27 @@ export async function loader() {
 export default function Exams({ loaderData }: Route.ComponentProps) {
   const { courses } = loaderData;
   const [selectedCourse, setSelectedCourse] = React.useState(() => {
+    if (courses.length === 0) return "_empty";
     const stored = readSelectedCourse();
     if (stored && courses.some((c) => c.course_id === stored)) return stored;
-    return courses[0]?.course_id ?? "";
+    return courses[0].course_id;
   });
+  // Sync selected course when courses list changes (e.g. after hydration)
+  React.useEffect(() => {
+    if (courses.length === 0) {
+      setSelectedCourse("_empty");
+      return;
+    }
+    setSelectedCourse((prev) => {
+      if (prev === "_empty" || !courses.some((c) => c.course_id === prev)) {
+        const stored = readSelectedCourse();
+        if (stored && courses.some((c) => c.course_id === stored)) return stored;
+        return courses[0].course_id;
+      }
+      return prev;
+    });
+  }, [courses]);
+
   const [exam, setExam] = React.useState<ExamData | null>(null);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
   const [results, setResults] = React.useState<any>(null);
@@ -143,7 +160,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                   </SelectTrigger>
                   <SelectContent>
                     {courses.length === 0 ? (
-                      <SelectItem value="_none" disabled>
+                      <SelectItem value="_empty" disabled>
                         אין קורסים — הוסף קורס בהגדרות
                       </SelectItem>
                     ) : (
@@ -171,7 +188,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                 </Select>
               </div>
 
-              <Button type="button" onClick={handleGenerateExam} disabled={isGenerating} size="lg">
+              <Button type="button" onClick={handleGenerateExam} disabled={isGenerating || selectedCourse === "_empty"} size="lg">
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isGenerating ? "מייצר מבחן..." : "צור מבחן עם AI"}
               </Button>
