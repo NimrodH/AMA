@@ -78,17 +78,22 @@ export async function action({ request }: Route.ActionArgs) {
   const userMessage = `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
 קרא את כל המבחן בקובץ המצורף והמר אותו לפורמט JSON כמפורט.`;
 
+  // Narrow the file_search to this specific exam using metadata attributes that were
+  // actually stored at upload time (student_id + source_type + topic).
+  // "vector_store_file_id" is NOT a metadata key — it's our internal DB column.
   const response = await client.responses.create({
     model: "gpt-4o",
     tools: [
       {
         type: "file_search",
         vector_store_ids: [vectorStoreId],
-        // Fix #1: filter by the specific file, not all Past exam files
         filters: {
-          type: "eq" as const,
-          key: "vector_store_file_id",
-          value: source.vector_store_file_id,
+          type: "and" as const,
+          filters: [
+            { type: "eq" as const, key: "student_id", value: student.id },
+            { type: "eq" as const, key: "source_type", value: "Past exam" },
+            { type: "eq" as const, key: "topic", value: source.topic },
+          ],
         },
       },
     ],
