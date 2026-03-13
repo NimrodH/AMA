@@ -20,8 +20,15 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // ── 1. Find matching lecture sources ──────────────────────────────────────
+  // Strategy:
+  // - Always include sources with lecture_number = NULL (course-wide materials)
+  // - If the card has a lecture_number, also include sources matching that number
+  // - Never exclude course-wide sources just because the card has a lecture number
   const db = createServerClient();
-  let sourcesQuery = db
+  const lectureNum = lectureNumber ? parseInt(lectureNumber, 10) : null;
+
+  // Fetch ALL lecture sources for this course with a vector store file
+  const { data: allCourseSources } = await db
     .from("sources")
     .select("id, topic, lecture_number, vector_store_file_id")
     .eq("student_id", student.id)
@@ -29,24 +36,22 @@ export async function action({ request }: Route.ActionArgs) {
     .eq("source_type", "Lecture")
     .not("vector_store_file_id", "is", null);
 
-  // If the card has a lecture number, prefer sources that match it;
-  // otherwise fall back to ALL lectures for the course.
-  const lectureNum = lectureNumber ? parseInt(lectureNumber, 10) : null;
-  if (lectureNum !== null && !isNaN(lectureNum)) {
-    sourcesQuery = sourcesQuery.eq("lecture_number", lectureNum);
-  }
+  const courseSources = allCourseSources ?? [];
 
-  const { data: sources } = await sourcesQuery;
+  // Filter: course-wide (null) sources are always included.
+  // If the card has a lecture_number, also include sources with that exact lecture_number.
+  // If the card has no lecture_number, include ALL sources for the course.
+  const matchingSources = courseSources.filter((s) => {
+    if (s.lecture_number === null) return true; // course-wide: always relevant
+    if (lectureNum === null) return true;        // card has no lecture scope: include all
+    return s.lecture_number === lectureNum;      // match exact lecture number
+  });
 
-  const matchingSources = sources ?? [];
-
-  // ── 2. Build context string from source metadata ──────────────────────────
-  // We'll use OpenAI's file_search tool so the vector store handles retrieval.
-  // The source list gives us a "hint" to show the user which sources were used.
+  // ── 2. Build context hints ────────────────────────────────────────────────
   const sourceList =
     matchingSources.length > 0
       ? matchingSources
-          .map((s) => `• ${s.topic}${s.lecture_number ? ` (הרצאה ${s.lecture_number})` : ""}`)
+          .map((s) => `• ${s.topic}${s.lecture_number ? ` (הרצאה ${s.lecture_number})` : " (כלל הקורס)"}`)
           .join("\n")
       : null;
 
@@ -54,11 +59,9 @@ export async function action({ request }: Route.ActionArgs) {
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
 
-  // ── 3. Call OpenAI — with file_search if we have matching sources ─────────
+  // ── 3. Build prompts ──────────────────────────────────────────────────────
   const client = getOpenAIClient();
   const vectorStoreId = await getOrCreateVectorStore();
-
-  let feedback: string;
 
   const cardLectureHint =
     lectureNum !== null
@@ -66,15 +69,15 @@ export async function action({ request }: Route.ActionArgs) {
       : "הכרטיס אינו משויך להרצאה ספציפית — השתמש בכל חומרי הקורס הרלוונטיים.";
 
   const systemPrompt = `אתה מומחה אקדמי המספק משוב על כרטיסי למידה של סטודנטים.
-${sourceList ? `חפש את המידע הרלוונטי בחומרי הלימוד הבאים:\n${sourceList}` : ""}
-${cardLectureHint}
+${sourceList ? `מקורות הלמידה הרלוונטיים לכרטיס זה:\n${sourceList}\n` : ""}${cardLectureHint}
 
 מבנה הכרטיס:
 - **כותרת הכרטיס** = המושג או השאלה שהסטודנט מנסה ללמוד
 - **תוכן הכרטיס** = ההגדרה המלאה שהסטודנט כתב למושג, או התשובה המלאה לשאלה
 
 משימתך:
-חפש בחומרי ההרצאה המקוריים את ההסבר המלא של אותו מושג / תשובה לאותה שאלה, והשווה אותו לתוכן שכתב הסטודנט.
+חפש בחומרי ההרצאה המקוריים המצורפים את ההסבר המלא של אותו מושג / תשובה לאותה שאלה, והשווה אותו לתוכן שכתב הסטודנט.
+חשוב מאוד: אם המושג מופיע בחומר — ציין זאת מפורשות עם ציטוט ישיר מהמקור.
 
 ספק משוב מפורט הכולל:
 1. ✅ נקודות חוזק — מה הסטודנט הבין והסביר נכון
@@ -84,30 +87,42 @@ ${cardLectureHint}
 
 הצג את המשוב בפורמט מובנה וברור בעברית.`;
 
-  const { title: cardTitle = "", content: cardBody = cardContent } =
-    (() => {
-      // cardContent is passed as "title\n---\ncontent" from the client
-      const sep = "\n---\n";
-      const idx = cardContent.indexOf(sep);
-      if (idx !== -1) {
-        return { title: cardContent.slice(0, idx).trim(), content: cardContent.slice(idx + sep.length).trim() };
-      }
-      return { title: "", content: cardContent };
-    })();
+  // Parse card title vs content (encoded as "title\n---\ncontent" from the client)
+  const sep = "\n---\n";
+  const sepIdx = cardContent.indexOf(sep);
+  const cardTitle = sepIdx !== -1 ? cardContent.slice(0, sepIdx).trim() : "";
+  const cardBody = sepIdx !== -1 ? cardContent.slice(sepIdx + sep.length).trim() : cardContent;
 
   const userMessage = cardTitle
     ? `מושג / שאלה (כותרת הכרטיס):\n${cardTitle}\n\nהגדרה / תשובה (תוכן הכרטיס שכתב הסטודנט):\n${cardBody}`
     : `תוכן הכרטיס של הסטודנט:\n${cardContent}`;
 
+  // ── 4. Call OpenAI with file_search scoped to the matching files ──────────
+  let feedback: string;
+
   if (vectorStoreFileIds.length > 0) {
-    // Use the Responses API with file_search tool scoped to this vector store
+    // Build a file_id filter so the search is scoped to the exact matched sources.
+    // ComparisonFilter supports: eq, ne, gt, lt, gte, lte (no "in" type).
+    // For multiple files, use a CompoundFilter with "or" + multiple "eq" filters.
+    const fileFilter =
+      vectorStoreFileIds.length === 1
+        ? { type: "eq" as const, key: "file_id", value: vectorStoreFileIds[0] }
+        : {
+            type: "or" as const,
+            filters: vectorStoreFileIds.map((fid) => ({
+              type: "eq" as const,
+              key: "file_id",
+              value: fid,
+            })),
+          };
+
     const response = await client.responses.create({
       model: "gpt-4o",
       tools: [
         {
           type: "file_search",
           vector_store_ids: [vectorStoreId],
-          // Filter to only the matched files using a filter on file_id
+          filters: fileFilter,
         },
       ],
       input: [
@@ -118,7 +133,7 @@ ${cardLectureHint}
 
     feedback = response.output_text || "לא התקבל משוב";
   } else {
-    // No matching sources found — fall back to generic feedback without RAG
+    // No matching sources found — generic feedback without RAG
     const response = await client.chat.completions.create({
       model: "gpt-4o",
       messages: [
