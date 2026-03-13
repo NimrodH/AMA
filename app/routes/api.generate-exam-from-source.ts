@@ -1,5 +1,5 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
-import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
 
@@ -55,6 +55,26 @@ function extractJson(text: string): string {
   return text;
 }
 
+/** Download a file from a public URL and return it as a Buffer. */
+async function fetchFileBuffer(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
+  const arrayBuffer = await res.arrayBuffer();
+  const contentType = res.headers.get("content-type") ?? "application/octet-stream";
+  return { buffer: Buffer.from(arrayBuffer), contentType };
+}
+
+/** Map a file URL extension to a MIME type accepted by OpenAI. */
+function getMimeType(url: string, fallback: string): string {
+  const lower = url.toLowerCase();
+  if (lower.endsWith(".pdf")) return "application/pdf";
+  if (lower.endsWith(".docx"))
+    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (lower.endsWith(".doc")) return "application/msword";
+  if (lower.endsWith(".txt")) return "text/plain";
+  return fallback;
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const { sourceId } = (await request.json()) as { sourceId: string };
 
@@ -76,110 +96,103 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "המקור אינו מבחן עבר" }, { status: 400 });
   }
 
-  if (!source.vector_store_file_id) {
-    return Response.json(
-      { ok: false, error: "הקובץ עדיין לא אונדקס — נסה לסנכרן את המקור ואז נסה שוב" },
-      { status: 400 }
-    );
+  if (!source.file_url) {
+    return Response.json({ ok: false, error: "אין קישור לקובץ — נסה לעלות מחדש" }, { status: 400 });
   }
 
   const client = getOpenAIClient();
-  const vectorStoreId = await getOrCreateVectorStore();
 
-  const userMessage = `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
-חשוב מאוד: קרא את כל השאלות במבחן — כל אחת מהן, ללא יוצא מן הכלל. אל תחסר אף שאלה.
-המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.`;
+  // ── 1. Download the file from Supabase Storage ──────────────────────────────
+  let fileBuffer: Buffer;
+  let mimeType: string;
+  try {
+    const { buffer, contentType } = await fetchFileBuffer(source.file_url);
+    fileBuffer = buffer;
+    mimeType = getMimeType(source.file_url, contentType);
+  } catch (err) {
+    console.error("[generate-exam] Failed to download file:", err);
+    return Response.json(
+      { ok: false, error: "לא ניתן להוריד את הקובץ מ-Supabase Storage" },
+      { status: 502 }
+    );
+  }
 
-  // ── SSE stream ──────────────────────────────────────────────────────────────
-  // We keep the HTTP connection alive by sending periodic heartbeat comments
-  // while OpenAI processes the request (which can take 60-90 s for large exams).
-  // The final event carries the JSON payload.
-  const encoder = new TextEncoder();
+  // ── 2. Upload the file to OpenAI for this request ───────────────────────────
+  let openaiFileId: string;
+  try {
+    const fileName = source.file_url.split("/").pop() ?? "exam.pdf";
+    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
+    const file = new File([blob], fileName, { type: mimeType });
 
-  const stream = new ReadableStream({
-    async start(controller) {
-      const send = (data: string) => {
-        controller.enqueue(encoder.encode(data));
-      };
+    const uploaded = await client.files.create({ file, purpose: "assistants" });
+    openaiFileId = uploaded.id;
+  } catch (err) {
+    console.error("[generate-exam] Failed to upload file to OpenAI:", err);
+    return Response.json(
+      { ok: false, error: "לא ניתן להעלות את הקובץ ל-OpenAI" },
+      { status: 502 }
+    );
+  }
 
-      // Heartbeat every 15 s so proxies / browsers don't close the connection.
-      const heartbeat = setInterval(() => {
-        try {
-          send(": heartbeat\n\n");
-        } catch {
-          /* stream already closed */
-        }
-      }, 15_000);
-
-      try {
-        const response = await client.responses.create({
-          model: "gpt-4o",
-          tools: [
+  // ── 3. Run chat completion with the uploaded file ───────────────────────────
+  let rawText: string;
+  try {
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: [
             {
-              type: "file_search",
-              vector_store_ids: [vectorStoreId],
-              max_num_results: 50,
-              filters: {
-                type: "and" as const,
-                filters: [
-                  { type: "eq" as const, key: "student_id", value: student.id },
-                  { type: "eq" as const, key: "source_type", value: "Past exam" },
-                  { type: "eq" as const, key: "topic", value: source.topic },
-                ],
-              },
+              type: "text",
+              text: `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
+חשוב מאוד: קרא את כל השאלות במבחן — כל אחת מהן, ללא יוצא מן הכלל. אל תחסר אף שאלה.
+המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.`,
+            },
+            // Attach the file so GPT-4o can read it directly
+            {
+              type: "file",
+              file: { file_id: openaiFileId },
             },
           ],
-          input: [
-            { role: "system", content: SYSTEM_PROMPT },
-            { role: "user", content: userMessage },
-          ],
-        });
+        },
+      ],
+    });
 
-        clearInterval(heartbeat);
+    rawText = response.choices[0]?.message?.content?.trim() ?? "";
+  } catch (err) {
+    console.error("[generate-exam] OpenAI chat completion error:", err);
+    // Clean up the uploaded file
+    try { await client.files.delete(openaiFileId); } catch { /* ignore */ }
+    return Response.json(
+      { ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" },
+      { status: 502 }
+    );
+  }
 
-        const rawText = response.output_text?.trim() ?? "";
-        if (!rawText) {
-          send(
-            `data: ${JSON.stringify({ ok: false, error: "OpenAI לא החזיר תוכן — ייתכן שהקובץ לא נמצא ב-Vector Store. נסה לסנכרן שוב." })}\n\n`
-          );
-          controller.close();
-          return;
-        }
+  // ── 4. Clean up the temporary file ──────────────────────────────────────────
+  try { await client.files.delete(openaiFileId); } catch { /* ignore */ }
 
-        const jsonStr = extractJson(rawText);
-        let examData: unknown;
-        try {
-          examData = JSON.parse(jsonStr);
-        } catch {
-          console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
-          send(
-            `data: ${JSON.stringify({ ok: false, error: "לא ניתן לפרסר את המבחן. נסה שוב." })}\n\n`
-          );
-          controller.close();
-          return;
-        }
+  if (!rawText) {
+    return Response.json(
+      { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
+      { status: 500 }
+    );
+  }
 
-        send(
-          `data: ${JSON.stringify({ ok: true, exam: examData, sourceTopic: source.topic })}\n\n`
-        );
-        controller.close();
-      } catch (err) {
-        clearInterval(heartbeat);
-        console.error("[generate-exam] OpenAI error:", err);
-        send(
-          `data: ${JSON.stringify({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב." })}\n\n`
-        );
-        controller.close();
-      }
-    },
-  });
+  // ── 5. Parse and return the JSON ─────────────────────────────────────────────
+  const jsonStr = extractJson(rawText);
+  let examData: unknown;
+  try {
+    examData = JSON.parse(jsonStr);
+  } catch {
+    console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
+    return Response.json(
+      { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
+      { status: 500 }
+    );
+  }
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-      "X-Accel-Buffering": "no", // disable Nginx buffering
-    },
-  });
+  return Response.json({ ok: true, exam: examData, sourceTopic: source.topic });
 }
