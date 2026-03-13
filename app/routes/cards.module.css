@@ -139,6 +139,31 @@
   height: 20px;
 }
 
+.feedbackSources {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+}
+
+.feedbackSources svg {
+  flex-shrink: 0;
+  color: var(--color-neutral-9);
+}
+
+.feedbackSourceTag {
+  background: var(--color-neutral-3);
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-round);
+  padding: 1px var(--space-3);
+  color: var(--color-neutral-11);
+  font: var(--font-caption);
+  white-space: nowrap;
+}
+
 .feedbackContent {
   font: var(--font-body);
   color: var(--color-accent-11);

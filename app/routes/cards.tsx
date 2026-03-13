@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save, Trash2, Hash } from "lucide-react";
+import { Sparkles, Save, Trash2, Hash, BookOpen } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -96,6 +96,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [isAutoFilling, setIsAutoFilling] = React.useState(false);
   const [cardContent, setCardContent] = React.useState("");
   const [feedback, setFeedback] = React.useState<string | null>(null);
+  const [feedbackSources, setFeedbackSources] = React.useState<{ topic: string; lectureNumber: number | null }[]>([]);
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
 
@@ -235,30 +236,37 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && cardContent.trim();
 
   const handleGetFeedback = async () => {
+    if (!selectedCourse || !cardContent) return;
     setIsLoadingFeedback(true);
-    setTimeout(() => {
-      setFeedback(`משוב על הכרטיס:
-
-✅ נקודות חוזק:
-- הסיכום מכסה את המושגים העיקריים
-- השפה ברורה ומדויקת
-- המבנה לוגי וקל לקריאה
-
-⚠️ מושגים חסרים:
-- לא הוזכרה התופעה של רזוננס
-- חסר הסבר על כללי הוקל
-- לא נדונו דוגמאות של תרכובות הטרוציקליות
-
-❌ טעויות לתיקון:
-- בנזן אינו בעל "קשרים כפולים" אלא מערכת מצומדת
-- מספר האלקטרונים המצומדים צריך להיות 4n+2 (כלל הוקל)
-
-💡 המלצות:
-- הוסף דיאגרמות של מבנים מולקולריים
-- הרחב את הדוגמאות לתרכובות נוספות
-- הוסף השוואה לתרכובות לא-ארומטיות`);
+    setFeedback(null);
+    setFeedbackSources([]);
+    try {
+      const res = await fetch("/api/card-feedback", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          courseId: selectedCourse,
+          lectureNumber: lectureNumber || null,
+          cardContent,
+        }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        feedback?: string;
+        sourcesUsed?: { topic: string; lectureNumber: number | null }[];
+        error?: string;
+      };
+      if (data.ok && data.feedback) {
+        setFeedback(data.feedback);
+        setFeedbackSources(data.sourcesUsed ?? []);
+      } else {
+        setFeedback(`שגיאה: ${data.error ?? "לא התקבל משוב"}`);
+      }
+    } catch {
+      setFeedback("שגיאה בקבלת משוב — נסה שוב");
+    } finally {
       setIsLoadingFeedback(false);
-    }, 2000);
+    }
   };
 
   const handleCourseChange = (value: string) => {
@@ -425,6 +433,17 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   <Sparkles />
                   משוב מהבינה המלאכותית
                 </h3>
+                {feedbackSources.length > 0 && (
+                  <div className={styles.feedbackSources}>
+                    <BookOpen size={13} />
+                    <span>מקורות ששימשו: </span>
+                    {feedbackSources.map((s, i) => (
+                      <span key={i} className={styles.feedbackSourceTag}>
+                        {s.topic}{s.lectureNumber ? ` (הרצאה ${s.lectureNumber})` : ""}
+                      </span>
+                    ))}
+                  </div>
+                )}
                 <div className={styles.feedbackContent}>{feedback}</div>
               </div>
             )}
