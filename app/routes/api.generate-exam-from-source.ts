@@ -76,17 +76,20 @@ export async function action({ request }: Route.ActionArgs) {
   const vectorStoreId = await getOrCreateVectorStore();
 
   const userMessage = `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
-קרא את כל המבחן בקובץ המצורף והמר אותו לפורמט JSON כמפורט.`;
+חשוב מאוד: קרא את כל השאלות במבחן — כל אחת מהן, ללא יוצא מן הכלל. אל תחסר אף שאלה.
+המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.`;
 
   // Narrow the file_search to this specific exam using metadata attributes that were
   // actually stored at upload time (student_id + source_type + topic).
-  // "vector_store_file_id" is NOT a metadata key — it's our internal DB column.
+  // max_num_results is raised from the default 5 to 50 so the model receives
+  // all chunks of the file and can see every question.
   const response = await client.responses.create({
     model: "gpt-4o",
     tools: [
       {
         type: "file_search",
         vector_store_ids: [vectorStoreId],
+        max_num_results: 50,
         filters: {
           type: "and" as const,
           filters: [
