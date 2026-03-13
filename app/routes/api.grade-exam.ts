@@ -3,8 +3,9 @@ import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 
 const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשובות סטודנטים.
-קיבלת מבחן עם שאלות, תשובות של סטודנט, ומידע על נושא הקורס.
+קיבלת מבחן עם שאלות, תשובות של סטודנט, וגישה לחומרי ההרצאות של הקורס.
 
+בדוק כל תשובה **אך ורק** על סמך חומרי ההרצאות של הקורס המצורפים. אל תסתמך על ידע כללי שמחוץ לחומרי הלימוד.
 בדוק כל תשובה בקפידה ותן ציון מדויק ומשוב בונה.
 
 החזר תוצאות בפורמט JSON בדיוק:
@@ -88,8 +89,10 @@ ${examText}
           filters: [
             { type: "eq" as const, key: "student_id", value: student.id },
             { type: "eq" as const, key: "course_id", value: courseId },
+            { type: "eq" as const, key: "source_type", value: "הרצאה" },
           ],
         },
+        max_num_results: 50,
       },
     ],
     input: [
