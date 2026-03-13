@@ -226,14 +226,6 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             </Link>
           </Button>
         )}
-        {source.file_url && source.source_type === "Past exam" && (
-          <Button asChild variant="outline" size="sm">
-            <Link to={`/sources/${source.id}/view`}>
-              <Eye style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
-              צפייה
-            </Link>
-          </Button>
-        )}
         <Button
           variant="outline"
           size="sm"
