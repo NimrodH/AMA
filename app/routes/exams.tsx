@@ -108,20 +108,51 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setResults(null);
 
     try {
+      // Use fetch with SSE — POST the request, then read the response body as a stream.
+      // The server sends periodic heartbeat comments to keep the connection alive
+      // while OpenAI processes the request (can take 60-90 s for large exams).
       const res = await fetch("/api/generate-exam-from-source", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sourceId }),
       });
-      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
 
-      if (!data.ok || !data.exam) {
-        setGenerateError(data.error ?? "שגיאה בייצור המבחן");
+      if (!res.ok || !res.body) {
+        setGenerateError("שגיאת רשת — נסה שוב");
         return;
       }
 
-      setExam(data.exam);
-      setExamCourseId(selectedCourse);
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+
+      // eslint-disable-next-line no-constant-condition
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Process complete SSE lines
+        const lines = buffer.split("\n");
+        buffer = lines.pop() ?? ""; // keep incomplete last line
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue; // skip heartbeats / empty lines
+          const json = line.slice(6).trim();
+          if (!json) continue;
+          try {
+            const data = JSON.parse(json) as { ok: boolean; exam?: ExamData; error?: string };
+            if (!data.ok || !data.exam) {
+              setGenerateError(data.error ?? "שגיאה בייצור המבחן");
+            } else {
+              setExam(data.exam);
+              setExamCourseId(selectedCourse);
+            }
+          } catch {
+            setGenerateError("שגיאה בעיבוד התשובה — נסה שוב");
+          }
+        }
+      }
     } catch {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {

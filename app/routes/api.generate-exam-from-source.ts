@@ -46,6 +46,15 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 החזר JSON בלבד, ללא טקסט נוסף.`;
 
+/** Extract a JSON object from raw text (handles markdown code fences). */
+function extractJson(text: string): string {
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) return codeBlock[1].trim();
+  const bareObject = text.match(/\{[\s\S]*\}/);
+  if (bareObject) return bareObject[0].trim();
+  return text;
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const { sourceId } = (await request.json()) as { sourceId: string };
 
@@ -58,7 +67,6 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
   }
 
-  // Fetch the source to verify ownership and get the vector store file id
   const source = await getSourceById(sourceId, student.id);
   if (!source) {
     return Response.json({ ok: false, error: "מקור לא נמצא" }, { status: 404 });
@@ -69,7 +77,10 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   if (!source.vector_store_file_id) {
-    return Response.json({ ok: false, error: "הקובץ עדיין לא אונדקס — נסה לסנכרן את המקור ואז נסה שוב" }, { status: 400 });
+    return Response.json(
+      { ok: false, error: "הקובץ עדיין לא אונדקס — נסה לסנכרן את המקור ואז נסה שוב" },
+      { status: 400 }
+    );
   }
 
   const client = getOpenAIClient();
@@ -79,65 +90,96 @@ export async function action({ request }: Route.ActionArgs) {
 חשוב מאוד: קרא את כל השאלות במבחן — כל אחת מהן, ללא יוצא מן הכלל. אל תחסר אף שאלה.
 המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.`;
 
-  // Narrow the file_search to this specific exam using metadata attributes that were
-  // actually stored at upload time (student_id + source_type + topic).
-  // max_num_results is raised from the default 5 to 50 so the model receives
-  // all chunks of the file and can see every question.
-  const response = await client.responses.create({
-    model: "gpt-4o",
-    tools: [
-      {
-        type: "file_search",
-        vector_store_ids: [vectorStoreId],
-        max_num_results: 50,
-        filters: {
-          type: "and" as const,
-          filters: [
-            { type: "eq" as const, key: "student_id", value: student.id },
-            { type: "eq" as const, key: "source_type", value: "Past exam" },
-            { type: "eq" as const, key: "topic", value: source.topic },
+  // ── SSE stream ──────────────────────────────────────────────────────────────
+  // We keep the HTTP connection alive by sending periodic heartbeat comments
+  // while OpenAI processes the request (which can take 60-90 s for large exams).
+  // The final event carries the JSON payload.
+  const encoder = new TextEncoder();
+
+  const stream = new ReadableStream({
+    async start(controller) {
+      const send = (data: string) => {
+        controller.enqueue(encoder.encode(data));
+      };
+
+      // Heartbeat every 15 s so proxies / browsers don't close the connection.
+      const heartbeat = setInterval(() => {
+        try {
+          send(": heartbeat\n\n");
+        } catch {
+          /* stream already closed */
+        }
+      }, 15_000);
+
+      try {
+        const response = await client.responses.create({
+          model: "gpt-4o",
+          tools: [
+            {
+              type: "file_search",
+              vector_store_ids: [vectorStoreId],
+              max_num_results: 50,
+              filters: {
+                type: "and" as const,
+                filters: [
+                  { type: "eq" as const, key: "student_id", value: student.id },
+                  { type: "eq" as const, key: "source_type", value: "Past exam" },
+                  { type: "eq" as const, key: "topic", value: source.topic },
+                ],
+              },
+            },
           ],
-        },
-      },
-    ],
-    input: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content: userMessage },
-    ],
+          input: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user", content: userMessage },
+          ],
+        });
+
+        clearInterval(heartbeat);
+
+        const rawText = response.output_text?.trim() ?? "";
+        if (!rawText) {
+          send(
+            `data: ${JSON.stringify({ ok: false, error: "OpenAI לא החזיר תוכן — ייתכן שהקובץ לא נמצא ב-Vector Store. נסה לסנכרן שוב." })}\n\n`
+          );
+          controller.close();
+          return;
+        }
+
+        const jsonStr = extractJson(rawText);
+        let examData: unknown;
+        try {
+          examData = JSON.parse(jsonStr);
+        } catch {
+          console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
+          send(
+            `data: ${JSON.stringify({ ok: false, error: "לא ניתן לפרסר את המבחן. נסה שוב." })}\n\n`
+          );
+          controller.close();
+          return;
+        }
+
+        send(
+          `data: ${JSON.stringify({ ok: true, exam: examData, sourceTopic: source.topic })}\n\n`
+        );
+        controller.close();
+      } catch (err) {
+        clearInterval(heartbeat);
+        console.error("[generate-exam] OpenAI error:", err);
+        send(
+          `data: ${JSON.stringify({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב." })}\n\n`
+        );
+        controller.close();
+      }
+    },
   });
 
-  // Fix #2: handle empty output_text (model ran file_search but returned no text)
-  const rawText = response.output_text?.trim() ?? "";
-  if (!rawText) {
-    return Response.json(
-      { ok: false, error: "OpenAI לא החזיר תוכן — ייתכן שהקובץ לא נמצא ב-Vector Store. נסה לסנכרן שוב." },
-      { status: 500 }
-    );
-  }
-
-  // Fix #3: robustly extract JSON — try markdown block first, then bare JSON object
-  const extractJson = (text: string): string => {
-    // Try ```json ... ``` or ``` ... ```
-    const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-    if (codeBlock) return codeBlock[1].trim();
-    // Try bare JSON object { ... }
-    const bareObject = text.match(/\{[\s\S]*\}/);
-    if (bareObject) return bareObject[0].trim();
-    return text;
-  };
-
-  const jsonStr = extractJson(rawText);
-
-  let examData: unknown;
-  try {
-    examData = JSON.parse(jsonStr);
-  } catch {
-    console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
-    return Response.json(
-      { ok: false, error: "לא ניתן לפרסר את המבחן. נסה שוב." },
-      { status: 500 }
-    );
-  }
-
-  return Response.json({ ok: true, exam: examData, sourceTopic: source.topic });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+      "X-Accel-Buffering": "no", // disable Nginx buffering
+    },
+  });
 }
