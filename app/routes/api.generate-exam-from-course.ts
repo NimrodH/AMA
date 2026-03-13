@@ -5,7 +5,7 @@ import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
-
+// v2: extract text pipeline with mammoth — no OpenAI file uploads
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת:
 1. מבנה של מבחן/מבחנים מהעבר (מספר שאלות סגורות, פתוחות, חלוקת נקודות)
