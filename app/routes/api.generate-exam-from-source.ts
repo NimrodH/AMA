@@ -1,4 +1,5 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
+import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
@@ -56,23 +57,31 @@ function extractJson(text: string): string {
 }
 
 /** Download a file from a public URL and return it as a Buffer. */
-async function fetchFileBuffer(url: string): Promise<{ buffer: Buffer; contentType: string }> {
+async function fetchFileBuffer(url: string): Promise<Buffer> {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
-  const arrayBuffer = await res.arrayBuffer();
-  const contentType = res.headers.get("content-type") ?? "application/octet-stream";
-  return { buffer: Buffer.from(arrayBuffer), contentType };
+  return Buffer.from(await res.arrayBuffer());
 }
 
-/** Map a file URL extension to a MIME type accepted by OpenAI. */
-function getMimeType(url: string, fallback: string): string {
+/**
+ * Extract plain text from a file buffer.
+ * Supports DOCX (via mammoth) and plain text files.
+ * For PDF or other types, falls back to a UTF-8 decode attempt.
+ */
+async function extractText(buffer: Buffer, url: string): Promise<string> {
   const lower = url.toLowerCase();
-  if (lower.endsWith(".pdf")) return "application/pdf";
-  if (lower.endsWith(".docx"))
-    return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-  if (lower.endsWith(".doc")) return "application/msword";
-  if (lower.endsWith(".txt")) return "text/plain";
-  return fallback;
+
+  if (lower.endsWith(".docx")) {
+    const result = await mammoth.extractRawText({ buffer });
+    return result.value;
+  }
+
+  if (lower.endsWith(".txt")) {
+    return buffer.toString("utf-8");
+  }
+
+  // Fallback: try UTF-8, which works for plain text / markdown files
+  return buffer.toString("utf-8");
 }
 
 export async function action({ request }: Route.ActionArgs) {
@@ -100,15 +109,10 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "אין קישור לקובץ — נסה לעלות מחדש" }, { status: 400 });
   }
 
-  const client = getOpenAIClient();
-
   // ── 1. Download the file from Supabase Storage ──────────────────────────────
   let fileBuffer: Buffer;
-  let mimeType: string;
   try {
-    const { buffer, contentType } = await fetchFileBuffer(source.file_url);
-    fileBuffer = buffer;
-    mimeType = getMimeType(source.file_url, contentType);
+    fileBuffer = await fetchFileBuffer(source.file_url);
   } catch (err) {
     console.error("[generate-exam] Failed to download file:", err);
     return Response.json(
@@ -117,24 +121,26 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Upload the file to OpenAI for this request ───────────────────────────
-  let openaiFileId: string;
+  // ── 2. Extract text from the file ───────────────────────────────────────────
+  let examText: string;
   try {
-    const fileName = source.file_url.split("/").pop() ?? "exam.pdf";
-    const blob = new Blob([new Uint8Array(fileBuffer)], { type: mimeType });
-    const file = new File([blob], fileName, { type: mimeType });
-
-    const uploaded = await client.files.create({ file, purpose: "assistants" });
-    openaiFileId = uploaded.id;
+    examText = await extractText(fileBuffer, source.file_url);
+    if (!examText.trim()) {
+      return Response.json(
+        { ok: false, error: "הקובץ ריק או לא ניתן לחלץ ממנו טקסט" },
+        { status: 422 }
+      );
+    }
   } catch (err) {
-    console.error("[generate-exam] Failed to upload file to OpenAI:", err);
+    console.error("[generate-exam] Failed to extract text from file:", err);
     return Response.json(
-      { ok: false, error: "לא ניתן להעלות את הקובץ ל-OpenAI" },
-      { status: 502 }
+      { ok: false, error: "לא ניתן לחלץ טקסט מהקובץ" },
+      { status: 422 }
     );
   }
 
-  // ── 3. Run chat completion with the uploaded file ───────────────────────────
+  // ── 3. Run chat completion with the extracted text ───────────────────────────
+  const client = getOpenAIClient();
   let rawText: string;
   try {
     const response = await client.chat.completions.create({
@@ -143,19 +149,12 @@ export async function action({ request }: Route.ActionArgs) {
         { role: "system", content: SYSTEM_PROMPT },
         {
           role: "user",
-          content: [
-            {
-              type: "text",
-              text: `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
+          content: `זהו מבחן עבר בנושא "${source.topic}" מהקורס "${source.course_id}".
 חשוב מאוד: קרא את כל השאלות במבחן — כל אחת מהן, ללא יוצא מן הכלל. אל תחסר אף שאלה.
-המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.`,
-            },
-            // Attach the file so GPT-4o can read it directly
-            {
-              type: "file",
-              file: { file_id: openaiFileId },
-            },
-          ],
+המר את כל המבחן במלואו לפורמט JSON כמפורט בהוראות המערכת.
+
+תוכן המבחן:
+${examText}`,
         },
       ],
     });
@@ -163,16 +162,11 @@ export async function action({ request }: Route.ActionArgs) {
     rawText = response.choices[0]?.message?.content?.trim() ?? "";
   } catch (err) {
     console.error("[generate-exam] OpenAI chat completion error:", err);
-    // Clean up the uploaded file
-    try { await client.files.delete(openaiFileId); } catch { /* ignore */ }
     return Response.json(
       { ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" },
       { status: 502 }
     );
   }
-
-  // ── 4. Clean up the temporary file ──────────────────────────────────────────
-  try { await client.files.delete(openaiFileId); } catch { /* ignore */ }
 
   if (!rawText) {
     return Response.json(
@@ -181,7 +175,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 5. Parse and return the JSON ─────────────────────────────────────────────
+  // ── 4. Parse and return the JSON ─────────────────────────────────────────────
   const jsonStr = extractJson(rawText);
   let examData: unknown;
   try {
