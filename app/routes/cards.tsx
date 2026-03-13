@@ -104,7 +104,6 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [feedbackSources, setFeedbackSources] = React.useState<{ topic: string; lectureNumber: number | null }[]>([]);
   const [showSuccess, setShowSuccess] = React.useState(false);
   const [isLoadingFeedback, setIsLoadingFeedback] = React.useState(false);
-  const [additionalInstruction, setAdditionalInstruction] = React.useState("");
 
   // Unsaved-changes guard
   const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
@@ -147,7 +146,6 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setCardContent("");
     setFeedback(null);
     setShowSuccess(false);
-    setAdditionalInstruction("");
   };
 
   const handleSaveFromDialog = () => {
@@ -261,7 +259,6 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
           courseId: selectedCourse,
           lectureNumber: lectureNumber || null,
           cardContent: encodedContent,
-          additionalInstruction: additionalInstruction.trim() || null,
         }),
       });
       const data = (await res.json()) as {
@@ -420,19 +417,6 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 }}
                 placeholder="כתוב את הסיכום שלך כאן..."
                 rows={12}
-                style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
-                className={styles.textarea}
-              />
-            </div>
-
-            <div className={styles.additionalInstructionField}>
-              <Label htmlFor="additionalInstruction">הוראות נוספות ל-AI (אופציונלי)</Label>
-              <Textarea
-                id="additionalInstruction"
-                value={additionalInstruction}
-                onChange={(e) => setAdditionalInstruction(e.target.value)}
-                placeholder="לדוגמה: התמקד בהיבטים התרמודינמיים בלבד, או: השווה לשיטות חלופיות..."
-                rows={2}
                 style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
                 className={styles.textarea}
               />

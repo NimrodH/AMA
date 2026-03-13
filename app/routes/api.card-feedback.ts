@@ -4,11 +4,10 @@ import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 
 export async function action({ request }: Route.ActionArgs) {
-  const { courseId, lectureNumber, cardContent, additionalInstruction } = (await request.json()) as {
+  const { courseId, lectureNumber, cardContent } = (await request.json()) as {
     courseId: string;
     lectureNumber: string | null;
     cardContent: string;
-    additionalInstruction?: string | null;
   };
 
   if (!courseId || !cardContent) {
@@ -20,20 +19,21 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
   }
 
-  // ── 1. Find matching sources ──────────────────────────────────────────────
+  // ── 1. Find matching lecture sources ──────────────────────────────────────
   // Strategy:
   // - Always include sources with lecture_number = NULL (course-wide materials)
   // - If the card has a lecture_number, also include sources matching that number
-  // - Include ALL source types (Lecture, Card, Past exam) for maximum coverage
+  // - Never exclude course-wide sources just because the card has a lecture number
   const db = createServerClient();
   const lectureNum = lectureNumber ? parseInt(lectureNumber, 10) : null;
 
-  // Fetch ALL sources for this course with a vector store file
+  // Fetch ALL lecture sources for this course with a vector store file
   const { data: allCourseSources } = await db
     .from("sources")
-    .select("id, topic, lecture_number, vector_store_file_id, source_type")
+    .select("id, topic, lecture_number, vector_store_file_id")
     .eq("student_id", student.id)
     .eq("course_id", courseId)
+    .eq("source_type", "Lecture")
     .not("vector_store_file_id", "is", null);
 
   const courseSources = allCourseSources ?? [];
@@ -51,12 +51,11 @@ export async function action({ request }: Route.ActionArgs) {
   const sourceList =
     matchingSources.length > 0
       ? matchingSources
-          .map((s) => `• ${s.topic}${s.lecture_number ? ` (הרצאה ${s.lecture_number})` : " (כלל הקורס)"}`)
+          .map((s) => `\u2022 ${s.topic}${s.lecture_number ? ` (\u05d4\u05e8\u05e6\u05d0\u05d4 ${s.lecture_number})` : " (\u05db\u05dc\u05dc \u05d4\u05e7\u05d5\u05e8\u05e1)"}`)
           .join("\n")
       : null;
 
-  // Collect the underlying OpenAI file IDs stored in vector_store_file_id column
-  const vectorFileIds = matchingSources
+  const vectorStoreFileIds = matchingSources
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
 
@@ -66,8 +65,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   const cardLectureHint =
     lectureNum !== null
-      ? `הכרטיס שייך להרצאה מספר ${lectureNum}.`
-      : "הכרטיס אינו משויך להרצאה ספציפית — השתמש בכל חומרי הקורס הרלוונטיים.";
+      ? `\u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05d9\u05d9\u05da \u05dc\u05d4\u05e8\u05e6\u05d0\u05d4 \u05de\u05e1\u05e4\u05e8 ${lectureNum}.`
+      : "\u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05d0\u05d9\u05e0\u05d5 \u05de\u05e9\u05d5\u05d9\u05da \u05dc\u05d4\u05e8\u05e6\u05d0\u05d4 \u05e1\u05e4\u05e6\u05d9\u05e4\u05d9\u05ea \u2014 \u05d4\u05e9\u05ea\u05de\u05e9 \u05d1\u05db\u05dc \u05d7\u05d5\u05de\u05e8\u05d9 \u05d4\u05e7\u05d5\u05e8\u05e1 \u05d4\u05e8\u05dc\u05d5\u05d5\u05e0\u05d8\u05d9\u05d9\u05dd.";
 
   // Parse card title vs content (encoded as "title\n---\ncontent" from the client)
   const sep = "\n---\n";
@@ -76,69 +75,60 @@ export async function action({ request }: Route.ActionArgs) {
   const cardBody = sepIdx !== -1 ? cardContent.slice(sepIdx + sep.length).trim() : cardContent;
 
   const systemPrompt = [
-    "אתה מומחה אקדמי המספק משוב על כרטיסי למידה של סטודנטים.",
+    "\u05d0\u05ea\u05d4 \u05de\u05d5\u05de\u05d7\u05d4 \u05d0\u05e7\u05d3\u05de\u05d9 \u05d4\u05de\u05e1\u05e4\u05e7 \u05de\u05e9\u05d5\u05d1 \u05e2\u05dc \u05db\u05e8\u05d8\u05d9\u05e1\u05d9 \u05dc\u05de\u05d9\u05d3\u05d4 \u05e9\u05dc \u05e1\u05d8\u05d5\u05d3\u05e0\u05d8\u05d9\u05dd.",
     sourceList
-      ? `מקורות הלמידה הרלוונטיים לכרטיס זה:\n${sourceList}`
+      ? `\u05de\u05e7\u05d5\u05e8\u05d5\u05ea \u05d4\u05dc\u05de\u05d9\u05d3\u05d4 \u05d4\u05e8\u05dc\u05d5\u05d5\u05e0\u05d8\u05d9\u05d9\u05dd \u05dc\u05db\u05e8\u05d8\u05d9\u05e1 \u05d6\u05d4:\n${sourceList}`
       : "",
     cardLectureHint,
     "",
-    "חשוב מאוד: בצע חיפוש רחב בכל המסמכים שצורפו — כולל סיכומים כלליים וקבצים עם lecture_number=null. המושג עשוי להופיע בעמוד אחר, פרק אחר, או תחת שם שונה מעט. אל תאמר \"אין מידע\" אלא אם ביצעת חיפוש מקיף ועדיין לא מצאת.",
+    // ── CRITICAL SEARCH INSTRUCTION ──
+    // The source document is a course-wide summary (lecture_number = null). The vector search
+    // must find the relevant section even if it is on page 2 or under a slightly different heading.
+    "\u05d7\u05e9\u05d5\u05d1 \u05de\u05d0\u05d5\u05d3: \u05d1\u05e6\u05e2 \u05d7\u05d9\u05e4\u05d5\u05e9 \u05e8\u05d7\u05d1 \u05d1\u05db\u05dc \u05d4\u05de\u05e1\u05de\u05db\u05d9\u05dd \u05e9\u05e6\u05d5\u05e8\u05e4\u05d5 \u2014 \u05db\u05d5\u05dc\u05dc \u05e1\u05d9\u05db\u05d5\u05de\u05d9\u05dd \u05db\u05dc\u05dc\u05d9\u05d9\u05dd \u05d5\u05e7\u05d1\u05e6\u05d9\u05dd \u05e2\u05dd lecture_number=null. \u05d4\u05de\u05d5\u05e9\u05d2 \u05e2\u05e9\u05d5\u05d9 \u05dc\u05d4\u05d5\u05e4\u05d9\u05e2 \u05d1\u05e2\u05de\u05d5\u05d3 \u05d0\u05d7\u05e8, \u05e4\u05e8\u05e7 \u05d0\u05d7\u05e8, \u05d0\u05d5 \u05ea\u05d7\u05ea \u05e9\u05dd \u05e9\u05d5\u05e0\u05d4 \u05de\u05e2\u05d8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \"\u05d0\u05d9\u05df \u05de\u05d9\u05d3\u05e2\" \u05d0\u05dc\u05d0 \u05d0\u05dd \u05d1\u05d9\u05e6\u05e2\u05ea \u05d7\u05d9\u05e4\u05d5\u05e9 \u05de\u05e7\u05d9\u05e3 \u05d5\u05e2\u05d3\u05d9\u05d9\u05df \u05dc\u05d0 \u05de\u05e6\u05d0\u05ea.",
     "",
-    "מבנה הכרטיס:",
-    "- **כותרת הכרטיס** = המושג או השאלה שהסטודנט מנסה ללמוד",
-    "- **תוכן הכרטיס** = ההגדרה המלאה שהסטודנט כתב למושג, או התשובה המלאה לשאלה",
+    "\u05de\u05d1\u05e0\u05d4 \u05d4\u05db\u05e8\u05d8\u05d9\u05e1:",
+    "- **\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05db\u05e8\u05d8\u05d9\u05e1** = \u05d4\u05de\u05d5\u05e9\u05d2 \u05d0\u05d5 \u05d4\u05e9\u05d0\u05dc\u05d4 \u05e9\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05de\u05e0\u05e1\u05d4 \u05dc\u05dc\u05de\u05d5\u05d3",
+    "- **\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1** = \u05d4\u05d4\u05d2\u05d3\u05e8\u05d4 \u05d4\u05de\u05dc\u05d0\u05d4 \u05e9\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05db\u05ea\u05d1 \u05dc\u05de\u05d5\u05e9\u05d2, \u05d0\u05d5 \u05d4\u05ea\u05e9\u05d5\u05d1\u05d4 \u05d4\u05de\u05dc\u05d0\u05d4 \u05dc\u05e9\u05d0\u05dc\u05d4",
     "",
-    "משימתך:",
-    "חפש בחומרי ההרצאה המקוריים המצורפים את ההסבר המלא של אותו מושג / תשובה לאותה שאלה, והשווה אותו לתוכן שכתב הסטודנט.",
-    "חשוב מאוד: אם המושג מופיע בחומר — ציין זאת מפורשות עם ציטוט ישיר מהמקור.",
+    "\u05de\u05e9\u05d9\u05de\u05ea\u05da:",
+    "\u05d7\u05e4\u05e9 \u05d1\u05d7\u05d5\u05de\u05e8\u05d9 \u05d4\u05d4\u05e8\u05e6\u05d0\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05d9\u05dd \u05d4\u05de\u05e6\u05d5\u05e8\u05e4\u05d9\u05dd \u05d0\u05ea \u05d4\u05d4\u05e1\u05d1\u05e8 \u05d4\u05de\u05dc\u05d0 \u05e9\u05dc \u05d0\u05d5\u05ea\u05d5 \u05de\u05d5\u05e9\u05d2 / \u05ea\u05e9\u05d5\u05d1\u05d4 \u05dc\u05d0\u05d5\u05ea\u05d4 \u05e9\u05d0\u05dc\u05d4, \u05d5\u05d4\u05e9\u05d5\u05d5\u05d4 \u05d0\u05d5\u05ea\u05d5 \u05dc\u05ea\u05d5\u05db\u05df \u05e9\u05db\u05ea\u05d1 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8.",
+    "\u05d7\u05e9\u05d5\u05d1 \u05de\u05d0\u05d5\u05d3: \u05d0\u05dd \u05d4\u05de\u05d5\u05e9\u05d2 \u05de\u05d5\u05e4\u05d9\u05e2 \u05d1\u05d7\u05d5\u05de\u05e8 \u2014 \u05e6\u05d9\u05d9\u05df \u05d6\u05d0\u05ea \u05de\u05e4\u05d5\u05e8\u05e9\u05d5\u05ea \u05e2\u05dd \u05e6\u05d9\u05d8\u05d5\u05d8 \u05d9\u05e9\u05d9\u05e8 \u05de\u05d4\u05de\u05e7\u05d5\u05e8.",
     "",
-    "ספק משוב מפורט הכולל:",
-    "1. ✅ נקודות חוזק — מה הסטודנט הבין והסביר נכון",
-    "2. ⚠️ פרטים חסרים — היבטים, תנאים, דוגמאות או הסברים שמופיעים בהרצאה אך חסרים מהכרטיס",
-    "3. ❌ אי-דיוקים — טענות שגויות, ניסוחים מטעים או הכללות לא נכונות",
-    "4. 💡 ניסוח משופר — הצע כיצד לנסח מחדש את תוכן הכרטיס כך שישקף נאמנה את הגדרת/הסבר המקור",
+    "\u05e1\u05e4\u05e7 \u05de\u05e9\u05d5\u05d1 \u05de\u05e4\u05d5\u05e8\u05d8 \u05d4\u05db\u05d5\u05dc\u05dc:",
+    "1. \u2705 \u05e0\u05e7\u05d5\u05d3\u05d5\u05ea \u05d7\u05d5\u05d6\u05e7 \u2014 \u05de\u05d4 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05d4\u05d1\u05d9\u05df \u05d5\u05d4\u05e1\u05d1\u05d9\u05e8 \u05e0\u05db\u05d5\u05df",
+    "2. \u26a0\ufe0f \u05e4\u05e8\u05d8\u05d9\u05dd \u05d7\u05e1\u05e8\u05d9\u05dd \u2014 \u05d4\u05d9\u05d1\u05d8\u05d9\u05dd, \u05ea\u05e0\u05d0\u05d9\u05dd, \u05d3\u05d5\u05d2\u05de\u05d0\u05d5\u05ea \u05d0\u05d5 \u05d4\u05e1\u05d1\u05e8\u05d9\u05dd \u05e9\u05de\u05d5\u05e4\u05d9\u05e2\u05d9\u05dd \u05d1\u05d4\u05e8\u05e6\u05d0\u05d4 \u05d0\u05da \u05d7\u05e1\u05e8\u05d9\u05dd \u05de\u05d4\u05db\u05e8\u05d8\u05d9\u05e1",
+    "3. \u274c \u05d0\u05d9-\u05d3\u05d9\u05d5\u05e7\u05d9\u05dd \u2014 \u05d8\u05e2\u05e0\u05d5\u05ea \u05e9\u05d2\u05d5\u05d9\u05d5\u05ea, \u05e0\u05d9\u05e1\u05d5\u05d7\u05d9\u05dd \u05de\u05d8\u05e2\u05d9\u05dd \u05d0\u05d5 \u05d4\u05db\u05dc\u05dc\u05d5\u05ea \u05dc\u05d0 \u05e0\u05db\u05d5\u05e0\u05d5\u05ea",
+    "4. \ud83d\udca1 \u05e0\u05d9\u05e1\u05d5\u05d7 \u05de\u05e9\u05d5\u05e4\u05e8 \u2014 \u05d4\u05e6\u05e2 \u05db\u05d9\u05e6\u05d3 \u05dc\u05e0\u05e1\u05d7 \u05de\u05d7\u05d3\u05e9 \u05d0\u05ea \u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05db\u05da \u05e9\u05d9\u05e9\u05e7\u05e3 \u05e0\u05d0\u05de\u05e0\u05d4 \u05d0\u05ea \u05d4\u05d2\u05d3\u05e8\u05ea/\u05d4\u05e1\u05d1\u05e8 \u05d4\u05de\u05e7\u05d5\u05e8",
     "",
-    "הצג את המשוב בפורמט מובנה וברור בעברית.",
-    additionalInstruction
-      ? `\nהוראות נוספות מהסטודנט:\n${additionalInstruction}`
-      : null,
+    "\u05d4\u05e6\u05d2 \u05d0\u05ea \u05d4\u05de\u05e9\u05d5\u05d1 \u05d1\u05e4\u05d5\u05e8\u05de\u05d8 \u05de\u05d5\u05d1\u05e0\u05d4 \u05d5\u05d1\u05e8\u05d5\u05e8 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea.",
   ]
     .filter((line) => line !== null)
     .join("\n");
 
   const userMessage = cardTitle
-    ? `מושג / שאלה (כותרת הכרטיס):\n${cardTitle}\n\nהגדרה / תשובה (תוכן הכרטיס שכתב הסטודנט):\n${cardBody}`
-    : `תוכן הכרטיס של הסטודנט:\n${cardContent}`;
+    ? `\u05de\u05d5\u05e9\u05d2 / \u05e9\u05d0\u05dc\u05d4 (\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05db\u05e8\u05d8\u05d9\u05e1):\n${cardTitle}\n\n\u05d4\u05d2\u05d3\u05e8\u05d4 / \u05ea\u05e9\u05d5\u05d1\u05d4 (\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05db\u05ea\u05d1 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8):\n${cardBody}`
+    : `\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05dc \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8:\n${cardContent}`;
 
   // ── 4. Call OpenAI with file_search ──────────────────────────────────────
-  // Build a precise filter targeting ONLY the specific source files for this course/lecture.
-  // We use the file_id attribute (stored as vector_store_file_id in the DB) which IS a
-  // searchable attribute on vector store files. This avoids cross-course contamination.
+  // Filter by student_id (a custom metadata attribute set on every uploaded file).
+  // This correctly scopes the search to this student's files only.
+  // NOTE: We do NOT filter by file_id because "file_id" is NOT a stored metadata attribute —
+  // using it caused the vector search to silently return zero results, making the AI
+  // fall back to its internal knowledge and claim "no information found in the source".
   let feedback: string;
 
-  if (vectorFileIds.length > 0) {
-    // Build compound OR filter when there are multiple files, or a single eq filter.
-    // OpenAI file_search filters: { type: "eq", key: "file_id", value: "..." }
-    // For multiple files: { type: "or", filters: [...] }
-    const fileFilter =
-      vectorFileIds.length === 1
-        ? { type: "eq" as const, key: "file_id", value: vectorFileIds[0] }
-        : {
-            type: "or" as const,
-            filters: vectorFileIds.map((fileId) => ({
-              type: "eq" as const,
-              key: "file_id",
-              value: fileId,
-            })),
-          };
-
+  if (vectorStoreFileIds.length > 0) {
     const response = await client.responses.create({
       model: "gpt-4o",
       tools: [
         {
           type: "file_search",
           vector_store_ids: [vectorStoreId],
-          filters: fileFilter,
+          filters: {
+            type: "eq" as const,
+            key: "student_id",
+            value: student.id,
+          },
         },
       ],
       input: [
@@ -147,7 +137,7 @@ export async function action({ request }: Route.ActionArgs) {
       ],
     });
 
-    feedback = response.output_text || "לא התקבל משוב";
+    feedback = response.output_text || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
   } else {
     // No matching sources found — generic feedback without RAG
     const response = await client.chat.completions.create({
@@ -158,7 +148,7 @@ export async function action({ request }: Route.ActionArgs) {
       ],
       temperature: 0.7,
     });
-    feedback = response.choices[0]?.message?.content || "לא התקבל משוב";
+    feedback = response.choices[0]?.message?.content || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
   }
 
   return Response.json({
