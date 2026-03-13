@@ -1,5 +1,5 @@
 import type { Route } from "./+types/api.reupload-source";
-import { getOpenAIClient, getOrCreateVectorStore, uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore, uploadToVectorStore, deleteFromVectorStore, extractTextFromOpenAIFile } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 import mammoth from "mammoth";
@@ -13,11 +13,16 @@ async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<
     return htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   }
   if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text.trim();
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+      const data = await pdfParse(buffer);
+      if (data.text.trim()) return data.text.trim();
+    } catch {
+      // pdf-parse failed — caller should fall back to OpenAI
+    }
   }
-  return buffer.toString("utf-8").trim();
+  return "";
 }
 
 /**
@@ -132,12 +137,22 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 5. Extract text content and update DB ──────────────────────────────────
+  // ── 5. Extract text content ─────────────────────────────────────────────────
   let content: string | undefined;
   try {
     content = await extractTextFromBuffer(fileBuffer, fileName);
   } catch (err) {
-    console.warn("Text extraction failed (non-blocking):", err);
+    console.warn("Local text extraction failed, will try OpenAI fallback:", err);
+  }
+
+  // Fallback: use OpenAI to extract text from the newly uploaded file
+  if (!content) {
+    try {
+      console.log(`[reupload] Local extraction empty, trying OpenAI file extraction for ${newVectorStoreFileId}...`);
+      content = await extractTextFromOpenAIFile(newVectorStoreFileId, source.topic ?? fileName);
+    } catch (err) {
+      console.warn("OpenAI text extraction fallback also failed:", err);
+    }
   }
 
   const { error: updateError } = await db

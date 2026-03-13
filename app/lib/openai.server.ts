@@ -72,6 +72,37 @@ export async function uploadToVectorStore({
 }
 
 /**
+ * Uses GPT-4o to extract plain text from an OpenAI file by its file ID.
+ * The file must already be uploaded to OpenAI (e.g. via vector store upload).
+ * This is the most reliable extraction path for PDFs that pdf-parse can't handle.
+ */
+export async function extractTextFromOpenAIFile(fileId: string, topic: string): Promise<string> {
+  const client = getOpenAIClient();
+
+  const response = await client.responses.create({
+    model: "gpt-4o",
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_file",
+            file_id: fileId,
+          },
+          {
+            type: "input_text",
+            text: `Extract all text content from this document titled "${topic}". Return only the raw text content, no commentary, no formatting markers, no JSON. Just the plain text exactly as it appears in the document.`,
+          },
+        ],
+      },
+    ],
+  });
+
+  const text = response.output_text?.trim() ?? "";
+  return text;
+}
+
+/**
  * Deletes a file from the OpenAI vector store and from OpenAI file storage.
  * Silently succeeds if the file is not found.
  */

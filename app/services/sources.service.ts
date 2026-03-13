@@ -1,14 +1,14 @@
 import mammoth from "mammoth";
 import { createServerClient } from "~/lib/supabase";
 import type { Database } from "~/lib/supabase";
-import { uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
+import { uploadToVectorStore, deleteFromVectorStore, extractTextFromOpenAIFile } from "~/lib/openai.server";
 import type { CourseRow } from "~/services/settings.service";
 
 export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 
 const BUCKET_NAME = "sources";
 
-/** Extract plain text from a file buffer. Supports DOCX and PDF. */
+/** Extract plain text from a file buffer. Supports DOCX and PDF. Returns empty string on failure. */
 async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<string> {
   const lower = fileName.toLowerCase();
   if (lower.endsWith(".docx")) {
@@ -19,11 +19,16 @@ async function extractTextFromBuffer(buffer: Buffer, fileName: string): Promise<
     return htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
   }
   if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text.trim();
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfParse = require("pdf-parse") as (buf: Buffer) => Promise<{ text: string }>;
+      const data = await pdfParse(buffer);
+      if (data.text.trim()) return data.text.trim();
+    } catch {
+      // pdf-parse failed 
+    }
   }
-  return buffer.toString("utf-8").trim();
+  return "";
 }
 
 /** Fetch a single source by ID (must belong to the student). */
