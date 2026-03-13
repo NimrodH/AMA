@@ -136,11 +136,26 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setAnswers({});
     setResults(null);
 
-    // For now, generating a new AI exam from course material still uses a short delay
-    // (real AI generation from course vector store can be wired here later)
-    await new Promise((resolve) => setTimeout(resolve, 1500));
-    setGenerateError("ייצור מבחן מחומרי הלימוד עדיין בפיתוח. השתמש בכפתור \"הצג כבחינה\" על מבחן עבר.");
-    setIsGenerating(false);
+    try {
+      const res = await fetch("/api/generate-exam-from-course", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: selectedCourse }),
+      });
+
+      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+
+      if (!data.ok || !data.exam) {
+        setGenerateError(data.error ?? "שגיאה בייצור המבחן");
+      } else {
+        setExam(data.exam);
+        setExamCourseId(selectedCourse);
+      }
+    } catch {
+      setGenerateError("שגיאת רשת — נסה שוב");
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSubmitExam = async () => {
@@ -198,7 +213,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
             <p className={styles.loadingSubtitle}>
               {sourceIdParam
                 ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
-                : "מנתח חומרי לימוד ויוצר שאלות מותאמות"}
+                : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
             </p>
           </div>
         </div>

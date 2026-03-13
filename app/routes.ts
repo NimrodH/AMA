@@ -16,6 +16,7 @@ export default [
   route("api/reupload-source", "routes/api.reupload-source.ts"),
   route("api/file-status", "routes/api.file-status.ts"),
   route("api/generate-exam-from-source", "routes/api.generate-exam-from-source.ts"),
+  route("api/generate-exam-from-course", "routes/api.generate-exam-from-course.ts"),
   route("api/grade-exam", "routes/api.grade-exam.ts"),
   ...devRoutes,
 ] satisfies RouteConfig;

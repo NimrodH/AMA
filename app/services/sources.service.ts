@@ -23,6 +23,30 @@ export async function getSourceById(id: string, studentId: string): Promise<Sour
   return data as SourceRow;
 }
 
+/** Fetch all sources for a student filtered by course and optionally by type. */
+export async function getSourcesByCourse(
+  studentId: string,
+  courseId: string,
+  sourceType?: "Lecture" | "Card" | "Past exam"
+): Promise<SourceRow[]> {
+  const db = createServerClient();
+  let query = db
+    .from("sources")
+    .select(
+      "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, content, metadata, vector_store_file_id, created_at"
+    )
+    .eq("student_id", studentId)
+    .eq("course_id", courseId);
+
+  if (sourceType) {
+    query = query.eq("source_type", sourceType);
+  }
+
+  const { data, error } = await query.order("created_at", { ascending: true });
+  if (error) return [];
+  return (data ?? []) as SourceRow[];
+}
+
 /** Fetch all sources for a student. */
 export async function getSources(studentId: string): Promise<SourceRow[]> {
   const db = createServerClient();
