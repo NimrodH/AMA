@@ -18,6 +18,7 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import { getStudent, getCourses } from "~/services/settings.service";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import styles from "./cards.module.css";
@@ -89,7 +90,11 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
 
   const [editingCard, setEditingCard] = React.useState<CardRow | null>(null);
   const [cardTitle, setCardTitle] = React.useState("");
-  const [selectedCourse, setSelectedCourse] = React.useState(courses[0]?.course_id ?? "");
+  const [selectedCourse, setSelectedCourse] = React.useState(() => {
+    const stored = readSelectedCourse();
+    if (stored && courses.some((c) => c.course_id === stored)) return stored;
+    return courses[0]?.course_id ?? "";
+  });
   const [cardTopic, setCardTopic] = React.useState("");
   const [lectureNumber, setLectureNumber] = React.useState("");
   const [cardNumber, setCardNumber] = React.useState("");
@@ -278,6 +283,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const handleCourseChange = (value: string) => {
     guardedAction(() => {
       setSelectedCourse(value);
+      writeSelectedCourse(value);
       clearForm();
     });
   };

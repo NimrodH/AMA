@@ -6,7 +6,8 @@ import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Textarea } from "~/components/ui/textarea/textarea";
-import { mockCourses } from "~/data/mock-data";
+import { getStudent, getCourses } from "~/services/settings.service";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./exams.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -61,7 +62,20 @@ const mockExam: ExamData = {
   ],
 };
 
-export default function Exams() {
+export async function loader() {
+  const student = await getStudent();
+  if (!student) return { courses: [] };
+  const courses = await getCourses(student.id);
+  return { courses };
+}
+
+export default function Exams({ loaderData }: Route.ComponentProps) {
+  const { courses } = loaderData;
+  const [selectedCourse, setSelectedCourse] = React.useState(() => {
+    const stored = readSelectedCourse();
+    if (stored && courses.some((c) => c.course_id === stored)) return stored;
+    return courses[0]?.course_id ?? "";
+  });
   const [exam, setExam] = React.useState<ExamData | null>(null);
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
   const [results, setResults] = React.useState<any>(null);
@@ -117,16 +131,28 @@ export default function Exams() {
             <form className={styles.generatorForm}>
               <div>
                 <Label htmlFor="examCourse">קורס</Label>
-                <Select>
+                <Select
+                  value={selectedCourse}
+                  onValueChange={(v) => {
+                    setSelectedCourse(v);
+                    writeSelectedCourse(v);
+                  }}
+                >
                   <SelectTrigger id="examCourse">
                     <SelectValue placeholder="בחר קורס" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockCourses.map((course) => (
-                      <SelectItem key={course.id} value={course.course_id}>
-                        {course.course_name}
+                    {courses.length === 0 ? (
+                      <SelectItem value="_none" disabled>
+                        אין קורסים — הוסף קורס בהגדרות
                       </SelectItem>
-                    ))}
+                    ) : (
+                      courses.map((course) => (
+                        <SelectItem key={course.id} value={course.course_id}>
+                          {course.course_name}
+                        </SelectItem>
+                      ))
+                    )}
                   </SelectContent>
                 </Select>
               </div>

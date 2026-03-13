@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "~/components/ui/select/select";
 import { getStudent, getCourses } from "~/services/settings.service";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import styles from "./learn.module.css";
@@ -32,7 +33,11 @@ export async function loader() {
 export default function Learn({ loaderData }: Route.ComponentProps) {
   const { courses, cards } = loaderData;
 
-  const [selectedCourse, setSelectedCourse] = React.useState("__all__");
+  const [selectedCourse, setSelectedCourse] = React.useState(() => {
+    const stored = readSelectedCourse();
+    if (stored && courses.some((c) => c.course_id === stored)) return stored;
+    return "__all__";
+  });
   const [currentCard, setCurrentCard] = React.useState<CardRow | null>(null);
   const [showContent, setShowContent] = React.useState(false);
   const [orderMode, setOrderMode] = React.useState<"random" | "ordered">("random");
@@ -80,6 +85,7 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
 
   const handleCourseChange = (value: string) => {
     setSelectedCourse(value);
+    if (value !== "__all__") writeSelectedCourse(value);
     setCurrentCard(null);
     setShowContent(false);
     setOrderedIndex(0);

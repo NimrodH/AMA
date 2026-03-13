@@ -11,6 +11,7 @@ import { Input } from "~/components/ui/input/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudent } from "~/services/settings.service";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getSources, getCoursesForStudent, addSource, deleteSource } from "~/services/sources.service";
 import type { SourceRow } from "~/services/sources.service";
 import styles from "./sources.module.css";
@@ -247,7 +248,11 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 export default function Sources({ loaderData }: Route.ComponentProps) {
   const { sources, courses, studentId } = loaderData;
   const [selectedType, setSelectedType] = React.useState<FilterType>("all");
-  const [selectedCourseId, setSelectedCourseId] = React.useState<string>("all");
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string>(() => {
+    const stored = readSelectedCourse();
+    if (stored && courses.some((c) => c.course_id === stored)) return stored;
+    return "all";
+  });
   const [isDialogOpen, setIsDialogOpen] = React.useState(false);
 
   const filteredSources = React.useMemo(() => {
@@ -274,7 +279,13 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
               </TabsList>
             </Tabs>
 
-            <Select value={selectedCourseId} onValueChange={setSelectedCourseId}>
+            <Select
+              value={selectedCourseId}
+              onValueChange={(v) => {
+                setSelectedCourseId(v);
+                if (v !== "all") writeSelectedCourse(v);
+              }}
+            >
               <SelectTrigger className={styles.courseFilter}>
                 <SelectValue placeholder="כל הקורסים" />
               </SelectTrigger>

@@ -5,9 +5,11 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
-import { getStudent, getReminders } from "~/services/settings.service";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
+import { getStudent, getReminders, getCourses } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
 import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -22,8 +24,11 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  const sources = student ? await getSources(student.id) : [];
-  const allReminders = student ? await getReminders(student.id) : [];
+  const [sources, allReminders, courses] = await Promise.all([
+    student ? getSources(student.id) : Promise.resolve([]),
+    student ? getReminders(student.id) : Promise.resolve([]),
+    student ? getCourses(student.id) : Promise.resolve([]),
+  ]);
 
   // Only surface active reminders that are due today
   const dueReminders = allReminders.filter(
@@ -36,6 +41,7 @@ export async function loader({}: Route.LoaderArgs) {
     studentName: student?.name ?? null,
     recentSources,
     dueReminders,
+    courses,
     totalSources: sources.length,
     totalLectures: sources.filter((s) => s.source_type === "Lecture").length,
     totalCards: sources.filter((s) => s.source_type === "Card").length,
@@ -83,11 +89,22 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     studentId,
     recentSources,
     dueReminders,
+    courses,
     totalSources,
     totalLectures,
     totalCards,
     totalExams,
   } = loaderData;
+
+  // Selected course — persisted in localStorage
+  const [selectedCourse, setSelectedCourse] = React.useState<string>(() => readSelectedCourse());
+
+  const handleCourseChange = (value: string) => {
+    setSelectedCourse(value);
+    writeSelectedCourse(value);
+  };
+
+  const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? null;
 
   // Load dismissed IDs from localStorage (today only — auto-resets at midnight)
   const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => loadDismissedToday());
@@ -105,8 +122,32 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <AppLayout title="דף הבית">
       <div className={styles.home}>
         <div className={styles.welcome}>
-          <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
-          <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
+          <div className={styles.welcomeTop}>
+            <div>
+              <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
+              <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
+            </div>
+            {courses.length > 0 && (
+              <div className={styles.coursePickerWrap}>
+                <label className={styles.coursePickerLabel}>קורס פעיל</label>
+                <Select value={selectedCourse} onValueChange={handleCourseChange}>
+                  <SelectTrigger className={styles.coursePicker}>
+                    <SelectValue placeholder="בחר קורס..." />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {courses.map((c) => (
+                      <SelectItem key={c.id} value={c.course_id}>
+                        {c.course_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {selectedCourseName && (
+                  <p className={styles.coursePickerHint}>ברירת מחדל בכל הדפים</p>
+                )}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Due Reminders — shown before Quick Actions */}
