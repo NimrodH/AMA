@@ -241,13 +241,19 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setFeedback(null);
     setFeedbackSources([]);
     try {
+      // Encode title + content together so the AI understands the concept/question
+      // vs definition/answer structure of the card.
+      const encodedContent = cardTitle.trim()
+        ? `${cardTitle.trim()}\n---\n${cardContent}`
+        : cardContent;
+
       const res = await fetch("/api/card-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           courseId: selectedCourse,
           lectureNumber: lectureNumber || null,
-          cardContent,
+          cardContent: encodedContent,
         }),
       });
       const data = (await res.json()) as {

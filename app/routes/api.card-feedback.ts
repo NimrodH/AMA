@@ -65,20 +65,39 @@ export async function action({ request }: Route.ActionArgs) {
       ? `הכרטיס שייך להרצאה מספר ${lectureNum}.`
       : "הכרטיס אינו משויך להרצאה ספציפית — השתמש בכל חומרי הקורס הרלוונטיים.";
 
-  const systemPrompt = `אתה מומחה אקדמי המספק משוב על כרטיסי סיכום של סטודנטים.
+  const systemPrompt = `אתה מומחה אקדמי המספק משוב על כרטיסי למידה של סטודנטים.
 ${sourceList ? `חפש את המידע הרלוונטי בחומרי הלימוד הבאים:\n${sourceList}` : ""}
 ${cardLectureHint}
 
-השווה את כרטיס הסיכום של הסטודנט לחומרי ההרצאה המקוריים.
+מבנה הכרטיס:
+- **כותרת הכרטיס** = המושג או השאלה שהסטודנט מנסה ללמוד
+- **תוכן הכרטיס** = ההגדרה המלאה שהסטודנט כתב למושג, או התשובה המלאה לשאלה
+
+משימתך:
+חפש בחומרי ההרצאה המקוריים את ההסבר המלא של אותו מושג / תשובה לאותה שאלה, והשווה אותו לתוכן שכתב הסטודנט.
+
 ספק משוב מפורט הכולל:
-1. ✅ נקודות חוזק בסיכום
-2. ⚠️ מושגים חסרים שהיו בהרצאה אך לא בכרטיס
-3. ❌ טענות שגויות או לא מדויקות
-4. 💡 המלצות לשיפור
+1. ✅ נקודות חוזק — מה הסטודנט הבין והסביר נכון
+2. ⚠️ פרטים חסרים — היבטים, תנאים, דוגמאות או הסברים שמופיעים בהרצאה אך חסרים מהכרטיס
+3. ❌ אי-דיוקים — טענות שגויות, ניסוחים מטעים או הכללות לא נכונות
+4. 💡 ניסוח משופר — הצע כיצד לנסח מחדש את תוכן הכרטיס כך שישקף נאמנה את הגדרת/הסבר המקור
 
 הצג את המשוב בפורמט מובנה וברור בעברית.`;
 
-  const userMessage = `כרטיס סיכום של הסטודנט:\n${cardContent}`;
+  const { title: cardTitle = "", content: cardBody = cardContent } =
+    (() => {
+      // cardContent is passed as "title\n---\ncontent" from the client
+      const sep = "\n---\n";
+      const idx = cardContent.indexOf(sep);
+      if (idx !== -1) {
+        return { title: cardContent.slice(0, idx).trim(), content: cardContent.slice(idx + sep.length).trim() };
+      }
+      return { title: "", content: cardContent };
+    })();
+
+  const userMessage = cardTitle
+    ? `מושג / שאלה (כותרת הכרטיס):\n${cardTitle}\n\nהגדרה / תשובה (תוכן הכרטיס שכתב הסטודנט):\n${cardBody}`
+    : `תוכן הכרטיס של הסטודנט:\n${cardContent}`;
 
   if (vectorStoreFileIds.length > 0) {
     // Use the Responses API with file_search tool scoped to this vector store
