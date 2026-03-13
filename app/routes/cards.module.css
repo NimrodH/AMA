@@ -111,6 +111,22 @@
   cursor: not-allowed;
 }
 
+.additionalInstructionField {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-neutral-3);
+  border: 1px dashed var(--color-neutral-7);
+  border-radius: var(--radius-3);
+}
+
+.additionalInstructionField label {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+  font-style: italic;
+}
+
 .editorActions {
   display: flex;
   gap: var(--space-3);
