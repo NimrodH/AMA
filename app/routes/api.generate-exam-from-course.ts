@@ -1,11 +1,10 @@
 import type { Route } from "./+types/api.generate-exam-from-course";
-import mammoth from "mammoth";
-import { getOpenAIClient } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
-// v2: extract text pipeline with mammoth — no OpenAI file uploads
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת:
 1. מבנה של מבחן/מבחנים מהעבר (מספר שאלות סגורות, פתוחות, חלוקת נקודות)
@@ -21,6 +20,11 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - השאלות עצמן חייבות להיות שונות לחלוטין מהמבחן המקורי
 - כל השאלות מבוססות אך ורק על תוכן ההרצאות שסופקו
 - כתוב בעברית
+
+חשוב מאוד: השתמש בכלי file_search כדי לאחזר:
+1. את תוכן מבחני העבר (source_type=Past exam) — ללמוד מהם את המבנה בלבד
+2. את תוכן הרצאות הקורס (source_type=Lecture) — לבנות מהם את השאלות החדשות
+בצע חיפוש רחב בכל המסמכים שצורפו.
 
 החזר את המבחן בפורמט JSON בדיוק עם המבנה הבא:
 {
@@ -62,31 +66,6 @@ function extractJson(text: string): string {
   return text;
 }
 
-async function fetchFileBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
-  return Buffer.from(await res.arrayBuffer());
-}
-
-async function extractText(buffer: Buffer, url: string): Promise<string> {
-  const lower = url.toLowerCase();
-  if (lower.endsWith(".docx")) {
-    // extractRawText misses text inside shapes/text-boxes — fall back to HTML conversion
-    const rawResult = await mammoth.extractRawText({ buffer });
-    if (rawResult.value.trim()) return rawResult.value;
-    // Fallback: strip HTML tags from the full conversion
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-    const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    return plainText;
-  }
-  if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
-    const data = await pdfParse(buffer);
-    return data.text;
-  }
-  return buffer.toString("utf-8");
-}
-
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -101,7 +80,7 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
   }
 
-  // ── 1. Load past exam sources and lecture sources in parallel ────────────────
+  // ── 1. Verify sources exist ──────────────────────────────────────────────
   const [pastExams, lectures] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Past exam"),
     getSourcesByCourse(student.id, courseId, "Lecture"),
@@ -121,74 +100,83 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Extract text from past exams ─────────────────────────────────────────
-  const pastExamTexts: string[] = [];
-  for (const source of pastExams) {
-    if (!source.file_url) continue;
-    try {
-      const buffer = await fetchFileBuffer(source.file_url);
-      const text = await extractText(buffer, source.file_url);
-      if (text.trim()) pastExamTexts.push(`--- מבחן עבר: ${source.topic} ---\n${text}`);
-    } catch (err) {
-      console.error(`[generate-exam-from-course] Failed to load past exam ${source.id}:`, err);
-    }
-  }
+  // ── 2. Collect vector store file IDs for all sources ────────────────────
+  const allSources = [...pastExams, ...lectures];
+  const vectorStoreFileIds = allSources
+    .map((s) => s.vector_store_file_id)
+    .filter(Boolean) as string[];
 
-  if (pastExamTexts.length === 0) {
-    return Response.json(
-      { ok: false, error: "לא ניתן לחלץ טקסט ממבחני העבר. נסה להעלות מחדש." },
-      { status: 422 }
-    );
-  }
+  // ── 3. Build the user prompt listing available sources ───────────────────
+  const pastExamList = pastExams
+    .map((s) => `• ${s.topic}`)
+    .join("\n");
 
-  // ── 3. Extract text from lecture sources ─────────────────────────────────────
-  const lectureTexts: string[] = [];
-  for (const source of lectures) {
-    if (!source.file_url) continue;
-    try {
-      const buffer = await fetchFileBuffer(source.file_url);
-      const text = await extractText(buffer, source.file_url);
-      if (text.trim()) {
-        const label = source.lecture_number
-          ? `הרצאה ${source.lecture_number} — ${source.topic}`
-          : source.topic;
-        lectureTexts.push(`--- ${label} ---\n${text}`);
-      }
-    } catch (err) {
-      console.error(`[generate-exam-from-course] Failed to load lecture ${source.id}:`, err);
-    }
-  }
-
-  if (lectureTexts.length === 0) {
-    return Response.json(
-      { ok: false, error: "לא ניתן לחלץ טקסט מהרצאות הקורס. נסה להעלות מחדש." },
-      { status: 422 }
-    );
-  }
-
-  // ── 4. Call GPT-4o ───────────────────────────────────────────────────────────
-  const client = getOpenAIClient();
+  const lectureList = lectures
+    .map((s) => {
+      const label = s.lecture_number
+        ? `הרצאה ${s.lecture_number} — ${s.topic}`
+        : `${s.topic} (כלל הקורס)`;
+      return `• ${label}`;
+    })
+    .join("\n");
 
   const userPrompt = `קורס: ${courseId}
 
-=== מבנה מבחני העבר (ללמוד ממנו את המבנה בלבד — לא להעתיק שאלות) ===
-${pastExamTexts.join("\n\n")}
+מבחני עבר זמינים (למד מהם את מבנה המבחן בלבד — אל תעתיק שאלות):
+${pastExamList}
 
-=== תוכן הרצאות (לבנות ממנו את השאלות החדשות) ===
-${lectureTexts.join("\n\n")}
+הרצאות הקורס הזמינות (בנה מהן את השאלות החדשות):
+${lectureList}
 
-בנה מבחן אימון חדש לפי ההוראות.`;
+בצע חיפוש רחב בכל המסמכים באמצעות file_search כדי לאחזר את התוכן המלא של כל אחד מהמקורות לעיל, ולאחר מכן בנה מבחן אימון חדש לפי ההוראות.`;
+
+  // ── 4. Call OpenAI with file_search (like card-feedback) ─────────────────
+  const client = getOpenAIClient();
+  const db = createServerClient();
+  const vectorStoreId = await getOrCreateVectorStore(db);
 
   let rawText: string;
+
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: userPrompt },
-      ],
-    });
-    rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    if (vectorStoreFileIds.length > 0) {
+      // Use the vector store — identical pattern to card-feedback
+      // Filter by student_id so only this student's files are searched
+      const response = await client.responses.create({
+        model: "gpt-4o",
+        tools: [
+          {
+            type: "file_search",
+            vector_store_ids: [vectorStoreId],
+            filters: {
+              type: "eq" as const,
+              key: "student_id",
+              value: student.id,
+            },
+          },
+        ],
+        input: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      rawText = response.output_text?.trim() ?? "";
+    } else {
+      // No vector store files — fall back to chat completion without RAG
+      // (should be rare; sources were uploaded but not indexed yet)
+      console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
+      const response = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות בלבד.`,
+          },
+        ],
+      });
+      rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    }
   } catch (err) {
     console.error("[generate-exam-from-course] OpenAI error:", err);
     return Response.json(
@@ -204,7 +192,7 @@ ${lectureTexts.join("\n\n")}
     );
   }
 
-  // ── 5. Parse and return ───────────────────────────────────────────────────────
+  // ── 5. Parse and return ───────────────────────────────────────────────────
   const jsonStr = extractJson(rawText);
   let examData: unknown;
   try {
