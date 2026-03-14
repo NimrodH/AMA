@@ -12,19 +12,20 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 המשימה שלך: לבנות מבחן חדש שמשמר את אותו מבנה בדיוק (אותו מספר שאלות מכל סוג, אותה חלוקת נקודות), אך השאלות עצמן צריכות להיות שונות לחלוטין ולהתבסס אך ורק על תוכן ההרצאות.
 
+שלב 0 — חובה לפני הכל:
+בצע חיפוש רחב ומקיף בכל המסמכים באמצעות file_search.
+ספור בדיוק כמה שאלות יש בכל מבחן עבר שמצאת — רשום לעצמך את המספר לפני שתתחיל ליצור.
+אל תסכם, אל תקצר — קרא את כל השאלות עד הסוף.
+
 חוקים:
-- שמור על אותו מספר שאלות אמריקאיות (multiple_choice) כמו במבחן העבר
+- שמור על אותו מספר שאלות אמריקאיות (multiple_choice) כמו במבחן העבר — ספור אותן בדיוק
 - שמור על אותו מספר שאלות נכון/לא נכון (true_false) כמו במבחן העבר
 - שמור על אותו מספר שאלות פתוחות (open) כמו במבחן העבר
 - שמור על אותה חלוקת נקודות (כל שאלה — אותו מספר נקודות כמו במבחן המקביל)
 - השאלות עצמן חייבות להיות שונות לחלוטין מהמבחן המקורי
 - כל השאלות מבוססות אך ורק על תוכן ההרצאות שסופקו
 - כתוב בעברית
-
-חשוב מאוד: השתמש בכלי file_search כדי לאחזר:
-1. את תוכן מבחני העבר (source_type=Past exam) — ללמוד מהם את המבנה בלבד
-2. את תוכן הרצאות הקורס (source_type=Lecture) — לבנות מהם את השאלות החדשות
-בצע חיפוש רחב בכל המסמכים שצורפו.
+- אם במבחן העבר יש 24 שאלות — המבחן החדש יכיל 24 שאלות בדיוק. אם יש 30 — אז 30. אסור לקצץ.
 
 החזר את המבחן בפורמט JSON בדיוק עם המבנה הבא:
 {
@@ -128,7 +129,11 @@ ${pastExamList}
 הרצאות הקורס הזמינות (בנה מהן את השאלות החדשות):
 ${lectureList}
 
-בצע חיפוש רחב בכל המסמכים באמצעות file_search כדי לאחזר את התוכן המלא של כל אחד מהמקורות לעיל, ולאחר מכן בנה מבחן אימון חדש לפי ההוראות.`;
+הוראות חובה:
+1. בצע file_search כדי לאחזר את תוכן מבחן העבר במלואו — כולל כל השאלות, מהראשונה ועד האחרונה.
+2. ספור את מספר השאלות הכולל במבחן העבר (אמריקאיות + נכון/לא נכון + פתוחות).
+3. בנה מבחן אימון חדש עם אותו מספר שאלות בדיוק מאותם סוגים, מבוסס על תוכן ההרצאות.
+4. אל תקצר את הפלט — ספק את כל השאלות.`;
 
   // ── 4. Call OpenAI with file_search (like card-feedback) ─────────────────
   const client = getOpenAIClient();
@@ -139,14 +144,16 @@ ${lectureList}
 
   try {
     if (vectorStoreFileIds.length > 0) {
-      // Use the vector store — identical pattern to card-feedback
-      // Filter by student_id so only this student's files are searched
+      // Use the vector store — identical pattern to card-feedback.
+      // max_num_results=50 ensures we retrieve enough chunks to cover a full
+      // 24-question exam (default is ~5 which caused truncation to ~5 questions).
       const response = await client.responses.create({
         model: "gpt-4o",
         tools: [
           {
             type: "file_search",
             vector_store_ids: [vectorStoreId],
+            max_num_results: 50,
             filters: {
               type: "eq" as const,
               key: "student_id",
