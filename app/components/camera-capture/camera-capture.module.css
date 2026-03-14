@@ -1,0 +1,148 @@
+/* ── Root container ───────────────────────────────────────────── */
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* ── Idle state ───────────────────────────────────────────────── */
+.idle {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-7) var(--space-4);
+  border: 2px dashed var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  background: var(--color-neutral-2);
+  text-align: center;
+}
+
+.idleIcon {
+  width: 48px;
+  height: 48px;
+  color: var(--color-neutral-9);
+}
+
+.idleText {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-neutral-11);
+}
+
+/* ── Live preview ─────────────────────────────────────────────── */
+.previewWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.video {
+  width: 100%;
+  max-height: 340px;
+  object-fit: cover;
+  border-radius: var(--radius-3);
+  background: #000;
+}
+
+.captureBtn {
+  width: 100%;
+}
+
+/* ── Captured frame ───────────────────────────────────────────── */
+.capturedWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.preview {
+  width: 100%;
+  max-height: 300px;
+  object-fit: contain;
+  border-radius: var(--radius-3);
+  border: 1px solid var(--color-neutral-6);
+  background: var(--color-neutral-2);
+}
+
+.capturedActions {
+  display: flex;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.spinner {
+  width: 15px;
+  height: 15px;
+  animation: var(--animation-spin);
+  margin-left: var(--space-2);
+}
+
+/* ── Transcription result ─────────────────────────────────────── */
+.resultWrapper {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.resultLabel {
+  margin: 0;
+  font: var(--font-caption);
+  font-weight: 600;
+  color: var(--color-neutral-11);
+}
+
+.resultTextarea {
+  width: 100%;
+  padding: var(--space-3);
+  font: var(--font-body);
+  font-size: var(--font-size-1);
+  line-height: 1.6;
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  background: var(--color-neutral-2);
+  color: var(--color-neutral-12);
+  resize: vertical;
+  min-height: 180px;
+  box-sizing: border-box;
+  direction: auto;
+}
+
+.resultTextarea:focus {
+  outline: none;
+  border-color: var(--color-accent-8);
+  box-shadow: 0 0 0 3px var(--color-accent-4);
+}
+
+.resultActions {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: flex-end;
+}
+
+/* ── Error state ──────────────────────────────────────────────── */
+.errorWrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-5) var(--space-4);
+  border: 1px solid var(--color-error-6);
+  border-radius: var(--radius-3);
+  background: var(--color-error-2);
+  text-align: center;
+}
+
+.errorIcon {
+  width: 36px;
+  height: 36px;
+  color: var(--color-error-9);
+}
+
+.errorText {
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-error-11);
+}

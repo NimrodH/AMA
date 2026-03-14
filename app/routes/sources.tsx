@@ -1,5 +1,6 @@
 import * as React from "react";
-import { Upload, Loader2, Link } from "lucide-react";
+import { Upload, Loader2, Link, Camera, Check } from "lucide-react";
+import { CameraCapture } from "~/components/camera-capture/camera-capture";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/sources";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -114,13 +115,14 @@ interface UploadDialogProps {
   onClose: () => void;
 }
 
-type UploadTab = "file" | "url";
+type UploadTab = "file" | "url" | "camera";
 
 function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   const fetcher = useFetcher();
   const [activeTab, setActiveTab] = React.useState<UploadTab>("file");
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
   const [googleDocsUrl, setGoogleDocsUrl] = React.useState("");
+  const [cameraFile, setCameraFile] = React.useState<File | null>(null);
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>("");
   const [selectedSourceType, setSelectedSourceType] = React.useState<string>("");
   const isSubmitting = fetcher.state !== "idle";
@@ -136,6 +138,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
       onClose();
       setSelectedFile(null);
       setGoogleDocsUrl("");
+      setCameraFile(null);
       setSelectedCourseId("");
       setSelectedSourceType("");
       setActiveTab("file");
@@ -155,6 +158,9 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
     if (activeTab === "file") {
       if (selectedFile) formData.set("file", selectedFile);
       fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
+    } else if (activeTab === "camera") {
+      if (cameraFile) formData.set("file", cameraFile);
+      fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
     } else {
       // URL tab: send googleDocsUrl, no file attachment needed
       fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
@@ -162,7 +168,8 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   };
 
   const isUrlValid = googleDocsUrl.includes("docs.google.com/document/d/");
-  const canSubmit = activeTab === "file" ? !!selectedFile : isUrlValid;
+  const canSubmit =
+    activeTab === "file" ? !!selectedFile : activeTab === "camera" ? !!cameraFile : isUrlValid;
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
@@ -184,7 +191,15 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
           onClick={() => setActiveTab("url")}
         >
           <Link style={{ width: 15, height: 15 }} />
-          קישור Google Docs
+          Google Docs
+        </button>
+        <button
+          type="button"
+          className={`${styles.uploadTab} ${activeTab === "camera" ? styles.uploadTabActive : ""}`}
+          onClick={() => { setActiveTab("camera"); setCameraFile(null); }}
+        >
+          <Camera style={{ width: 15, height: 15 }} />
+          צילום
         </button>
       </div>
 
@@ -250,6 +265,23 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
             </p>
             <input type="file" accept=".pdf,.docx,.ppt,.pptx" onChange={handleFileChange} style={{ display: "none" }} />
           </label>
+        </div>
+      )}
+
+      {/* ── Camera tab content ── */}
+      {activeTab === "camera" && (
+        <div>
+          {cameraFile ? (
+            <div className={styles.cameraReady}>
+              <Check className={styles.cameraReadyIcon} />
+              <p className={styles.cameraReadyText}>{cameraFile.name}</p>
+              <button type="button" className={styles.cameraReset} onClick={() => setCameraFile(null)}>
+                החלף צילום
+              </button>
+            </div>
+          ) : (
+            <CameraCapture onCapture={(file) => setCameraFile(file)} />
+          )}
         </div>
       )}
 
