@@ -17,7 +17,7 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
-import { getStudent, getCourses } from "~/services/settings.service";
+import { getStudent, getActiveCourses } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -30,7 +30,7 @@ export function meta({}: Route.MetaArgs) {
 export async function loader() {
   const student = await getStudent();
   if (!student) return { courses: [], cards: [] };
-  const [courses, cards] = await Promise.all([getCourses(student.id), getCards(student.id)]);
+  const [courses, cards] = await Promise.all([getActiveCourses(student.id), getCards(student.id)]);
   return { courses, cards };
 }
 

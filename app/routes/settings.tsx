@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Trash2, Bell, Code, X } from "lucide-react";
+import { Plus, Bell, Code, X } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -13,7 +13,7 @@ import {
   getReminders,
   updateStudentName,
   addCourse,
-  deleteCourse,
+  toggleCourse,
   addReminder,
   toggleReminder,
   deleteReminder,
@@ -60,9 +60,10 @@ export async function action({ request }: Route.ActionArgs) {
       }
       break;
     }
-    case "delete_course": {
+    case "toggle_course": {
       const id = formData.get("id") as string;
-      if (id) await deleteCourse(id);
+      const isActive = formData.get("is_active") === "true";
+      if (id) await toggleCourse(id, isActive);
       break;
     }
     case "add_reminder": {
@@ -198,13 +199,12 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   <h3 className={styles.courseName}>{course.course_name}</h3>
                   <p className={styles.courseId}>{course.course_id}</p>
                 </div>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => submitIntent({ intent: "delete_course", id: course.id })}
-                >
-                  <Trash2 />
-                </Button>
+                <Switch
+                  checked={course.is_active}
+                  onCheckedChange={(checked) =>
+                    submitIntent({ intent: "toggle_course", id: course.id, is_active: String(checked) })
+                  }
+                />
               </div>
             ))}
 

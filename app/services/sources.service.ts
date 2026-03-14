@@ -337,13 +337,14 @@ export async function addSourceFromUrl({
 
 export type { CourseRow };
 
-/** Fetch all courses for a student (used to populate the dialog dropdown). */
+/** Fetch active courses for a student (used to populate the upload dialog dropdown). */
 export async function getCoursesForStudent(studentId: string): Promise<CourseRow[]> {
   const db = createServerClient();
   const { data, error } = await db
     .from("courses")
-    .select("id, course_id, course_name")
+    .select("id, course_id, course_name, is_active")
     .eq("student_id", studentId)
+    .eq("is_active", true)
     .order("created_at", { ascending: true });
 
   if (error) return [];

@@ -7,7 +7,7 @@ import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Textarea } from "~/components/ui/textarea/textarea";
-import { getStudent, getCourses } from "~/services/settings.service";
+import { getStudent, getActiveCourses } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./exams.module.css";
 
@@ -48,8 +48,8 @@ interface GradingResult {
 
 export async function loader() {
   const student = await getStudent();
-  if (!student) return { courses: [] as Awaited<ReturnType<typeof getCourses>> };
-  const courses = await getCourses(student.id);
+  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>> };
+  const courses = await getActiveCourses(student.id);
   return { courses };
 }
 

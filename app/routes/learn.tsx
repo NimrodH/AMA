@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select/select";
-import { getStudent, getCourses } from "~/services/settings.service";
+import { getStudent, getActiveCourses } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -24,7 +24,7 @@ export async function loader() {
   const student = await getStudent();
   if (!student) return { courses: [], cards: [] };
   const [courses, cards] = await Promise.all([
-    getCourses(student.id),
+    getActiveCourses(student.id),
     getCards(student.id),
   ]);
   return { courses, cards };

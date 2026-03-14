@@ -4,6 +4,7 @@ export type CourseRow = {
   id: string;
   course_id: string;
   course_name: string;
+  is_active: boolean;
 };
 
 export type ReminderRow = {
@@ -37,13 +38,27 @@ export async function updateStudentName(id: string, name: string): Promise<void>
   await db.from("students").update({ name }).eq("id", id);
 }
 
-/** Fetch all courses for a student. */
+/** Fetch all courses for a student (settings page — includes inactive). */
 export async function getCourses(studentId: string): Promise<CourseRow[]> {
   const db = createServerClient();
   const { data, error } = await db
     .from("courses")
-    .select("id, course_id, course_name")
+    .select("id, course_id, course_name, is_active")
     .eq("student_id", studentId)
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []) as CourseRow[];
+}
+
+/** Fetch only active courses for a student (used in all selection dropdowns). */
+export async function getActiveCourses(studentId: string): Promise<CourseRow[]> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("courses")
+    .select("id, course_id, course_name, is_active")
+    .eq("student_id", studentId)
+    .eq("is_active", true)
     .order("created_at", { ascending: true });
 
   if (error) return [];
@@ -64,10 +79,10 @@ export async function addCourse(
   });
 }
 
-/** Delete a course by its primary key. */
-export async function deleteCourse(id: string): Promise<void> {
+/** Toggle a course's active state. */
+export async function toggleCourse(id: string, isActive: boolean): Promise<void> {
   const db = createServerClient();
-  await db.from("courses").delete().eq("id", id);
+  await db.from("courses").update({ is_active: isActive }).eq("id", id);
 }
 
 /** Fetch all reminders for a student. */

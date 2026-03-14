@@ -6,7 +6,7 @@ import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { getStudent, getReminders, getCourses } from "~/services/settings.service";
+import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
 import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
@@ -27,7 +27,7 @@ export async function loader({}: Route.LoaderArgs) {
   const [sources, allReminders, courses] = await Promise.all([
     student ? getSources(student.id) : Promise.resolve([]),
     student ? getReminders(student.id) : Promise.resolve([]),
-    student ? getCourses(student.id) : Promise.resolve([]),
+    student ? getActiveCourses(student.id) : Promise.resolve([]),
   ]);
 
   // Only surface active reminders that are due today
