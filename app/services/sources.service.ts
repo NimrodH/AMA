@@ -142,6 +142,7 @@ export async function addSource({
   let vectorStoreFileId: string | undefined;
   try {
     vectorStoreFileId = await uploadToVectorStore({
+      db,
       fileBuffer,
       fileName: file.name,
       metadata,
@@ -208,7 +209,7 @@ export async function deleteSource(
   // 3. Delete from OpenAI vector store
   if (source.vector_store_file_id) {
     try {
-      await deleteFromVectorStore(source.vector_store_file_id);
+      await deleteFromVectorStore({ db, vectorStoreFileId: source.vector_store_file_id });
     } catch (err) {
       console.error("Vector store delete error:", err);
     }

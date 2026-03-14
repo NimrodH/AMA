@@ -1,5 +1,6 @@
 import type { Route } from "./+types/api.grade-exam";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 
 const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשובות סטודנטים.
@@ -55,8 +56,9 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
   }
 
+  const db = createServerClient();
   const client = getOpenAIClient();
-  const vectorStoreId = await getOrCreateVectorStore();
+  const vectorStoreId = await getOrCreateVectorStore(db);
 
   // Format the exam and answers for the prompt
   const examText = exam.questions

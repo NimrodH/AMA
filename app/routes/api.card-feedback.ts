@@ -62,7 +62,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   // ── 3. Build prompts ──────────────────────────────────────────────────────
   const client = getOpenAIClient();
-  const vectorStoreId = await getOrCreateVectorStore();
+  const vectorStoreId = await getOrCreateVectorStore(db);
 
   const cardLectureHint =
     lectureNum !== null

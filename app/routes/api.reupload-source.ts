@@ -71,7 +71,7 @@ export async function action({ request }: Route.ActionArgs) {
   // ── 3. Delete the old vector store file ───────────────────────────────────
   if (source.vector_store_file_id) {
     try {
-      await deleteFromVectorStore(source.vector_store_file_id);
+      await deleteFromVectorStore({ db, vectorStoreFileId: source.vector_store_file_id });
       console.log(`Deleted old vector store file: ${source.vector_store_file_id}`);
     } catch (err) {
       // Log but continue — file may already be deleted in OpenAI
@@ -105,7 +105,7 @@ export async function action({ request }: Route.ActionArgs) {
 
   let newVectorStoreFileId: string;
   try {
-    newVectorStoreFileId = await uploadToVectorStore({ fileBuffer, fileName, metadata });
+    newVectorStoreFileId = await uploadToVectorStore({ db, fileBuffer, fileName, metadata });
     console.log(`Re-uploaded to vector store. New file ID: ${newVectorStoreFileId}`);
   } catch (err) {
     console.error("Vector store upload error:", err);
@@ -134,7 +134,7 @@ export async function action({ request }: Route.ActionArgs) {
   let fileStatus = "unknown";
   try {
     const client = getOpenAIClient();
-    const vectorStoreId = await getOrCreateVectorStore();
+    const vectorStoreId = await getOrCreateVectorStore(db);
     const vsFile = await client.vectorStores.files.retrieve(newVectorStoreFileId, { vector_store_id: vectorStoreId });
     fileStatus = vsFile.status;
   } catch (err) {

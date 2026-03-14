@@ -1,5 +1,6 @@
 import type { Route } from "./+types/api.file-status";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { createServerClient } from "~/lib/supabase";
 
 /**
  * GET /api/file-status?fileId=<vector_store_file_id>
@@ -14,8 +15,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   }
 
   try {
+    const db = createServerClient();
     const client = getOpenAIClient();
-    const vectorStoreId = await getOrCreateVectorStore();
+    const vectorStoreId = await getOrCreateVectorStore(db);
     const vsFile = await client.vectorStores.files.retrieve(fileId, {
       vector_store_id: vectorStoreId,
     });

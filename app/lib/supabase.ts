@@ -139,6 +139,23 @@ export type Database = {
           created_at?: string;
         };
       };
+      app_config: {
+        Row: {
+          key: string;
+          value: string;
+          updated_at: string;
+        };
+        Insert: {
+          key: string;
+          value: string;
+          updated_at?: string;
+        };
+        Update: {
+          key?: string;
+          value?: string;
+          updated_at?: string;
+        };
+      };
       reminders: {
         Row: {
           id: string;
