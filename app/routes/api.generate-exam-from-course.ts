@@ -55,16 +55,38 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
   ]
 }
 
-החזר JSON בלבד, ללא טקסט נוסף.`;
+החזר JSON בלבד, ללא טקסט נוסף, ללא הערות, ללא ציטוטים.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Strips OpenAI file_search citation annotations like 【4:0†source】
+ * that get injected into output_text even in JSON mode.
+ */
+function stripCitations(text: string): string {
+  return text.replace(/\u3010[\d:†\w\s]+\u3011/g, "").trim();
+}
+
+/**
+ * Attempts to extract a valid JSON object string from raw model output.
+ * Handles markdown code blocks, leading/trailing prose, and citation markers.
+ */
 function extractJson(text: string): string {
-  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // 1. Strip citation annotations first
+  const clean = stripCitations(text);
+
+  // 2. Try code block
+  const codeBlock = clean.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return codeBlock[1].trim();
-  const bareObject = text.match(/\{[\s\S]*\}/);
-  if (bareObject) return bareObject[0].trim();
-  return text;
+
+  // 3. Try bare JSON object — find the first { and the matching last }
+  const start = clean.indexOf("{");
+  const end = clean.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) {
+    return clean.slice(start, end + 1).trim();
+  }
+
+  return clean;
 }
 
 // ─── Action ───────────────────────────────────────────────────────────────────
@@ -133,7 +155,8 @@ ${lectureList}
 1. בצע file_search כדי לאחזר את תוכן מבחן העבר במלואו — כולל כל השאלות, מהראשונה ועד האחרונה.
 2. ספור את מספר השאלות הכולל במבחן העבר (אמריקאיות + נכון/לא נכון + פתוחות).
 3. בנה מבחן אימון חדש עם אותו מספר שאלות בדיוק מאותם סוגים, מבוסס על תוכן ההרצאות.
-4. אל תקצר את הפלט — ספק את כל השאלות.`;
+4. אל תקצר את הפלט — ספק את כל השאלות.
+5. החזר JSON בלבד — ללא הסברים, ללא ציטוטים, ללא טקסט נוסף.`;
 
   // ── 4. Call OpenAI with file_search (like card-feedback) ─────────────────
   const client = getOpenAIClient();
@@ -147,6 +170,8 @@ ${lectureList}
       // Use the vector store — identical pattern to card-feedback.
       // max_num_results=50 ensures we retrieve enough chunks to cover a full
       // 24-question exam (default is ~5 which caused truncation to ~5 questions).
+      // text.format json_object forces pure JSON output — no citation annotations
+      // get embedded inside the JSON string, which breaks JSON.parse.
       const response = await client.responses.create({
         model: "gpt-4o",
         tools: [
@@ -161,6 +186,11 @@ ${lectureList}
             },
           },
         ],
+        text: {
+          format: {
+            type: "json_object",
+          },
+        },
         input: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
@@ -174,6 +204,7 @@ ${lectureList}
       console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -205,7 +236,7 @@ ${lectureList}
   try {
     examData = JSON.parse(jsonStr);
   } catch {
-    console.error("[generate-exam-from-course] Failed to parse JSON:", rawText);
+    console.error("[generate-exam-from-course] Failed to parse JSON. Raw output:", rawText.slice(0, 500));
     return Response.json(
       { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
       { status: 500 }
