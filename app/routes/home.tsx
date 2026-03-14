@@ -219,6 +219,37 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
+        {/* Course Activity Stats — shown after reminders (or after welcome if none) */}
+        {courseStats.length > 0 && (
+          <div className={styles.section}>
+            <div className={styles.sectionHeader}>
+              <h2 className={styles.sectionTitle}>
+                <TrendingUp className={styles.sectionTitleIcon} />
+                סטטיסטיקות לימוד לפי קורס
+              </h2>
+            </div>
+            <div className={styles.courseStatsPanel}>
+              <div className={styles.courseStatsHeader}>
+                <span className={styles.courseStatsColLabel}>קורס</span>
+                <div className={styles.courseStatsColGroup}>
+                  <span className={styles.courseStatsColLabel}>תרגולים</span>
+                  <span className={styles.courseStatsColLabel}>מבחני עבר</span>
+                  <span className={styles.courseStatsColLabel}>מבחני AI</span>
+                  <span className={styles.courseStatsColLabel}>ציון אחרון</span>
+                </div>
+              </div>
+              {courseStats.map((stat) => {
+                const courseName =
+                  courses.find((c) => c.course_id === stat.course_id)?.course_name ??
+                  stat.course_id;
+                return (
+                  <CourseStatRow key={stat.course_id} stat={stat} courseName={courseName} />
+                );
+              })}
+            </div>
+          </div>
+        )}
+
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>פעולות מהירות</h2>
