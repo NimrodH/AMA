@@ -203,8 +203,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   size="sm"
                   onClick={() => submitIntent({ intent: "delete_course", id: course.id })}
                 >
-                  <Trash2 style={{ marginLeft: "var(--space-2)" }} />
-                  הסר
+                  <Trash2 />
                 </Button>
               </div>
             ))}
