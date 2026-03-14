@@ -85,6 +85,26 @@ export async function toggleCourse(id: string, isActive: boolean): Promise<void>
   await db.from("courses").update({ is_active: isActive }).eq("id", id);
 }
 
+/**
+ * Cascade-delete a course and all its associated cards, sources, and exams.
+ * Matches by course_id string + student_id since those tables don't FK to courses.id.
+ */
+export async function deleteCourse(
+  id: string,
+  studentId: string,
+  courseId: string
+): Promise<void> {
+  const db = createServerClient();
+  // Delete dependent records first
+  await Promise.all([
+    db.from("cards").delete().eq("student_id", studentId).eq("course_id", courseId),
+    db.from("sources").delete().eq("student_id", studentId).eq("course_id", courseId),
+    db.from("exams").delete().eq("student_id", studentId).eq("course_id", courseId),
+  ]);
+  // Then delete the course row itself
+  await db.from("courses").delete().eq("id", id);
+}
+
 /** Fetch all reminders for a student. */
 export async function getReminders(studentId: string): Promise<ReminderRow[]> {
   const db = createServerClient();

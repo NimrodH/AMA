@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Bell, Code, X } from "lucide-react";
+import { Plus, Bell, Code, X, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -8,12 +8,23 @@ import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Switch } from "~/components/ui/switch/switch";
 import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogCancel,
+} from "~/components/ui/alert-dialog/alert-dialog";
+import {
   getStudent,
   getCourses,
   getReminders,
   updateStudentName,
   addCourse,
   toggleCourse,
+  deleteCourse,
   addReminder,
   toggleReminder,
   deleteReminder,
@@ -66,6 +77,12 @@ export async function action({ request }: Route.ActionArgs) {
       if (id) await toggleCourse(id, isActive);
       break;
     }
+    case "delete_course": {
+      const id = formData.get("id") as string;
+      const courseId = formData.get("course_id") as string;
+      if (id && studentId && courseId) await deleteCourse(id, studentId, courseId);
+      break;
+    }
     case "add_reminder": {
       const reminderType = formData.get("reminder_type") as string;
       const reminderTime = formData.get("reminder_time") as string;
@@ -88,6 +105,76 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   return { ok: true };
+}
+
+// ─── Course Delete Dialog ────────────────────────────────────────────────────
+
+const CONFIRM_PHRASE = "delete all";
+
+interface CourseDeleteDialogProps {
+  courseName: string;
+  onConfirm: () => void;
+}
+
+function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) {
+  const [open, setOpen] = React.useState(false);
+  const [inputValue, setInputValue] = React.useState("");
+
+  function handleOpenChange(next: boolean) {
+    setOpen(next);
+    if (!next) setInputValue("");
+  }
+
+  function handleConfirm() {
+    if (inputValue.trim().toLowerCase() !== CONFIRM_PHRASE) return;
+    onConfirm();
+    setOpen(false);
+    setInputValue("");
+  }
+
+  return (
+    <AlertDialog open={open} onOpenChange={handleOpenChange}>
+      <AlertDialogTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className={styles.deleteCourseBtn}
+          title="Delete course permanently"
+        >
+          <Trash2 size={15} />
+        </Button>
+      </AlertDialogTrigger>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Delete "{courseName}"?</AlertDialogTitle>
+          <AlertDialogDescription>
+            This will permanently delete the course and{" "}
+            <strong>all its cards, sources, and exams</strong>. This action cannot be
+            undone.
+            <br /><br />
+            Type <strong>{CONFIRM_PHRASE}</strong> to confirm:
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <Input
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          placeholder={CONFIRM_PHRASE}
+          autoFocus
+          onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
+        />
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <Button
+            variant="destructive"
+            disabled={inputValue.trim().toLowerCase() !== CONFIRM_PHRASE}
+            onClick={handleConfirm}
+          >
+            Delete permanently
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
@@ -199,12 +286,24 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   <h3 className={styles.courseName}>{course.course_name}</h3>
                   <p className={styles.courseId}>{course.course_id}</p>
                 </div>
-                <Switch
-                  checked={course.is_active}
-                  onCheckedChange={(checked) =>
-                    submitIntent({ intent: "toggle_course", id: course.id, is_active: String(checked) })
-                  }
-                />
+                <div className={styles.courseActions}>
+                  <Switch
+                    checked={course.is_active}
+                    onCheckedChange={(checked) =>
+                      submitIntent({ intent: "toggle_course", id: course.id, is_active: String(checked) })
+                    }
+                  />
+                  <CourseDeleteDialog
+                    courseName={course.course_name}
+                    onConfirm={() =>
+                      submitIntent({
+                        intent: "delete_course",
+                        id: course.id,
+                        course_id: course.course_id,
+                      })
+                    }
+                  />
+                </div>
               </div>
             ))}
 

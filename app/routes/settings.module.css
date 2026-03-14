@@ -86,6 +86,23 @@
   gap: var(--space-1);
 }
 
+.courseActions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.deleteCourseBtn {
+  color: var(--color-neutral-9);
+  padding: var(--space-1);
+  min-width: 0;
+}
+
+.deleteCourseBtn:hover {
+  color: var(--color-error-9);
+  border-color: var(--color-error-7);
+}
+
 .courseName {
   font: var(--font-subheading);
   color: var(--color-neutral-12);
