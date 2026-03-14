@@ -3,6 +3,17 @@ import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2, Cl
 import classNames from "classnames";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/button/button";
+import {
+  AlertDialog,
+  AlertDialogTrigger,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogAction,
+  AlertDialogCancel,
+} from "~/components/ui/alert-dialog/alert-dialog";
 import type { Database } from "~/lib/supabase";
 import styles from "./source-card.module.css";
 
@@ -266,16 +277,31 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
           <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || (isPolling && !!reuploadResult)) ? "var(--animation-spin)" : "none" }} />
           {isReuploading ? "מעלה..." : isPolling ? "מאנדקס..." : "סנכרן"}
         </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          className={styles.deleteBtn}
-          onClick={handleDelete}
-          title="מחק מקור"
-        >
-          <Trash2 style={{ width: 14, height: 14 }} />
-          מחיקה
-        </Button>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button
+              variant="outline"
+              size="sm"
+              className={styles.deleteBtn}
+              title="מחק מקור"
+            >
+              <Trash2 style={{ width: 14, height: 14 }} />
+              מחיקה
+            </Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>מחיקת מקור</AlertDialogTitle>
+              <AlertDialogDescription>
+                האם אתה בטוח שברצונך למחוק את &quot;{source.topic}&quot;? פעולה זו אינה הפיכה.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>ביטול</AlertDialogCancel>
+              <AlertDialogAction onClick={handleDelete}>מחק</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
