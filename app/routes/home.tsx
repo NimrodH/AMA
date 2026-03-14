@@ -74,6 +74,66 @@ function ReminderBanner({
   );
 }
 
+// ─── Course Stats Table ──────────────────────────────────────────────────────
+
+function CourseStatsTable({
+  stats,
+  courses,
+}: {
+  stats: CourseStats[];
+  courses: { course_id: string; course_name: string }[];
+}) {
+  const courseNameById = React.useMemo(
+    () => Object.fromEntries(courses.map((c) => [c.course_id, c.course_name])),
+    [courses]
+  );
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>
+          <Brain className={styles.sectionTitleIcon} />
+          פעילות לפי קורס
+        </h2>
+      </div>
+      <div className={styles.courseStatsPanel}>
+        <div className={styles.courseStatsHeader}>
+          <span className={styles.courseStatName}>קורס</span>
+          <div className={styles.courseStatsColGroup}>
+            <span className={styles.courseStatsColLabel}>שינון כרטיסים</span>
+            <span className={styles.courseStatsColLabel}>בחינות עבר</span>
+            <span className={styles.courseStatsColLabel}>בחינות AI</span>
+          </div>
+        </div>
+        {stats.map((s) => (
+          <div key={s.course_id} className={styles.courseStatRow}>
+            <p className={styles.courseStatName}>
+              {courseNameById[s.course_id] ?? s.course_id}
+            </p>
+            <div className={styles.courseStatCells}>
+              <div className={styles.courseStatCell}>
+                <Brain className={styles.courseStatIcon} />
+                <span className={styles.courseStatValue}>{s.learn_sessions}</span>
+                <span className={styles.courseStatCellLabel}>שינון</span>
+              </div>
+              <div className={styles.courseStatCell}>
+                <ClipboardCheck className={styles.courseStatIcon} />
+                <span className={styles.courseStatValue}>{s.past_exam_attempts}</span>
+                <span className={styles.courseStatCellLabel}>עבר</span>
+              </div>
+              <div className={styles.courseStatCell}>
+                <BookOpen className={styles.courseStatIcon} />
+                <span className={styles.courseStatValue}>{s.ai_exam_attempts}</span>
+                <span className={styles.courseStatCellLabel}>AI</span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
 export default function Home({ loaderData }: Route.ComponentProps) {
