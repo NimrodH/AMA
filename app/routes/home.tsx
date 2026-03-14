@@ -1,10 +1,11 @@
 import * as React from "react";
-import { Bell, CheckCircle2 } from "lucide-react";
+import { Bell, CheckCircle2, Brain, ClipboardCheck, BookOpen } from "lucide-react";
 import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
+import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./home.module.css";
@@ -21,9 +22,10 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  const [allReminders, courses] = await Promise.all([
+  const [allReminders, courses, courseStats] = await Promise.all([
     student ? getReminders(student.id) : Promise.resolve([]),
     student ? getActiveCourses(student.id) : Promise.resolve([]),
+    student ? getAllCourseStats(student.id) : Promise.resolve([]),
   ]);
 
   // Only surface active reminders that are due today
@@ -36,6 +38,7 @@ export async function loader({}: Route.LoaderArgs) {
     studentName: student?.name ?? null,
     dueReminders,
     courses,
+    courseStats,
   };
 }
 
@@ -78,6 +81,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     studentName,
     dueReminders,
     courses,
+    courseStats,
   } = loaderData;
 
   // Selected course — persisted in localStorage
@@ -129,7 +133,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         </div>
 
-        {/* Due Reminders — shown before Quick Actions */}
+        {/* Due Reminders */}
         {visibleReminders.length > 0 && (
           <div className={styles.section}>
             <div className={styles.sectionHeader}>
@@ -144,6 +148,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
               ))}
             </div>
           </div>
+        )}
+
+        {/* Course Activity Table */}
+        {courseStats.length > 0 && (
+          <CourseStatsTable stats={courseStats} courses={courses} />
         )}
 
 
