@@ -14,6 +14,7 @@ export default [
   route("api/next-card-number", "routes/api.next-card-number.ts"),
   route("api/card-feedback", "routes/api.card-feedback.ts"),
   route("api/reupload-source", "routes/api.reupload-source.ts"),
+  route("api/refresh-source", "routes/api.refresh-source.ts"),
   route("api/file-status", "routes/api.file-status.ts"),
   route("api/generate-exam-from-source", "routes/api.generate-exam-from-source.ts"),
   route("api/generate-exam-from-course", "routes/api.generate-exam-from-course.ts"),

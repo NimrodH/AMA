@@ -1,5 +1,5 @@
 import * as React from "react";
-import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2, ClipboardList } from "lucide-react";
+import { FileText, Trash2, Eye, RefreshCw, CheckCircle, AlertCircle, Loader2, ClipboardList, RotateCcw } from "lucide-react";
 import classNames from "classnames";
 import { Link, useFetcher } from "react-router";
 import { Button } from "~/components/ui/button/button";
@@ -26,9 +26,16 @@ const MAX_POLL_ATTEMPTS = 20;
 export function SourceCard({ source, studentId, className }: SourceCardProps) {
   const fetcher = useFetcher();
   const reuploadFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string; newVectorStoreFileId?: string }>();
+  const refreshFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string; newVectorStoreFileId?: string }>();
   const isDeleting = fetcher.state !== "idle";
   const isReuploading = reuploadFetcher.state !== "idle";
+  const isRefreshing = refreshFetcher.state !== "idle";
   const reuploadResult = reuploadFetcher.data;
+  const refreshResult = refreshFetcher.data;
+
+  // The active operation result — refresh takes priority over reupload
+  const activeResult = refreshResult ?? reuploadResult;
+  const isAnyLoading = isReuploading || isRefreshing;
 
   // Polling state — tracks the live file status after a successful reupload
   const [polledStatus, setPolledStatus] = React.useState<string | null>(null);
@@ -36,14 +43,14 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
   const pollAttemptsRef = React.useRef(0);
   const pollTimerRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Start polling when the reupload finishes with in_progress status
+  // Start polling when the reupload OR refresh finishes with in_progress status
   React.useEffect(() => {
-    const fileId = reuploadResult?.newVectorStoreFileId;
-    const initialStatus = reuploadResult?.fileStatus;
+    const result = refreshResult ?? reuploadResult;
+    const fileId = result?.newVectorStoreFileId;
+    const initialStatus = result?.fileStatus;
 
-    if (!reuploadResult?.ok || !fileId) return;
+    if (!result?.ok || !fileId) return;
 
-    // Reset polled status each time a new reupload completes
     setPolledStatus(initialStatus ?? null);
 
     if (initialStatus === "in_progress") {
@@ -52,7 +59,7 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
 
     return () => stopPolling();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [reuploadResult]);
+  }, [reuploadResult, refreshResult]);
 
   // Cleanup on unmount
   React.useEffect(() => () => stopPolling(), []);
@@ -137,6 +144,15 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
     );
   };
 
+  const handleRefresh = () => {
+    stopPolling();
+    setPolledStatus(null);
+    refreshFetcher.submit(
+      JSON.stringify({ sourceId: source.id }),
+      { method: "post", action: "/api/refresh-source", encType: "application/json" }
+    );
+  };
+
   if (isDeleting) {
     return (
       <div className={classNames(styles.card, typeClass, styles.cardDeleting, className)}>
@@ -145,8 +161,8 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
     );
   }
 
-  // Derive the display status — polledStatus overrides the initial fileStatus
-  const displayStatus = polledStatus ?? reuploadResult?.fileStatus;
+  // Derive the display status — polledStatus overrides the initial operation status
+  const displayStatus = polledStatus ?? activeResult?.fileStatus;
   const statusIsCompleted = displayStatus === "completed";
   const statusIsFailed = displayStatus === "failed";
 
@@ -178,12 +194,12 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
         </div>
       )}
 
-      {/* ── Re-upload status ── */}
-      {reuploadResult && (
+      {/* ── Operation status banner ── */}
+      {activeResult && (
         <div
           className={classNames(
             styles.reuploadStatus,
-            reuploadResult.ok
+            activeResult.ok
               ? statusIsFailed
                 ? styles.reuploadErr
                 : statusIsCompleted
@@ -192,18 +208,18 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
               : styles.reuploadErr
           )}
         >
-          {reuploadResult.ok ? (
+          {activeResult.ok ? (
             isPolling ? (
               <><Loader2 style={{ width: 13, height: 13, animation: "var(--animation-spin)" }} /> מאנדקס... ({displayStatus})</>
             ) : statusIsCompleted ? (
-              <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש בהצלחה</>
+              <><CheckCircle style={{ width: 13, height: 13 }} /> {refreshResult ? "רועננן בהצלחה" : "הועלה מחדש בהצלחה"}</>
             ) : statusIsFailed ? (
               <><AlertCircle style={{ width: 13, height: 13 }} /> האינדוקס נכשל</>
             ) : (
-              <><CheckCircle style={{ width: 13, height: 13 }} /> הועלה מחדש ({displayStatus})</>
+              <><CheckCircle style={{ width: 13, height: 13 }} /> {refreshResult ? "רוענן" : "הועלה מחדש"} ({displayStatus})</>
             )
           ) : (
-            <><AlertCircle style={{ width: 13, height: 13 }} /> {reuploadResult.error}</>
+            <><AlertCircle style={{ width: 13, height: 13 }} /> {activeResult.error}</>
           )}
         </div>
       )}
@@ -226,15 +242,28 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             </Link>
           </Button>
         )}
+        {source.google_docs_url && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={styles.refreshBtn}
+            onClick={handleRefresh}
+            disabled={isAnyLoading || isPolling}
+            title="רענן מ-Google Docs"
+          >
+            <RotateCcw style={{ width: 14, height: 14, animation: (isRefreshing || (isPolling && !!refreshResult)) ? "var(--animation-spin)" : "none" }} />
+            {isRefreshing ? "מרענן..." : "רענן"}
+          </Button>
+        )}
         <Button
           variant="outline"
           size="sm"
           className={styles.reuploadBtn}
           onClick={handleReupload}
-          disabled={isReuploading || isPolling}
+          disabled={isAnyLoading || isPolling}
           title="העלה מחדש ל-OpenAI"
         >
-          <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || isPolling) ? "var(--animation-spin)" : "none" }} />
+          <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || (isPolling && !!reuploadResult)) ? "var(--animation-spin)" : "none" }} />
           {isReuploading ? "מעלה..." : isPolling ? "מאנדקס..." : "סנכרן"}
         </Button>
         <Button

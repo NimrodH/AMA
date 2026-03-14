@@ -152,6 +152,16 @@
   border-color: var(--color-accent-8) !important;
 }
 
+.refreshBtn {
+  color: var(--teal-11) !important;
+  border-color: var(--teal-7) !important;
+}
+
+.refreshBtn:hover {
+  background: var(--teal-3) !important;
+  border-color: var(--teal-8) !important;
+}
+
 .examBtn {
   color: var(--color-success-11) !important;
   border-color: var(--color-success-7) !important;

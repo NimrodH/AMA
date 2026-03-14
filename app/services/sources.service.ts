@@ -8,14 +8,15 @@ export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 
 const BUCKET_NAME = "sources";
 
+const SOURCE_SELECT_FIELDS =
+  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, created_at";
+
 /** Fetch a single source by ID (must belong to the student). */
 export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
   const db = createServerClient();
   const { data, error } = await db
     .from("sources")
-    .select(
-      "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, content, metadata, vector_store_file_id, created_at"
-    )
+    .select(SOURCE_SELECT_FIELDS)
     .eq("id", id)
     .eq("student_id", studentId)
     .single();
@@ -33,9 +34,7 @@ export async function getSourcesByCourse(
   const db = createServerClient();
   let query = db
     .from("sources")
-    .select(
-      "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, content, metadata, vector_store_file_id, created_at"
-    )
+    .select(SOURCE_SELECT_FIELDS)
     .eq("student_id", studentId)
     .eq("course_id", courseId);
 
@@ -53,9 +52,7 @@ export async function getSources(studentId: string): Promise<SourceRow[]> {
   const db = createServerClient();
   const { data, error } = await db
     .from("sources")
-    .select(
-      "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, content, metadata, vector_store_file_id, created_at"
-    )
+    .select(SOURCE_SELECT_FIELDS)
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
 
@@ -323,6 +320,7 @@ export async function addSourceFromUrl({
     upload_date: new Date().toISOString().split("T")[0],
     language: "he",
     file_url: fileUrl,
+    google_docs_url: googleDocsUrl,
     vector_store_file_id: vectorStoreFileId,
     metadata,
   });
@@ -336,6 +334,109 @@ export async function addSourceFromUrl({
 }
 
 export type { CourseRow };
+
+interface RefreshSourceFromGoogleDocsParams {
+  sourceId: string;
+  studentId: string;
+}
+
+/**
+ * Re-fetches a Google Docs source and replaces it in-place:
+ * 1. Reads google_docs_url from the DB row
+ * 2. Downloads the updated doc as PDF
+ * 3. Replaces the old Supabase Storage file
+ * 4. Replaces the old OpenAI vector store file
+ * 5. Updates file_url, vector_store_file_id, and upload_date in the DB
+ */
+export async function refreshSourceFromGoogleDocs({
+  sourceId,
+  studentId,
+}: RefreshSourceFromGoogleDocsParams): Promise<{ ok: boolean; error?: string; fileStatus?: string; newVectorStoreFileId?: string }> {
+  const db = createServerClient();
+
+  // ── 1. Fetch the source row ──────────────────────────────────────────────
+  const source = await getSourceById(sourceId, studentId);
+  if (!source) return { ok: false, error: "מקור לא נמצא" };
+  if (!source.google_docs_url) return { ok: false, error: "למקור זה אין כתובת Google Docs" };
+
+  // ── 2. Re-fetch the Google Doc as PDF ───────────────────────────────────
+  let fileBuffer: Buffer;
+  let fileName: string;
+  let mimeType: string;
+  try {
+    ({ buffer: fileBuffer, fileName, mimeType } = await fetchGoogleDocAsPdf(source.google_docs_url));
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+
+  // ── 3. Delete old file from Supabase Storage ─────────────────────────────
+  if (source.file_url) {
+    try {
+      const url = new URL(source.file_url);
+      const match = url.pathname.match(/\/object\/public\/[^/]+\/(.+)$/);
+      if (match?.[1]) {
+        await db.storage.from(BUCKET_NAME).remove([decodeURIComponent(match[1])]);
+      }
+    } catch (err) {
+      console.warn("Could not delete old storage file:", err);
+    }
+  }
+
+  // ── 4. Upload new PDF to Supabase Storage ────────────────────────────────
+  const timestamp = Date.now();
+  const newStoragePath = `${studentId}/${source.course_id}/${timestamp}_${fileName}`;
+
+  const { error: uploadError } = await db.storage
+    .from(BUCKET_NAME)
+    .upload(newStoragePath, fileBuffer, { contentType: mimeType, upsert: false });
+
+  if (uploadError) {
+    console.error("Storage upload error:", uploadError);
+    return { ok: false, error: `שגיאה בהעלאת הקובץ: ${uploadError.message}` };
+  }
+
+  const { data: publicUrlData } = db.storage.from(BUCKET_NAME).getPublicUrl(newStoragePath);
+  const newFileUrl = publicUrlData.publicUrl;
+
+  // ── 5. Delete old vector store file and re-upload ────────────────────────
+  if (source.vector_store_file_id) {
+    try {
+      await deleteFromVectorStore({ db, vectorStoreFileId: source.vector_store_file_id });
+    } catch (err) {
+      console.warn("Could not delete old vector store file:", err);
+    }
+  }
+
+  // Preserve existing metadata, update file_name
+  const existingMeta = (source.metadata ?? {}) as Record<string, string>;
+  const metadata: Record<string, string> = { ...existingMeta, file_name: fileName };
+
+  let newVectorStoreFileId: string | undefined;
+  let fileStatus = "unknown";
+  try {
+    newVectorStoreFileId = await uploadToVectorStore({ db, fileBuffer, fileName, metadata });
+  } catch (err) {
+    console.error("Vector store re-upload error:", err);
+  }
+
+  // ── 6. Update DB row ──────────────────────────────────────────────────────
+  const { error: updateError } = await db
+    .from("sources")
+    .update({
+      file_url: newFileUrl,
+      upload_date: new Date().toISOString().split("T")[0],
+      vector_store_file_id: newVectorStoreFileId,
+    })
+    .eq("id", sourceId)
+    .eq("student_id", studentId);
+
+  if (updateError) {
+    console.error("DB update error:", updateError);
+    return { ok: false, error: `הקובץ עודכן אך שגיאה בשמירה: ${updateError.message}` };
+  }
+
+  return { ok: true, fileStatus, newVectorStoreFileId };
+}
 
 /** Fetch active courses for a student (used to populate the upload dialog dropdown). */
 export async function getCoursesForStudent(studentId: string): Promise<CourseRow[]> {

@@ -71,6 +71,7 @@ export type Database = {
           language: string;
           upload_date: string;
           file_url?: string;
+          google_docs_url?: string | null;
           content?: string;
           metadata: Record<string, unknown>;
           vector_store_file_id?: string;
@@ -86,6 +87,7 @@ export type Database = {
           language: string;
           upload_date: string;
           file_url?: string;
+          google_docs_url?: string | null;
           content?: string;
           metadata?: Record<string, unknown>;
           vector_store_file_id?: string;
@@ -101,6 +103,7 @@ export type Database = {
           language?: string;
           upload_date?: string;
           file_url?: string;
+          google_docs_url?: string | null;
           content?: string;
           metadata?: Record<string, unknown>;
           vector_store_file_id?: string;
