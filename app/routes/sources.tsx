@@ -12,7 +12,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudent } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
-import { getSources, getCoursesForStudent, addSource, addSourceFromUrl, deleteSource } from "~/services/sources.service";
+import {
+  getSources,
+  getCoursesForStudent,
+  addSource,
+  addSourceFromUrl,
+  deleteSource,
+} from "~/services/sources.service";
 import type { SourceRow } from "~/services/sources.service";
 import styles from "./sources.module.css";
 
@@ -26,10 +32,7 @@ export async function loader() {
   const student = await getStudent();
   if (!student) return { sources: [], courses: [], studentId: "" };
 
-  const [sources, courses] = await Promise.all([
-    getSources(student.id),
-    getCoursesForStudent(student.id),
-  ]);
+  const [sources, courses] = await Promise.all([getSources(student.id), getCoursesForStudent(student.id)]);
 
   return { sources, courses, studentId: student.id };
 }
@@ -241,9 +244,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
           <Label>קובץ</Label>
           <label className={`${styles.fileInput} ${selectedFile ? styles.fileInputActive : ""}`}>
             <Upload className={styles.fileInputIcon} />
-            <p className={styles.fileInputText}>
-              {selectedFile ? selectedFile.name : "לחץ להעלאת קובץ או גרור לכאן"}
-            </p>
+            <p className={styles.fileInputText}>{selectedFile ? selectedFile.name : "לחץ להעלאת קובץ או גרור לכאן"}</p>
             <p className={styles.fileInputText} style={{ fontSize: "var(--font-size-0)", marginTop: "var(--space-2)" }}>
               PDF, DOCX, PPT עד 10MB
             </p>
@@ -265,9 +266,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
             value={googleDocsUrl}
             onChange={(e) => setGoogleDocsUrl(e.target.value)}
           />
-          <p className={styles.urlHint}>
-            ודא שהמסמך שיתופי — ״כל מי שיש לו קישור יכול לצפות״
-          </p>
+          <p className={styles.urlHint}>בזמן יבוא המסמך, ודא שהמסמך שיתופי — ״כל מי שיש לו קישור יכול לצפות״</p>
         </div>
       )}
 
@@ -360,11 +359,7 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
               <DialogHeader>
                 <DialogTitle>העלאת מקור לימוד חדש</DialogTitle>
               </DialogHeader>
-              <UploadDialog
-                studentId={studentId}
-                courses={courses}
-                onClose={() => setIsDialogOpen(false)}
-              />
+              <UploadDialog studentId={studentId} courses={courses} onClose={() => setIsDialogOpen(false)} />
             </DialogContent>
           </Dialog>
         </div>
