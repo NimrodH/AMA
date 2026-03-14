@@ -276,8 +276,10 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       } else {
         setFeedback(`שגיאה: ${data.error ?? "לא התקבל משוב"}`);
       }
-    } catch {
-      setFeedback("שגיאה בקבלת משוב — נסה שוב");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      console.error("[card-feedback] client error:", message);
+      setFeedback(`שגיאה בקבלת משוב: ${message}`);
     } finally {
       setIsLoadingFeedback(false);
     }

@@ -121,38 +121,44 @@ export async function action({ request }: Route.ActionArgs) {
   // fall back to its internal knowledge and claim "no information found in the source".
   let feedback: string;
 
-  if (vectorStoreFileIds.length > 0) {
-    const response = await client.responses.create({
-      model: "gpt-4o",
-      tools: [
-        {
-          type: "file_search",
-          vector_store_ids: [vectorStoreId],
-          filters: {
-            type: "eq" as const,
-            key: "student_id",
-            value: student.id,
+  try {
+    if (vectorStoreFileIds.length > 0) {
+      const response = await client.responses.create({
+        model: "gpt-4o",
+        tools: [
+          {
+            type: "file_search",
+            vector_store_ids: [vectorStoreId],
+            filters: {
+              type: "eq" as const,
+              key: "student_id",
+              value: student.id,
+            },
           },
-        },
-      ],
-      input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-    });
+        ],
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      });
 
-    feedback = response.output_text || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
-  } else {
-    // No matching sources found — generic feedback without RAG
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.7,
-    });
-    feedback = response.choices[0]?.message?.content || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
+      feedback = response.output_text || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
+    } else {
+      // No matching sources found — generic feedback without RAG
+      const response = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.7,
+      });
+      feedback = response.choices[0]?.message?.content || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("[card-feedback] OpenAI error:", message);
+    return Response.json({ ok: false, error: message }, { status: 500 });
   }
 
   return Response.json({
