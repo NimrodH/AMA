@@ -1,14 +1,10 @@
 import * as React from "react";
-import { Link } from "react-router";
-import { FileText, BookOpen, GraduationCap, Plus, TrendingUp, Bell, CheckCircle2, Brain, ClipboardCheck, Sparkles, Star } from "lucide-react";
+import { Bell, CheckCircle2 } from "lucide-react";
 import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
-import { SourceCard } from "~/components/source-card/source-card";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
-import { getSources } from "~/services/sources.service";
-import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./home.module.css";
@@ -25,11 +21,9 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  const [sources, allReminders, courses, courseStats] = await Promise.all([
-    student ? getSources(student.id) : Promise.resolve([]),
+  const [allReminders, courses] = await Promise.all([
     student ? getReminders(student.id) : Promise.resolve([]),
     student ? getActiveCourses(student.id) : Promise.resolve([]),
-    student ? getAllCourseStats(student.id) : Promise.resolve([]),
   ]);
 
   // Only surface active reminders that are due today
@@ -37,70 +31,15 @@ export async function loader({}: Route.LoaderArgs) {
     (r) => r.is_active && isReminderDueToday(r.reminder_time)
   );
 
-  const recentSources = sources.slice(0, 3);
   return {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
-    recentSources,
     dueReminders,
     courses,
-    courseStats,
-    totalSources: sources.length,
-    totalLectures: sources.filter((s) => s.source_type === "Lecture").length,
-    totalCards: sources.filter((s) => s.source_type === "Card").length,
-    totalExams: sources.filter((s) => s.source_type === "Past exam").length,
   };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
-
-function CourseStatRow({ stat, courseName }: { stat: CourseStats; courseName: string }) {
-  const lastDate = stat.last_exam_date
-    ? new Date(stat.last_exam_date).toLocaleDateString("he-IL", {
-        day: "2-digit",
-        month: "2-digit",
-        year: "2-digit",
-      })
-    : null;
-
-  const examTypeLabel = stat.last_exam_type === "past" ? "מבחן עבר" : "AI";
-
-  return (
-    <div className={styles.courseStatRow}>
-      <p className={styles.courseStatName} title={courseName}>{courseName}</p>
-      <div className={styles.courseStatCells}>
-        <div className={styles.courseStatCell}>
-          <Brain size={14} className={styles.courseStatIcon} />
-          <span className={styles.courseStatValue}>{stat.learn_sessions}</span>
-          <span className={styles.courseStatCellLabel}>תרגולים</span>
-        </div>
-        <div className={styles.courseStatCell}>
-          <ClipboardCheck size={14} className={styles.courseStatIcon} />
-          <span className={styles.courseStatValue}>{stat.past_exam_attempts}</span>
-          <span className={styles.courseStatCellLabel}>מבחני עבר</span>
-        </div>
-        <div className={styles.courseStatCell}>
-          <Sparkles size={14} className={styles.courseStatIcon} />
-          <span className={styles.courseStatValue}>{stat.ai_exam_attempts}</span>
-          <span className={styles.courseStatCellLabel}>מבחני AI</span>
-        </div>
-        <div className={styles.courseStatCell}>
-          <Star size={14} className={styles.courseStatIcon} />
-          {stat.last_exam_grade != null ? (
-            <>
-              <span className={styles.courseStatValue}>{stat.last_exam_grade}</span>
-              <span className={styles.courseStatCellLabel}>
-                {examTypeLabel}{lastDate ? ` · ${lastDate}` : ""}
-              </span>
-            </>
-          ) : (
-            <span className={styles.courseStatCellLabel}>טרם נבדק</span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
 
 function ReminderBanner({
   reminder,
@@ -137,15 +76,8 @@ function ReminderBanner({
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     studentName,
-    studentId,
-    recentSources,
     dueReminders,
     courses,
-    courseStats,
-    totalSources,
-    totalLectures,
-    totalCards,
-    totalExams,
   } = loaderData;
 
   // Selected course — persisted in localStorage
@@ -155,8 +87,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     setSelectedCourse(value);
     writeSelectedCourse(value);
   };
-
-  const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? null;
 
   // Load dismissed IDs from localStorage (today only — auto-resets at midnight)
   const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => loadDismissedToday());
@@ -194,9 +124,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
                     ))}
                   </SelectContent>
                 </Select>
-                {selectedCourseName && (
-                  <p className={styles.coursePickerHint}>ברירת מחדל בכל הדפים</p>
-                )}
               </div>
             )}
           </div>
@@ -219,127 +146,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
-        {/* Course Activity Stats — shown after reminders (or after welcome if none) */}
-        {courseStats.length > 0 && (
-          <div className={styles.section}>
-            <div className={styles.sectionHeader}>
-              <h2 className={styles.sectionTitle}>
-                <TrendingUp className={styles.sectionTitleIcon} />
-                סטטיסטיקות לימוד לפי קורס
-              </h2>
-            </div>
-            <div className={styles.courseStatsPanel}>
-              <div className={styles.courseStatsHeader}>
-                <span className={styles.courseStatsColLabel}>קורס</span>
-                <div className={styles.courseStatsColGroup}>
-                  <span className={styles.courseStatsColLabel}>תרגולים</span>
-                  <span className={styles.courseStatsColLabel}>מבחני עבר</span>
-                  <span className={styles.courseStatsColLabel}>מבחני AI</span>
-                  <span className={styles.courseStatsColLabel}>ציון אחרון</span>
-                </div>
-              </div>
-              {courseStats.map((stat) => {
-                const courseName =
-                  courses.find((c) => c.course_id === stat.course_id)?.course_name ??
-                  stat.course_id;
-                return (
-                  <CourseStatRow key={stat.course_id} stat={stat} courseName={courseName} />
-                );
-              })}
-            </div>
-          </div>
-        )}
 
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>פעולות מהירות</h2>
-          </div>
-          <div className={styles.grid}>
-            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
-              <Link to="/cards">
-                <BookOpen style={{ marginLeft: "var(--space-2)" }} />
-                כתוב כרטיס סיכום חדש
-              </Link>
-            </Button>
-            <Button asChild variant="outline" size="lg" style={{ height: "80px" }}>
-              <Link to="/exams">
-                <GraduationCap style={{ marginLeft: "var(--space-2)" }} />
-                צור מבחן אימון
-              </Link>
-            </Button>
-          </div>
-        </div>
-
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>מקורות אחרונים</h2>
-            <Button asChild variant="outline">
-              <Link to="/sources">
-                <Plus style={{ marginLeft: "var(--space-2)" }} />
-                הוסף מקור חדש
-              </Link>
-            </Button>
-          </div>
-
-          {recentSources.length > 0 ? (
-            <div className={styles.grid}>
-              {recentSources.map((source) => (
-                <SourceCard key={source.id} source={source} studentId={studentId ?? ""} />
-              ))}
-            </div>
-          ) : (
-            <div className={styles.emptyState}>
-              <FileText className={styles.emptyStateIcon} />
-              <h3 className={styles.emptyStateTitle}>אין מקורות עדיין</h3>
-              <p className={styles.emptyStateText}>התחל להעלות חומרי לימוד, כרטיסי סיכום ומבחני עבר</p>
-              <Button asChild>
-                <Link to="/sources">הוסף מקור ראשון</Link>
-              </Button>
-            </div>
-          )}
-        </div>
-
-        <div className={styles.stats}>
-          <div className={styles.statCard}>
-            <div className={styles.statHeader}>
-              <div className={styles.statIcon}>
-                <FileText />
-              </div>
-              <p className={styles.statLabel}>הרצאות</p>
-            </div>
-            <p className={styles.statValue}>{totalLectures}</p>
-          </div>
-
-          <div className={styles.statCard}>
-            <div className={styles.statHeader}>
-              <div className={styles.statIcon}>
-                <BookOpen />
-              </div>
-              <p className={styles.statLabel}>כרטיסי סיכום</p>
-            </div>
-            <p className={styles.statValue}>{totalCards}</p>
-          </div>
-
-          <div className={styles.statCard}>
-            <div className={styles.statHeader}>
-              <div className={styles.statIcon}>
-                <GraduationCap />
-              </div>
-              <p className={styles.statLabel}>מבחני עבר</p>
-            </div>
-            <p className={styles.statValue}>{totalExams}</p>
-          </div>
-
-          <div className={styles.statCard}>
-            <div className={styles.statHeader}>
-              <div className={styles.statIcon}>
-                <TrendingUp />
-              </div>
-              <p className={styles.statLabel}>סה״כ מקורות</p>
-            </div>
-            <p className={styles.statValue}>{totalSources}</p>
-          </div>
-        </div>
       </div>
     </AppLayout>
   );
