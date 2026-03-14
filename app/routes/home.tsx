@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link } from "react-router";
-import { FileText, BookOpen, GraduationCap, Plus, TrendingUp, Bell, CheckCircle2 } from "lucide-react";
+import { FileText, BookOpen, GraduationCap, Plus, TrendingUp, Bell, CheckCircle2, Brain, ClipboardCheck, Sparkles, Star } from "lucide-react";
 import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { SourceCard } from "~/components/source-card/source-card";
@@ -8,6 +8,7 @@ import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
 import { getSources } from "~/services/sources.service";
+import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./home.module.css";
@@ -24,10 +25,11 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  const [sources, allReminders, courses] = await Promise.all([
+  const [sources, allReminders, courses, courseStats] = await Promise.all([
     student ? getSources(student.id) : Promise.resolve([]),
     student ? getReminders(student.id) : Promise.resolve([]),
     student ? getActiveCourses(student.id) : Promise.resolve([]),
+    student ? getAllCourseStats(student.id) : Promise.resolve([]),
   ]);
 
   // Only surface active reminders that are due today
@@ -42,6 +44,7 @@ export async function loader({}: Route.LoaderArgs) {
     recentSources,
     dueReminders,
     courses,
+    courseStats,
     totalSources: sources.length,
     totalLectures: sources.filter((s) => s.source_type === "Lecture").length,
     totalCards: sources.filter((s) => s.source_type === "Card").length,
@@ -50,6 +53,54 @@ export async function loader({}: Route.LoaderArgs) {
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
+
+function CourseStatRow({ stat, courseName }: { stat: CourseStats; courseName: string }) {
+  const lastDate = stat.last_exam_date
+    ? new Date(stat.last_exam_date).toLocaleDateString("he-IL", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "2-digit",
+      })
+    : null;
+
+  const examTypeLabel = stat.last_exam_type === "past" ? "מבחן עבר" : "AI";
+
+  return (
+    <div className={styles.courseStatRow}>
+      <p className={styles.courseStatName} title={courseName}>{courseName}</p>
+      <div className={styles.courseStatCells}>
+        <div className={styles.courseStatCell}>
+          <Brain size={14} className={styles.courseStatIcon} />
+          <span className={styles.courseStatValue}>{stat.learn_sessions}</span>
+          <span className={styles.courseStatCellLabel}>תרגולים</span>
+        </div>
+        <div className={styles.courseStatCell}>
+          <ClipboardCheck size={14} className={styles.courseStatIcon} />
+          <span className={styles.courseStatValue}>{stat.past_exam_attempts}</span>
+          <span className={styles.courseStatCellLabel}>מבחני עבר</span>
+        </div>
+        <div className={styles.courseStatCell}>
+          <Sparkles size={14} className={styles.courseStatIcon} />
+          <span className={styles.courseStatValue}>{stat.ai_exam_attempts}</span>
+          <span className={styles.courseStatCellLabel}>מבחני AI</span>
+        </div>
+        <div className={styles.courseStatCell}>
+          <Star size={14} className={styles.courseStatIcon} />
+          {stat.last_exam_grade != null ? (
+            <>
+              <span className={styles.courseStatValue}>{stat.last_exam_grade}</span>
+              <span className={styles.courseStatCellLabel}>
+                {examTypeLabel}{lastDate ? ` · ${lastDate}` : ""}
+              </span>
+            </>
+          ) : (
+            <span className={styles.courseStatCellLabel}>טרם נבדק</span>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
 
 function ReminderBanner({
   reminder,
@@ -90,6 +141,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     recentSources,
     dueReminders,
     courses,
+    courseStats,
     totalSources,
     totalLectures,
     totalCards,

@@ -2,6 +2,7 @@ import type { Route } from "./+types/api.grade-exam";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
+import { recordExamResult } from "~/services/stats.service";
 
 const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשובות סטודנטים.
 קיבלת מבחן עם שאלות, תשובות של סטודנט, וגישה לחומרי ההרצאות של הקורס.
@@ -41,10 +42,11 @@ interface QuestionForGrading {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const { exam, answers, courseId } = (await request.json()) as {
+  const { exam, answers, courseId, examType } = (await request.json()) as {
     exam: { title: string; questions: QuestionForGrading[] };
     answers: Record<number, string>;
     courseId: string;
+    examType?: "past" | "ai";
   };
 
   if (!exam || !answers) {
@@ -115,6 +117,17 @@ ${examText}
       { ok: false, error: "לא ניתן לפרסר את תוצאות הבדיקה. נסה שוב." },
       { status: 500 }
     );
+  }
+
+  // Record grade in course_stats (fire-and-forget; don't block the response)
+  const totalGrade = (gradingResult as { total_grade?: number }).total_grade;
+  if (courseId && typeof totalGrade === "number") {
+    recordExamResult(
+      student.id,
+      courseId,
+      totalGrade,
+      examType ?? "ai"
+    ).catch((err) => console.error("[grade-exam] failed to record stats:", err));
   }
 
   return Response.json({ ok: true, results: gradingResult });

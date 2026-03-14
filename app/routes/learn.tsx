@@ -63,6 +63,16 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
 
   const pickNextCard = () => {
     if (filteredCards.length === 0) return;
+
+    // Track the session for the selected course (skip "all courses" mode)
+    if (selectedCourse !== "__all__") {
+      fetch("/api/track-learn-session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: selectedCourse }),
+      }).catch(() => { /* fire-and-forget */ });
+    }
+
     if (orderMode === "ordered") {
       const nextIndex = orderedIndex % sortedCards.length;
       setCurrentCard(sortedCards[nextIndex]);

@@ -90,8 +90,9 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [isGrading, setIsGrading] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [gradeError, setGradeError] = React.useState<string | null>(null);
-  // Track which course the currently displayed exam belongs to
+  // Track which course and type the currently displayed exam belongs to
   const [examCourseId, setExamCourseId] = React.useState<string>("");
+  const [examType, setExamType] = React.useState<"past" | "ai">("ai");
 
   // Auto-generate exam from source when sourceId is in URL
   React.useEffect(() => {
@@ -121,6 +122,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       } else {
         setExam(data.exam);
         setExamCourseId(selectedCourse);
+        setExamType("past");
       }
     } catch {
       setGenerateError("שגיאת רשת — נסה שוב");
@@ -150,6 +152,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       } else {
         setExam(data.exam);
         setExamCourseId(selectedCourse);
+        setExamType("ai");
       }
     } catch {
       setGenerateError("שגיאת רשת — נסה שוב");
@@ -171,6 +174,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           exam,
           answers,
           courseId: examCourseId || selectedCourse,
+          examType,
         }),
       });
       const data = (await res.json()) as { ok: boolean; results?: GradingResult; error?: string };

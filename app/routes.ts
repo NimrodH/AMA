@@ -19,5 +19,6 @@ export default [
   route("api/generate-exam-from-source", "routes/api.generate-exam-from-source.ts"),
   route("api/generate-exam-from-course", "routes/api.generate-exam-from-course.ts"),
   route("api/grade-exam", "routes/api.grade-exam.ts"),
+  route("api/track-learn-session", "routes/api.track-learn-session.ts"),
   ...devRoutes,
 ] satisfies RouteConfig;
