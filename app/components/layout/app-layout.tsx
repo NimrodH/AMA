@@ -47,12 +47,12 @@ const navigationItems = [
     icon: FileText,
   },
   {
-    title: "כרטיסי סיכום",
+    title: "בניית כרטיסים",
     url: "/cards",
     icon: BookOpen,
   },
   {
-    title: "למד בכרטיסים",
+    title: "שינון כרטיסים",
     url: "/learn",
     icon: Layers,
   },
