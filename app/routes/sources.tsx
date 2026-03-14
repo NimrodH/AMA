@@ -111,27 +111,31 @@ interface UploadDialogProps {
   onClose: () => void;
 }
 
+type UploadTab = "file" | "url";
+
 function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   const fetcher = useFetcher();
+  const [activeTab, setActiveTab] = React.useState<UploadTab>("file");
   const [selectedFile, setSelectedFile] = React.useState<File | null>(null);
+  const [googleDocsUrl, setGoogleDocsUrl] = React.useState("");
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>("");
   const [selectedSourceType, setSelectedSourceType] = React.useState<string>("");
   const isSubmitting = fetcher.state !== "idle";
   const actionError = fetcher.data && !fetcher.data.ok ? fetcher.data.error : null;
 
-  // Derive the course name from the selected course_id
   const selectedCourseName = React.useMemo(() => {
     const course = courses.find((c) => c.course_id === selectedCourseId);
     return course?.course_name ?? "";
   }, [courses, selectedCourseId]);
 
-  // Close dialog after successful submission
   React.useEffect(() => {
     if (fetcher.state === "idle" && fetcher.data?.ok) {
       onClose();
       setSelectedFile(null);
+      setGoogleDocsUrl("");
       setSelectedCourseId("");
       setSelectedSourceType("");
+      setActiveTab("file");
     }
   }, [fetcher.state, fetcher.data, onClose]);
 
@@ -143,25 +147,45 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
   const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const formData = new FormData(e.currentTarget);
-
-    // Append the actual file to FormData
-    if (selectedFile) {
-      formData.set("file", selectedFile);
-    }
-
-    // Append the resolved course name for metadata
     formData.set("courseName", selectedCourseName);
 
-    fetcher.submit(formData, {
-      method: "post",
-      encType: "multipart/form-data",
-    });
+    if (activeTab === "file") {
+      if (selectedFile) formData.set("file", selectedFile);
+      fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
+    } else {
+      // URL tab: send googleDocsUrl, no file attachment needed
+      fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
+    }
   };
+
+  const isUrlValid = googleDocsUrl.includes("docs.google.com/document/d/");
+  const canSubmit = activeTab === "file" ? !!selectedFile : isUrlValid;
 
   return (
     <form onSubmit={handleSubmit} className={styles.form}>
       <input type="hidden" name="studentId" value={studentId} />
 
+      {/* ── Upload mode tab switcher ── */}
+      <div className={styles.uploadTabs}>
+        <button
+          type="button"
+          className={`${styles.uploadTab} ${activeTab === "file" ? styles.uploadTabActive : ""}`}
+          onClick={() => setActiveTab("file")}
+        >
+          <Upload style={{ width: 15, height: 15 }} />
+          העלאת קובץ
+        </button>
+        <button
+          type="button"
+          className={`${styles.uploadTab} ${activeTab === "url" ? styles.uploadTabActive : ""}`}
+          onClick={() => setActiveTab("url")}
+        >
+          <Link style={{ width: 15, height: 15 }} />
+          קישור Google Docs
+        </button>
+      </div>
+
+      {/* ── Shared metadata fields ── */}
       <div>
         <Label htmlFor="sourceType">סוג המקור</Label>
         <Select name="sourceType" required value={selectedSourceType} onValueChange={setSelectedSourceType}>
@@ -207,51 +231,57 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
         </div>
         <div>
           <Label htmlFor="lectureNumber">מספר הרצאה (אופציונלי)</Label>
-          <Input
-            id="lectureNumber"
-            name="lectureNumber"
-            type="number"
-            min="1"
-            placeholder="5"
-          />
+          <Input id="lectureNumber" name="lectureNumber" type="number" min="1" placeholder="5" />
         </div>
       </div>
 
-      <div>
-        <Label>קובץ</Label>
-        <label className={styles.fileInput}>
-          <Upload className={styles.fileInputIcon} />
-          <p className={styles.fileInputText}>
-            {selectedFile ? selectedFile.name : "לחץ להעלאת קובץ או גרור לכאן"}
-          </p>
-          <p
-            className={styles.fileInputText}
-            style={{ fontSize: "var(--font-size-0)", marginTop: "var(--space-2)" }}
-          >
-            PDF, DOCX, PPT עד 10MB
-          </p>
-          <input
-            type="file"
-            accept=".pdf,.docx,.ppt,.pptx"
-            onChange={handleFileChange}
-            style={{ display: "none" }}
-          />
-        </label>
-      </div>
-
-      {actionError && (
-        <p className={styles.errorMessage}>{actionError}</p>
+      {/* ── File tab content ── */}
+      {activeTab === "file" && (
+        <div>
+          <Label>קובץ</Label>
+          <label className={`${styles.fileInput} ${selectedFile ? styles.fileInputActive : ""}`}>
+            <Upload className={styles.fileInputIcon} />
+            <p className={styles.fileInputText}>
+              {selectedFile ? selectedFile.name : "לחץ להעלאת קובץ או גרור לכאן"}
+            </p>
+            <p className={styles.fileInputText} style={{ fontSize: "var(--font-size-0)", marginTop: "var(--space-2)" }}>
+              PDF, DOCX, PPT עד 10MB
+            </p>
+            <input type="file" accept=".pdf,.docx,.ppt,.pptx" onChange={handleFileChange} style={{ display: "none" }} />
+          </label>
+        </div>
       )}
+
+      {/* ── URL tab content ── */}
+      {activeTab === "url" && (
+        <div>
+          <Label htmlFor="googleDocsUrl">קישור Google Docs</Label>
+          <Input
+            id="googleDocsUrl"
+            name="googleDocsUrl"
+            type="url"
+            dir="ltr"
+            placeholder="https://docs.google.com/document/d/..."
+            value={googleDocsUrl}
+            onChange={(e) => setGoogleDocsUrl(e.target.value)}
+          />
+          <p className={styles.urlHint}>
+            ודא שהמסמך שיתופי — ״כל מי שיש לו קישור יכול לצפות״
+          </p>
+        </div>
+      )}
+
+      {actionError && <p className={styles.errorMessage}>{actionError}</p>}
 
       <div style={{ display: "flex", gap: "var(--space-3)", justifyContent: "flex-end" }}>
         <Button type="button" variant="outline" onClick={onClose} disabled={isSubmitting}>
           ביטול
         </Button>
-        <Button type="submit" disabled={isSubmitting || !selectedFile}>
+        <Button type="submit" disabled={isSubmitting || !canSubmit}>
           {isSubmitting ? (
             <>
               <Loader2 className={styles.spinner} />
-              מעלה...
+              {activeTab === "url" ? "מוריד ומעלה..." : "מעלה..."}
             </>
           ) : (
             "העלה"
