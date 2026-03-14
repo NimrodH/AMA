@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Upload, Loader2 } from "lucide-react";
+import { Upload, Loader2, Link } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/sources";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -12,7 +12,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudent } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
-import { getSources, getCoursesForStudent, addSource, deleteSource } from "~/services/sources.service";
+import { getSources, getCoursesForStudent, addSource, addSourceFromUrl, deleteSource } from "~/services/sources.service";
 import type { SourceRow } from "~/services/sources.service";
 import styles from "./sources.module.css";
 
@@ -56,6 +56,25 @@ export async function action({ request }: Route.ActionArgs) {
   const topic = form.get("topic") as string;
   const lectureNumberRaw = form.get("lectureNumber") as string;
   const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+
+  // ── URL branch (Google Docs) ──────────────────────────────────────────────
+  const googleDocsUrl = form.get("googleDocsUrl") as string | null;
+  if (googleDocsUrl) {
+    if (!studentId || !courseId || !sourceType || !topic) {
+      return { ok: false, error: "יש למלא את כל השדות" };
+    }
+    return addSourceFromUrl({
+      studentId,
+      courseId,
+      courseName,
+      sourceType,
+      topic,
+      lectureNumber,
+      googleDocsUrl,
+    });
+  }
+
+  // ── File branch ───────────────────────────────────────────────────────────
   const file = form.get("file") as File | null;
 
   if (!studentId || !courseId || !sourceType || !topic || !file || file.size === 0) {

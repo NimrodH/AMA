@@ -1,6 +1,7 @@
 import { createServerClient } from "~/lib/supabase";
 import type { Database } from "~/lib/supabase";
 import { uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
+import { fetchGoogleDocAsPdf } from "~/lib/google-docs.server";
 import type { CourseRow } from "~/services/settings.service";
 
 export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
@@ -220,6 +221,115 @@ export async function deleteSource(
   if (error) {
     console.error("DB delete error:", error);
     return { ok: false, error: `שגיאה במחיקת המקור: ${error.message}` };
+  }
+
+  return { ok: true };
+}
+
+interface AddSourceFromUrlParams {
+  studentId: string;
+  courseId: string;
+  courseName: string;
+  sourceType: "Lecture" | "Card" | "Past exam";
+  topic: string;
+  lectureNumber: number | null;
+  googleDocsUrl: string;
+}
+
+/**
+ * Adds a source from a Google Docs URL.
+ * Exports the document as PDF, then runs the same Storage → Vector Store → DB pipeline
+ * as addSource() so the rest of the app handles it identically.
+ */
+export async function addSourceFromUrl({
+  studentId,
+  courseId,
+  courseName,
+  sourceType,
+  topic,
+  lectureNumber,
+  googleDocsUrl,
+}: AddSourceFromUrlParams): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient();
+
+  // ── Fetch & convert Google Doc to PDF buffer ─────────────────────────────
+  let fileBuffer: Buffer;
+  let fileName: string;
+  let mimeType: string;
+  try {
+    ({ buffer: fileBuffer, fileName, mimeType } = await fetchGoogleDocAsPdf(googleDocsUrl));
+  } catch (err) {
+    return { ok: false, error: (err as Error).message };
+  }
+
+  // Build a safe storage path using doc ID embedded in the filename
+  const timestamp = Date.now();
+  const storagePath = `${studentId}/${courseId}/${timestamp}_${fileName}`;
+
+  // ── 1. Upload PDF to Supabase Storage ────────────────────────────────────
+  const { error: uploadError } = await db.storage
+    .from(BUCKET_NAME)
+    .upload(storagePath, fileBuffer, {
+      contentType: mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error("Storage upload error:", uploadError);
+    return { ok: false, error: `שגיאה בהעלאת הקובץ: ${uploadError.message}` };
+  }
+
+  // ── 2. Get the public URL ────────────────────────────────────────────────
+  const { data: publicUrlData } = db.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(storagePath);
+
+  const fileUrl = publicUrlData.publicUrl;
+
+  // ── 3. Upload to OpenAI vector store with metadata ──────────────────────
+  const metadata: Record<string, string> = {
+    course_id: courseId,
+    course_name: courseName,
+    source_type: sourceType,
+    topic,
+    student_id: studentId,
+    file_name: fileName,
+    source_url: googleDocsUrl,
+  };
+
+  if (lectureNumber !== null) {
+    metadata.lecture_number = String(lectureNumber);
+  }
+
+  let vectorStoreFileId: string | undefined;
+  try {
+    vectorStoreFileId = await uploadToVectorStore({
+      db,
+      fileBuffer,
+      fileName,
+      metadata,
+    });
+  } catch (err) {
+    console.error("OpenAI vector store upload error:", err);
+  }
+
+  // ── 4. Insert source record into the database ───────────────────────────
+  const { error: insertError } = await db.from("sources").insert({
+    student_id: studentId,
+    course_id: courseId,
+    source_type: sourceType,
+    topic,
+    lecture_number: lectureNumber ?? undefined,
+    upload_date: new Date().toISOString().split("T")[0],
+    language: "he",
+    file_url: fileUrl,
+    vector_store_file_id: vectorStoreFileId,
+    metadata,
+  });
+
+  if (insertError) {
+    console.error("DB insert error:", insertError);
+    return { ok: false, error: `שגיאה בשמירת המקור: ${insertError.message}` };
   }
 
   return { ok: true };
