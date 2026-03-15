@@ -1,5 +1,6 @@
 import type { Route } from "./+types/api.generate-mc-exam";
 import { getOpenAIClient } from "~/lib/openai.server";
+import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
 
@@ -7,7 +8,7 @@ import { getSourcesByCourse } from "~/services/sources.service";
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת את התוכן המלא של כל הרצאות הקורס.
-המשימה שלך: לבנות מבחן אמריקאי (multiple choice) המכסה את כלל הרצאות הקורס באופן מאוזן.
+המשימה שלך: לבנות מבחן אמריקאי (multiple choice) המכסה את כלל חומרי הקורס באופן מאוזן.
 
 חוקים:
 - כל שאלה חייבת להיות בעברית
@@ -17,7 +18,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - פזר את השאלות באופן שווה על פני כל חומרי הקורס
 - השאלות צריכות לבדוק הבנה, לא רק שינון עובדות
 - כל שאלה שווה נקודה אחת (points: 1)
- - השאלות צריכות לעסוק בתכנים שהקורס מלמד ולא באופן הלימוד
 - כתוב בעברית בלבד
 
 החזר JSON בלבד, ללא טקסט נוסף, עם המבנה הבא:
@@ -46,6 +46,20 @@ function extractJson(text: string): string {
   return text;
 }
 
+/**
+ * Fetch the full text content of an OpenAI file.
+ * Returns null if the content cannot be fetched (non-text, error, etc.)
+ */
+async function fetchFileContent(client: ReturnType<typeof getOpenAIClient>, fileId: string): Promise<string | null> {
+  try {
+    const response = await client.files.content(fileId);
+    const text = await response.text();
+    return text || null;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -66,6 +80,7 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // ── 1. Fetch all lecture sources for this course ─────────────────────────
+  const db = createServerClient();
   const lectures = await getSourcesByCourse(student.id, courseId, "Lecture");
 
   if (lectures.length === 0) {
@@ -75,19 +90,27 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Build content from extracted_text stored in DB ───────────────────
-  // extracted_text is populated at upload time via pdf-parse — no OpenAI API call needed.
+  const client = getOpenAIClient();
+
+  // ── 2. Retrieve FULL content of every lecture file ───────────────────────
+  // We fetch directly from the OpenAI Files API so that ALL content is included,
+  // not just the chunks that happen to be sampled by file_search.
   const lectureContents: { label: string; content: string }[] = [];
 
-  for (const source of lectures) {
-    const text = source.extracted_text?.trim();
-    if (text) {
-      const label = source.lecture_number
-        ? `הרצאה ${source.lecture_number} — ${source.topic}`
-        : source.topic;
-      lectureContents.push({ label, content: text });
-    }
-  }
+  await Promise.all(
+    lectures.map(async (source) => {
+      // The vector_store_file_id is actually the file_id of the underlying OpenAI file
+      if (!source.vector_store_file_id) return;
+
+      const content = await fetchFileContent(client, source.vector_store_file_id);
+      if (content) {
+        const label = source.lecture_number
+          ? `הרצאה ${source.lecture_number} — ${source.topic}`
+          : source.topic;
+        lectureContents.push({ label, content });
+      }
+    })
+  );
 
   // ── 3. Build the user prompt with full lecture content ───────────────────
   let fullContent: string;
@@ -104,7 +127,7 @@ export async function action({ request }: Route.ActionArgs) {
       .map((l) => `=== ${l.label} ===\n${l.content}`)
       .join("\n\n");
   } else {
-    // Fallback: no extracted text — list topics only and let AI do its best
+    // Fallback: no file content accessible — list topics only and let AI do its best
     fullContent = lectures
       .map((s) => {
         const label = s.lecture_number
@@ -113,7 +136,7 @@ export async function action({ request }: Route.ActionArgs) {
         return `• ${label}`;
       })
       .join("\n");
-    console.warn("[generate-mc-exam] No extracted_text found, falling back to topic list");
+    console.warn("[generate-mc-exam] Could not fetch file contents, falling back to topic list");
   }
 
   const userPrompt = `קורס: ${courseId}
@@ -126,7 +149,6 @@ ${fullContent}
 בנה מבחן אמריקאי עם ${count} שאלות המכסות את כלל החומר לעיל.`;
 
   // ── 4. Call GPT-4o ────────────────────────────────────────────────────────
-  const client = getOpenAIClient();
   let rawText: string;
 
   try {
