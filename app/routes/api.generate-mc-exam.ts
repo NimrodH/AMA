@@ -1,6 +1,5 @@
 import type { Route } from "./+types/api.generate-mc-exam";
 import { getOpenAIClient } from "~/lib/openai.server";
-import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
 
@@ -47,20 +46,6 @@ function extractJson(text: string): string {
   return text;
 }
 
-/**
- * Fetch the full text content of an OpenAI file.
- * Returns null if the content cannot be fetched (non-text, error, etc.)
- */
-async function fetchFileContent(client: ReturnType<typeof getOpenAIClient>, fileId: string): Promise<string | null> {
-  try {
-    const response = await client.files.content(fileId);
-    const text = await response.text();
-    return text || null;
-  } catch {
-    return null;
-  }
-}
-
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -81,7 +66,6 @@ export async function action({ request }: Route.ActionArgs) {
   }
 
   // ── 1. Fetch all lecture sources for this course ─────────────────────────
-  const db = createServerClient();
   const lectures = await getSourcesByCourse(student.id, courseId, "Lecture");
 
   if (lectures.length === 0) {
@@ -91,27 +75,19 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  const client = getOpenAIClient();
-
-  // ── 2. Retrieve FULL content of every lecture file ───────────────────────
-  // We fetch directly from the OpenAI Files API so that ALL content is included,
-  // not just the chunks that happen to be sampled by file_search.
+  // ── 2. Build content from extracted_text stored in DB ───────────────────
+  // extracted_text is populated at upload time via pdf-parse — no OpenAI API call needed.
   const lectureContents: { label: string; content: string }[] = [];
 
-  await Promise.all(
-    lectures.map(async (source) => {
-      // The vector_store_file_id is actually the file_id of the underlying OpenAI file
-      if (!source.vector_store_file_id) return;
-
-      const content = await fetchFileContent(client, source.vector_store_file_id);
-      if (content) {
-        const label = source.lecture_number
-          ? `הרצאה ${source.lecture_number} — ${source.topic}`
-          : source.topic;
-        lectureContents.push({ label, content });
-      }
-    })
-  );
+  for (const source of lectures) {
+    const text = source.extracted_text?.trim();
+    if (text) {
+      const label = source.lecture_number
+        ? `הרצאה ${source.lecture_number} — ${source.topic}`
+        : source.topic;
+      lectureContents.push({ label, content: text });
+    }
+  }
 
   // ── 3. Build the user prompt with full lecture content ───────────────────
   let fullContent: string;
@@ -128,7 +104,7 @@ export async function action({ request }: Route.ActionArgs) {
       .map((l) => `=== ${l.label} ===\n${l.content}`)
       .join("\n\n");
   } else {
-    // Fallback: no file content accessible — list topics only and let AI do its best
+    // Fallback: no extracted text — list topics only and let AI do its best
     fullContent = lectures
       .map((s) => {
         const label = s.lecture_number
@@ -137,7 +113,7 @@ export async function action({ request }: Route.ActionArgs) {
         return `• ${label}`;
       })
       .join("\n");
-    console.warn("[generate-mc-exam] Could not fetch file contents, falling back to topic list");
+    console.warn("[generate-mc-exam] No extracted_text found, falling back to topic list");
   }
 
   const userPrompt = `קורס: ${courseId}
@@ -150,6 +126,7 @@ ${fullContent}
 בנה מבחן אמריקאי עם ${count} שאלות המכסות את כלל החומר לעיל.`;
 
   // ── 4. Call GPT-4o ────────────────────────────────────────────────────────
+  const client = getOpenAIClient();
   let rawText: string;
 
   try {

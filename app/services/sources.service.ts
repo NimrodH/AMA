@@ -2,6 +2,7 @@ import { createServerClient } from "~/lib/supabase";
 import type { Database } from "~/lib/supabase";
 import { uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
 import { fetchGoogleDocAsPdf } from "~/lib/google-docs.server";
+import { extractTextFromPdf } from "~/lib/pdf-extract.server";
 import type { CourseRow } from "~/services/settings.service";
 
 export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
@@ -9,7 +10,7 @@ export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 const BUCKET_NAME = "sources";
 
 const SOURCE_SELECT_FIELDS =
-  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, created_at";
+  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, extracted_text, created_at";
 
 /** Fetch a single source by ID (must belong to the student). */
 export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
@@ -150,7 +151,16 @@ export async function addSource({
     console.error("OpenAI vector store upload error:", err);
   }
 
-  // ── 4. Insert source record into the database ───────────────────────────
+  // ── 4. Extract text from PDF (if applicable) ───────────────────────────
+  let extractedText: string | null = null;
+  if (file.type === "application/pdf" || file.name.toLowerCase().endsWith(".pdf")) {
+    extractedText = await extractTextFromPdf(fileBuffer);
+    if (!extractedText) {
+      console.warn("[sources] PDF text extraction yielded no text for", file.name);
+    }
+  }
+
+  // ── 5. Insert source record into the database ───────────────────────────
   const { error: insertError } = await db.from("sources").insert({
     student_id: studentId,
     course_id: courseId,
@@ -162,6 +172,7 @@ export async function addSource({
     file_url: fileUrl,
     vector_store_file_id: vectorStoreFileId,
     metadata,
+    ...(extractedText ? { extracted_text: extractedText } : {}),
   });
 
   if (insertError) {
@@ -310,7 +321,13 @@ export async function addSourceFromUrl({
     console.error("OpenAI vector store upload error:", err);
   }
 
-  // ── 4. Insert source record into the database ───────────────────────────
+  // ── 4. Extract text from PDF ─────────────────────────────────────────────
+  const extractedText = await extractTextFromPdf(fileBuffer);
+  if (!extractedText) {
+    console.warn("[sources] PDF text extraction yielded no text for Google Doc:", googleDocsUrl);
+  }
+
+  // ── 5. Insert source record into the database ───────────────────────────
   const { error: insertError } = await db.from("sources").insert({
     student_id: studentId,
     course_id: courseId,
@@ -323,6 +340,7 @@ export async function addSourceFromUrl({
     google_docs_url: googleDocsUrl,
     vector_store_file_id: vectorStoreFileId,
     metadata,
+    ...(extractedText ? { extracted_text: extractedText } : {}),
   });
 
   if (insertError) {
@@ -419,13 +437,20 @@ export async function refreshSourceFromGoogleDocs({
     console.error("Vector store re-upload error:", err);
   }
 
-  // ── 6. Update DB row ──────────────────────────────────────────────────────
+  // ── 6. Extract text from updated PDF ─────────────────────────────────────
+  const extractedText = await extractTextFromPdf(fileBuffer);
+  if (!extractedText) {
+    console.warn("[sources] PDF text extraction yielded no text on refresh:", sourceId);
+  }
+
+  // ── 7. Update DB row ──────────────────────────────────────────────────────
   const { error: updateError } = await db
     .from("sources")
     .update({
       file_url: newFileUrl,
       upload_date: new Date().toISOString().split("T")[0],
       vector_store_file_id: newVectorStoreFileId,
+      ...(extractedText ? { extracted_text: extractedText } : {}),
     })
     .eq("id", sourceId)
     .eq("student_id", studentId);
