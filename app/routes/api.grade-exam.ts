@@ -42,11 +42,16 @@ interface QuestionForGrading {
 }
 
 export async function action({ request }: Route.ActionArgs) {
-  const { exam, answers, courseId, examType } = (await request.json()) as {
+  const { exam, answers, courseId, examType, questionsSubset } = (await request.json()) as {
     exam: { title: string; questions: QuestionForGrading[] };
     answers: Record<number, string>;
     courseId: string;
-    examType?: "past" | "ai";
+    examType?: "past" | "ai" | "mc";
+    /**
+     * Optional subset of question IDs to grade (open questions only).
+     * When present, only these questions are sent for AI grading.
+     */
+    questionsSubset?: number[];
   };
 
   if (!exam || !answers) {
@@ -62,8 +67,13 @@ export async function action({ request }: Route.ActionArgs) {
   const client = getOpenAIClient();
   const vectorStoreId = await getOrCreateVectorStore(db);
 
+  // When a questionsSubset is provided, only grade those questions (open ones).
+  const questionsToGrade = questionsSubset
+    ? exam.questions.filter((q) => questionsSubset.includes(q.id))
+    : exam.questions;
+
   // Format the exam and answers for the prompt
-  const examText = exam.questions
+  const examText = questionsToGrade
     .map((q) => {
       const answer = answers[q.id] ?? "(לא ענה)";
       const optionsText = q.options ? `\nאפשרויות: ${q.options.join(" | ")}` : "";
@@ -120,13 +130,16 @@ ${examText}
   }
 
   // Record grade in course_stats (fire-and-forget; don't block the response)
+  // "mc" exams are treated as "ai" for stats purposes.
   const totalGrade = (gradingResult as { total_grade?: number }).total_grade;
+  const statsExamType: "past" | "ai" =
+    examType === "past" ? "past" : "ai";
   if (courseId && typeof totalGrade === "number") {
     recordExamResult(
       student.id,
       courseId,
       totalGrade,
-      examType ?? "ai"
+      statsExamType
     ).catch((err) => console.error("[grade-exam] failed to record stats:", err));
   }
 

@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
+import { createServerClient } from "~/lib/supabase";
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 ניתן לך קובץ מבחן עבר של קורס אקדמי. המשימה שלך היא לקרוא את המבחן בעיון ולהפוך אותו למבחן אינטראקטיבי.
@@ -17,6 +18,12 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - שאלות נכון/לא נכון = true_false
 - שאלות פתוחות = open
 
+תשובות נכונות לשאלות אמריקאיות ונכון/לא נכון:
+- אם המסמך מכיל מפתח תשובות (answer key) — חלץ את התשובה הנכונה לכל שאלה בדיוק כפי שמופיעה במפתח.
+- אם אין מפתח תשובות — קבע את התשובה הנכונה על סמך תוכן השאלה, הידע הנלמד, וההגיון האקדמי.
+- בכל מקרה — תמיד כלול correct_answer לכל שאלת multiple_choice ו-true_false.
+- לשאלות פתוחות (open) — אל תכלול correct_answer.
+
 החזר את המבחן בפורמט JSON בדיוק עם המבנה הבא:
 {
   "title": "כותרת המבחן (כולל שם הקורס)",
@@ -27,6 +34,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
       "type": "multiple_choice",
       "question": "נוסח השאלה",
       "options": ["אופציה א", "אופציה ב", "אופציה ג", "אופציה ד"],
+      "correct_answer": "אופציה ב",
       "points": 10
     },
     {
@@ -34,6 +42,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
       "type": "true_false",
       "question": "נוסח השאלה",
       "options": ["נכון", "לא נכון"],
+      "correct_answer": "נכון",
       "points": 5
     },
     {
@@ -72,10 +81,8 @@ async function extractText(buffer: Buffer, url: string): Promise<string> {
   const lower = url.toLowerCase();
 
   if (lower.endsWith(".docx")) {
-    // extractRawText misses text inside shapes/text-boxes — fall back to HTML conversion
     const rawResult = await mammoth.extractRawText({ buffer });
     if (rawResult.value.trim()) return rawResult.value;
-    // Fallback: strip HTML tags from the full conversion
     const htmlResult = await mammoth.convertToHtml({ buffer });
     const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
     return plainText;
@@ -115,7 +122,18 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "אין קישור לקובץ — נסה לעלות מחדש" }, { status: 400 });
   }
 
-  // ── 1. Download the file from Supabase Storage ──────────────────────────────
+  // ── 0. Cache hit — return immediately if exam was already parsed ─────────
+  if (source.content) {
+    try {
+      const cached = JSON.parse(source.content as string);
+      return Response.json({ ok: true, exam: cached, sourceTopic: source.topic });
+    } catch {
+      // Corrupted cache — fall through to re-generate
+      console.warn("[generate-exam] Corrupted cache for source", sourceId, "— re-generating");
+    }
+  }
+
+  // ── 1. Download the file from Supabase Storage ───────────────────────────
   let fileBuffer: Buffer;
   try {
     fileBuffer = await fetchFileBuffer(source.file_url);
@@ -127,7 +145,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Extract text from the file ───────────────────────────────────────────
+  // ── 2. Extract text from the file ───────────────────────────────────────
   let examText: string;
   try {
     examText = await extractText(fileBuffer, source.file_url);
@@ -145,7 +163,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 3. Run chat completion with the extracted text ───────────────────────────
+  // ── 3. Run chat completion with the extracted text ───────────────────────
   const client = getOpenAIClient();
   let rawText: string;
   try {
@@ -181,7 +199,7 @@ ${examText}`,
     );
   }
 
-  // ── 4. Parse and return the JSON ─────────────────────────────────────────────
+  // ── 4. Parse the JSON ─────────────────────────────────────────────────────
   const jsonStr = extractJson(rawText);
   let examData: unknown;
   try {
@@ -193,6 +211,16 @@ ${examText}`,
       { status: 500 }
     );
   }
+
+  // ── 5. Cache the result in DB (fire-and-forget) ──────────────────────────
+  const db = createServerClient();
+  db.from("sources")
+    .update({ content: JSON.stringify(examData) })
+    .eq("id", sourceId)
+    .eq("student_id", student.id)
+    .then(({ error }) => {
+      if (error) console.warn("[generate-exam] Failed to cache exam in DB:", error.message);
+    });
 
   return Response.json({ ok: true, exam: examData, sourceTopic: source.topic });
 }
