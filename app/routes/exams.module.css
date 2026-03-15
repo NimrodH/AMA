@@ -313,3 +313,82 @@
 .textarea {
   width: stretch;
 }
+
+/* ── Exam buttons row ── */
+.examButtons {
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+/* ── MC exam options panel ── */
+.mcButtonGroup {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.mcOptions {
+  background: var(--color-accent-2);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-3);
+  padding: var(--space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  animation: var(--animation-fade-in);
+}
+
+.mcCountRow {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+}
+
+.mcCountInput {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.mcHint {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  margin: 0;
+}
+
+/* ── MC badge on exam header ── */
+.mcBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-round);
+  font: var(--font-caption);
+  padding: var(--space-1) var(--space-3);
+  margin-bottom: var(--space-3);
+}
+
+/* ── Question feedback color variants ── */
+.questionFeedbackCorrect {
+  background: var(--color-success-2) !important;
+  border-color: var(--color-success-6) !important;
+  color: var(--color-success-11) !important;
+}
+
+.questionFeedbackWrong {
+  background: var(--color-error-2) !important;
+  border-color: var(--color-error-6) !important;
+  color: var(--color-error-11) !important;
+}
+
+@media (max-width: 480px) {
+  .examButtons {
+    flex-direction: column;
+  }
+
+  .mcCountRow {
+    flex-wrap: wrap;
+  }
+}

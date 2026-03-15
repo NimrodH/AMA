@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, GraduationCap, Send, RotateCcw, Loader2, ClipboardList } from "lucide-react";
+import { Sparkles, GraduationCap, Send, RotateCcw, Loader2, ClipboardList, ListChecks, ChevronDown, ChevronUp } from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -7,6 +7,7 @@ import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Textarea } from "~/components/ui/textarea/textarea";
+import { Input } from "~/components/ui/input/input";
 import { getStudent, getActiveCourses } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./exams.module.css";
@@ -22,6 +23,8 @@ interface Question {
   type: "multiple_choice" | "open" | "true_false";
   question: string;
   options?: string[];
+  /** Present in MC exam — the correct answer string */
+  correct_answer?: string;
   points: number;
 }
 
@@ -29,6 +32,8 @@ interface ExamData {
   title: string;
   instructions: string;
   questions: Question[];
+  /** Marks this as a pure MC exam (4 options, AI grading with explanations) */
+  isMcExam?: boolean;
 }
 
 interface GradingResult {
@@ -90,15 +95,18 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [isGrading, setIsGrading] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [gradeError, setGradeError] = React.useState<string | null>(null);
-  // Track which course and type the currently displayed exam belongs to
   const [examCourseId, setExamCourseId] = React.useState<string>("");
-  const [examType, setExamType] = React.useState<"past" | "ai">("ai");
+  const [examType, setExamType] = React.useState<"past" | "ai" | "mc">("ai");
+
+  // MC exam question count selector
+  const [showMcOptions, setShowMcOptions] = React.useState(false);
+  const [mcQuestionCount, setMcQuestionCount] = React.useState(10);
 
   // Auto-generate exam from source when sourceId is in URL
   React.useEffect(() => {
     if (!sourceIdParam) return;
     generateFromSource(sourceIdParam);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sourceIdParam]);
 
   const generateFromSource = async (sourceId: string) => {
@@ -137,6 +145,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setExam(null);
     setAnswers({});
     setResults(null);
+    setShowMcOptions(false);
 
     try {
       const res = await fetch("/api/generate-exam-from-course", {
@@ -161,8 +170,95 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     }
   };
 
+  const handleGenerateMcExam = async () => {
+    setIsGenerating(true);
+    setGenerateError(null);
+    setExam(null);
+    setAnswers({});
+    setResults(null);
+    setShowMcOptions(false);
+
+    try {
+      const res = await fetch("/api/generate-mc-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: selectedCourse, questionCount: mcQuestionCount }),
+      });
+
+      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+
+      if (!data.ok || !data.exam) {
+        setGenerateError(data.error ?? "שגיאה בייצור המבחן");
+      } else {
+        // Tag the exam as MC so the grading + display logic is optimised for it
+        const mcExam: ExamData = { ...data.exam, isMcExam: true };
+        setExam(mcExam);
+        setExamCourseId(selectedCourse);
+        setExamType("mc");
+      }
+    } catch {
+      setGenerateError("שגיאת רשת — נסה שוב");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  /** Grade the MC exam client-side — no server round-trip needed for pure MC */
+  const gradeMcExamLocally = (): GradingResult => {
+    if (!exam) throw new Error("No exam");
+
+    const question_grades = exam.questions.map((q) => {
+      const selected = answers[q.id] ?? "";
+      const isCorrect = selected === q.correct_answer;
+      return {
+        question_id: q.id,
+        grade: isCorrect ? q.points : 0,
+        max_points: q.points,
+        feedback: isCorrect
+          ? "✓ תשובה נכונה"
+          : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
+        correct_answer: q.correct_answer,
+      };
+    });
+
+    const earned = question_grades.reduce((sum, g) => sum + g.grade, 0);
+    const total = question_grades.reduce((sum, g) => sum + g.max_points, 0);
+    const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
+
+    let overall_feedback: string;
+    let recommendations: string[] = [];
+
+    if (pct >= 90) {
+      overall_feedback = `מצוין! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). שליטה מעולה בחומר.`;
+    } else if (pct >= 70) {
+      overall_feedback = `טוב! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). יש מקום לשיפור בנושאים שנכשלת בהם.`;
+      recommendations = ["חזור על הנושאים שבהם טעית", "למד מחדש את ההרצאות הרלוונטיות"];
+    } else if (pct >= 50) {
+      overall_feedback = `יש מקום לשיפור — ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). מומלץ לחזור על חומר הקורס.`;
+      recommendations = ["חזור על כל חומרי הקורס", "שים לב לנושאים שבהם טעית", "נסה שוב לאחר חזרה"];
+    } else {
+      overall_feedback = `ציון נמוך — ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). מומלץ לעבור מחדש על כל ההרצאות.`;
+      recommendations = ["קרא מחדש את כל הרצאות הקורס", "השתמש בכרטיסיות הלמידה", "פנה לעזרה מהמרצה אם נדרש"];
+    }
+
+    return {
+      total_grade: pct,
+      question_grades,
+      overall_feedback,
+      recommendations,
+    };
+  };
+
   const handleSubmitExam = async () => {
     if (!exam) return;
+
+    // MC exams are graded locally — no need for an AI grading call
+    if (exam.isMcExam) {
+      const localResults = gradeMcExamLocally();
+      setResults(localResults);
+      return;
+    }
+
     setIsGrading(true);
     setGradeError(null);
 
@@ -212,10 +308,16 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
             <h2 className={styles.loadingTitle}>
-              {sourceIdParam ? "טוען מבחן מהקובץ..." : "מייצר מבחן אימון..."}
+              {examType === "mc"
+                ? `בונה מבחן אמריקאי עם ${mcQuestionCount} שאלות...`
+                : sourceIdParam
+                ? "טוען מבחן מהקובץ..."
+                : "מייצר מבחן אימון..."}
             </h2>
             <p className={styles.loadingSubtitle}>
-              {sourceIdParam
+              {examType === "mc"
+                ? "קורא את כל חומרי הקורס ובונה שאלות אמריקאיות מכל ההרצאות"
+                : sourceIdParam
                 ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
                 : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
             </p>
@@ -284,10 +386,71 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                 </Select>
               </div>
 
-              <Button type="button" onClick={handleGenerateExam} disabled={isGenerating || selectedCourse === "_empty"} size="lg">
-                <Sparkles style={{ marginLeft: "var(--space-2)" }} />
-                {isGenerating ? "מייצר מבחן..." : "צור מבחן עם AI"}
-              </Button>
+              {/* ── Action buttons ── */}
+              <div className={styles.examButtons}>
+                {/* Existing: full summary exam (renamed) */}
+                <Button
+                  type="button"
+                  onClick={handleGenerateExam}
+                  disabled={isGenerating || selectedCourse === "_empty"}
+                  size="lg"
+                  variant="outline"
+                >
+                  <Sparkles style={{ marginLeft: "var(--space-2)" }} />
+                  צור מלא סיכום
+                </Button>
+
+                {/* New: MC quiz */}
+                <div className={styles.mcButtonGroup}>
+                  <Button
+                    type="button"
+                    onClick={() => setShowMcOptions((v) => !v)}
+                    disabled={isGenerating || selectedCourse === "_empty"}
+                    size="lg"
+                  >
+                    <ListChecks style={{ marginLeft: "var(--space-2)" }} />
+                    צור מבחן אמריקאי
+                    {showMcOptions ? (
+                      <ChevronUp style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
+                    ) : (
+                      <ChevronDown style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
+                    )}
+                  </Button>
+
+                  {showMcOptions && (
+                    <div className={styles.mcOptions}>
+                      <Label htmlFor="mcCount">מספר שאלות</Label>
+                      <div className={styles.mcCountRow}>
+                        <Input
+                          id="mcCount"
+                          type="number"
+                          min={5}
+                          max={50}
+                          value={mcQuestionCount}
+                          onChange={(e) =>
+                            setMcQuestionCount(
+                              Math.max(5, Math.min(50, parseInt(e.target.value) || 10))
+                            )
+                          }
+                          className={styles.mcCountInput}
+                        />
+                        <Button
+                          type="button"
+                          onClick={handleGenerateMcExam}
+                          disabled={isGenerating || selectedCourse === "_empty"}
+                          size="lg"
+                        >
+                          <Sparkles style={{ marginLeft: "var(--space-2)" }} />
+                          בנה מבחן
+                        </Button>
+                      </div>
+                      <p className={styles.mcHint}>
+                        5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
 
               <div className={styles.fromSourceHint}>
                 <ClipboardList style={{ width: 16, height: 16, flexShrink: 0 }} />
@@ -303,6 +466,12 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
             <div className={styles.exam}>
               <div className={styles.examHeader}>
                 <h1 className={styles.examTitle}>{exam.title}</h1>
+                {exam.isMcExam && (
+                  <span className={styles.mcBadge}>
+                    <ListChecks style={{ width: 14, height: 14 }} />
+                    מבחן אמריקאי — {exam.questions.length} שאלות
+                  </span>
+                )}
                 {exam.instructions && (
                   <p className={styles.examInstructions}>{exam.instructions}</p>
                 )}
@@ -331,9 +500,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           {question.options?.map((option, idx) => {
                             const isSelected = answers[question.id] === option;
                             const isCorrect =
-                              results && questionGrade?.correct_answer === option;
+                              results &&
+                              (questionGrade?.correct_answer === option ||
+                                question.correct_answer === option);
                             const isWrong =
-                              results && isSelected && questionGrade?.correct_answer !== option;
+                              results &&
+                              isSelected &&
+                              questionGrade?.correct_answer !== option &&
+                              question.correct_answer !== option;
 
                             return (
                               <label
@@ -372,7 +546,13 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
 
                       {/* Per-question feedback after grading */}
                       {results && questionGrade && (
-                        <div className={styles.questionFeedback}>
+                        <div
+                          className={`${styles.questionFeedback} ${
+                            questionGrade.grade === questionGrade.max_points
+                              ? styles.questionFeedbackCorrect
+                              : styles.questionFeedbackWrong
+                          }`}
+                        >
                           <span className={styles.questionFeedbackScore}>
                             {questionGrade.grade}/{questionGrade.max_points}
                           </span>
@@ -400,7 +580,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                     <Send style={{ marginLeft: "var(--space-2)" }} />
                     {isGrading ? (
                       <>
-                        <Loader2 style={{ width: 16, height: 16, marginLeft: "var(--space-2)", animation: "var(--animation-spin)" }} />
+                        <Loader2
+                          style={{
+                            width: 16,
+                            height: 16,
+                            marginLeft: "var(--space-2)",
+                            animation: "var(--animation-spin)",
+                          }}
+                        />
                         בודק תשובות...
                       </>
                     ) : (
@@ -414,7 +601,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
             {results && (
               <div className={styles.results}>
                 <div className={styles.resultsHeader}>
-                  <p className={styles.resultsGrade}>{results.total_grade}</p>
+                  <p className={styles.resultsGrade}>{results.total_grade}%</p>
                   <p className={styles.resultsLabel}>הציון שלך</p>
                 </div>
                 <div className={styles.resultsFeedback}>{results.overall_feedback}</div>
