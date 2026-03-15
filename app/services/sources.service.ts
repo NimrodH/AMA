@@ -9,7 +9,7 @@ export type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 const BUCKET_NAME = "sources";
 
 const SOURCE_SELECT_FIELDS =
-  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, created_at";
+  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, extracted_text, created_at";
 
 /** Fetch a single source by ID (must belong to the student). */
 export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
