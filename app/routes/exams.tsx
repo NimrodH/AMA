@@ -1,5 +1,15 @@
 import * as React from "react";
-import { Sparkles, GraduationCap, Send, RotateCcw, Loader2, ClipboardList, ListChecks, ChevronDown, ChevronUp } from "lucide-react";
+import {
+  Sparkles,
+  GraduationCap,
+  Send,
+  RotateCcw,
+  Loader2,
+  ClipboardList,
+  ListChecks,
+  ChevronDown,
+  ChevronUp,
+} from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -214,9 +224,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         question_id: q.id,
         grade: isCorrect ? q.points : 0,
         max_points: q.points,
-        feedback: isCorrect
-          ? "✓ תשובה נכונה"
-          : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
+        feedback: isCorrect ? "✓ תשובה נכונה" : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
         correct_answer: q.correct_answer,
       };
     });
@@ -311,15 +319,15 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
               {examType === "mc"
                 ? `בונה מבחן אמריקאי עם ${mcQuestionCount} שאלות...`
                 : sourceIdParam
-                ? "טוען מבחן מהקובץ..."
-                : "מייצר מבחן אימון..."}
+                  ? "טוען מבחן מהקובץ..."
+                  : "מייצר מבחן אימון..."}
             </h2>
             <p className={styles.loadingSubtitle}>
               {examType === "mc"
                 ? "קורא את כל חומרי הקורס ובונה שאלות אמריקאיות מכל ההרצאות"
                 : sourceIdParam
-                ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
-                : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
+                  ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
+                  : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
             </p>
           </div>
         </div>
@@ -397,7 +405,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                   variant="outline"
                 >
                   <Sparkles style={{ marginLeft: "var(--space-2)" }} />
-                  צור מלא סיכום
+                  צור מבחן סיכום
                 </Button>
 
                 {/* New: MC quiz */}
@@ -428,9 +436,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           max={50}
                           value={mcQuestionCount}
                           onChange={(e) =>
-                            setMcQuestionCount(
-                              Math.max(5, Math.min(50, parseInt(e.target.value) || 10))
-                            )
+                            setMcQuestionCount(Math.max(5, Math.min(50, parseInt(e.target.value) || 10)))
                           }
                           className={styles.mcCountInput}
                         />
@@ -444,9 +450,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           בנה מבחן
                         </Button>
                       </div>
-                      <p className={styles.mcHint}>
-                        5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות
-                      </p>
+                      <p className={styles.mcHint}>5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות</p>
                     </div>
                   )}
                 </div>
@@ -455,8 +459,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
               <div className={styles.fromSourceHint}>
                 <ClipboardList style={{ width: 16, height: 16, flexShrink: 0 }} />
                 <span>
-                  כדי לתרגל מבחן עבר ספציפי, עבור למקורות לימוד ולחץ על{" "}
-                  <strong>הצג כבחינה</strong> על מבחן עבר
+                  כדי לתרגל מבחן עבר ספציפי, עבור למקורות לימוד ולחץ על <strong>הצג כבחינה</strong> על מבחן עבר
                 </span>
               </div>
             </form>
@@ -472,16 +475,12 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                     מבחן אמריקאי — {exam.questions.length} שאלות
                   </span>
                 )}
-                {exam.instructions && (
-                  <p className={styles.examInstructions}>{exam.instructions}</p>
-                )}
+                {exam.instructions && <p className={styles.examInstructions}>{exam.instructions}</p>}
               </div>
 
               <div className={styles.questions}>
                 {exam.questions.map((question) => {
-                  const questionGrade = results?.question_grades?.find(
-                    (g) => g.question_id === question.id
-                  );
+                  const questionGrade = results?.question_grades?.find((g) => g.question_id === question.id);
 
                   return (
                     <div key={question.id} className={styles.question}>
@@ -489,9 +488,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                         <span className={styles.questionNumber}>שאלה {question.id}</span>
                         <p className={styles.questionText}>{question.question}</p>
                         <span className={styles.questionPoints}>
-                          {results
-                            ? `${questionGrade?.grade ?? 0}/${question.points}`
-                            : `${question.points} נקודות`}
+                          {results ? `${questionGrade?.grade ?? 0}/${question.points}` : `${question.points} נקודות`}
                         </span>
                       </div>
 
@@ -501,8 +498,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                             const isSelected = answers[question.id] === option;
                             const isCorrect =
                               results &&
-                              (questionGrade?.correct_answer === option ||
-                                question.correct_answer === option);
+                              (questionGrade?.correct_answer === option || question.correct_answer === option);
                             const isWrong =
                               results &&
                               isSelected &&
@@ -519,9 +515,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                                   name={`question-${question.id}`}
                                   value={option}
                                   checked={isSelected}
-                                  onChange={(e) =>
-                                    !results && handleAnswerChange(question.id, e.target.value)
-                                  }
+                                  onChange={(e) => !results && handleAnswerChange(question.id, e.target.value)}
                                   disabled={!!results}
                                 />
                                 <span>{option}</span>
@@ -533,9 +527,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                         <div className={styles.answerArea}>
                           <Textarea
                             value={answers[question.id] || ""}
-                            onChange={(e) =>
-                              !results && handleAnswerChange(question.id, e.target.value)
-                            }
+                            onChange={(e) => !results && handleAnswerChange(question.id, e.target.value)}
                             placeholder={results ? "" : "כתוב את תשובתך כאן..."}
                             rows={6}
                             className={styles.textarea}
