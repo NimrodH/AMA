@@ -77,46 +77,67 @@ export function isReminderDueToday(reminderTime: string): boolean {
   return DAY_CODE_TO_JS[dayCode] === todayJs;
 }
 
-// ─── Daily-dismissal persistence via localStorage ────────────────────────────
+// ─── Reminder pending/completion model ───────────────────────────────────────
+//
+// "reminders_pending" is a permanent localStorage set of reminder IDs that
+// have fired (been shown) at least once but not yet been completed ("בוצע").
+//
+//  • When a reminder is due today → add its ID to pending → show banner.
+//  • When user clicks "בוצע" → remove from pending → hide banner.
+//  • If the user never clicks "בוצע", the ID stays in pending and the banner
+//    continues to appear on all subsequent visits until explicitly completed.
+//  • For recurring reminders: they re-enter pending each time they fire on a
+//    new due day (added again if they had been previously completed).
 
-const DISMISSED_KEY = "reminders_dismissed";
-
-/** Returns today's date string in YYYY-MM-DD format (local time). */
-function todayKey(): string {
-  const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-}
+const PENDING_KEY = "reminders_pending";
 
 /**
- * Loads the set of reminder IDs dismissed **today** from localStorage.
- * Entries from previous days are automatically discarded.
+ * Loads the set of currently pending (shown but not completed) reminder IDs
+ * from localStorage.
  */
-export function loadDismissedToday(): Set<string> {
+export function loadPendingReminders(): Set<string> {
   if (typeof window === "undefined") return new Set();
   try {
-    const raw = localStorage.getItem(DISMISSED_KEY);
+    const raw = localStorage.getItem(PENDING_KEY);
     if (!raw) return new Set();
-    const parsed = JSON.parse(raw) as { date: string; ids: string[] };
-    if (parsed.date !== todayKey()) return new Set(); // stale — new day
-    return new Set(parsed.ids);
+    return new Set(JSON.parse(raw) as string[]);
   } catch {
     return new Set();
   }
 }
 
 /**
- * Persists the full set of dismissed reminder IDs for today to localStorage.
+ * Saves the full set of pending reminder IDs to localStorage.
  */
-export function saveDismissedToday(ids: Set<string>): void {
+function savePendingReminders(ids: Set<string>): void {
   if (typeof window === "undefined") return;
   try {
-    localStorage.setItem(
-      DISMISSED_KEY,
-      JSON.stringify({ date: todayKey(), ids: Array.from(ids) })
-    );
+    localStorage.setItem(PENDING_KEY, JSON.stringify(Array.from(ids)));
   } catch {
     // localStorage quota exceeded — fail silently
   }
+}
+
+/**
+ * Adds the given reminder IDs to the pending set (they have fired today).
+ * Returns the updated set.
+ */
+export function addPendingReminders(ids: string[], pending: Set<string>): Set<string> {
+  const next = new Set(pending);
+  for (const id of ids) next.add(id);
+  savePendingReminders(next);
+  return next;
+}
+
+/**
+ * Marks a reminder as completed — removes it from the pending set.
+ * Returns the updated set.
+ */
+export function completeReminder(id: string, pending: Set<string>): Set<string> {
+  const next = new Set(pending);
+  next.delete(id);
+  savePendingReminders(next);
+  return next;
 }
 
 /** Heuristic parser for old free-text reminder_time values. */

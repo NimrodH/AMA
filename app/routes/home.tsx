@@ -6,7 +6,13 @@ import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
 import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
-import { isReminderDueToday, formatReminderTime, loadDismissedToday, saveDismissedToday } from "~/lib/reminder-utils";
+import {
+  isReminderDueToday,
+  formatReminderTime,
+  loadPendingReminders,
+  addPendingReminders,
+  completeReminder,
+} from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./home.module.css";
 
@@ -28,15 +34,13 @@ export async function loader({}: Route.LoaderArgs) {
     student ? getAllCourseStats(student.id) : Promise.resolve([]),
   ]);
 
-  // Only surface active reminders that are due today
-  const dueReminders = allReminders.filter(
-    (r) => r.is_active && isReminderDueToday(r.reminder_time)
-  );
+  // Return all active reminders — client-side manages which are pending/visible
+  const activeReminders = allReminders.filter((r) => r.is_active);
 
   return {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
-    dueReminders,
+    activeReminders,
     courses,
     courseStats,
   };
@@ -139,7 +143,7 @@ function CourseStatsTable({
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     studentName,
-    dueReminders,
+    activeReminders,
     courses,
     courseStats,
   } = loaderData;
@@ -152,16 +156,32 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     writeSelectedCourse(value);
   };
 
-  // Load dismissed IDs from localStorage (today only — auto-resets at midnight)
-  const [dismissedIds, setDismissedIds] = React.useState<Set<string>>(() => loadDismissedToday());
-  const visibleReminders = dueReminders.filter((r) => !dismissedIds.has(r.id));
+  /**
+   * Pending reminders: a persistent set of IDs shown but not yet completed.
+   *
+   * On mount:
+   *  1. Load existing pending set from localStorage.
+   *  2. Add any reminders that are due today (they may already be in the set,
+   *     that's fine — Set deduplicates). This ensures recurring reminders
+   *     re-appear on each new due day even if previously completed.
+   *
+   * A reminder banner is shown for every ID in `pending`.
+   * Clicking "בוצע" removes the ID from `pending` permanently.
+   */
+  const [pending, setPending] = React.useState<Set<string>>(() => {
+    const stored = loadPendingReminders();
+    // Eagerly add today's due reminders so first render already shows them
+    const todayIds = activeReminders
+      .filter((r) => isReminderDueToday(r.reminder_time))
+      .map((r) => r.id);
+    return addPendingReminders(todayIds, stored);
+  });
+
+  // Show banners for reminders that are in the pending set
+  const visibleReminders = activeReminders.filter((r) => pending.has(r.id));
 
   function handleDismiss(id: string) {
-    setDismissedIds((prev) => {
-      const next = new Set(prev).add(id);
-      saveDismissedToday(next);
-      return next;
-    });
+    setPending((prev) => completeReminder(id, prev));
   }
 
   return (
@@ -214,7 +234,6 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         {courseStats.length > 0 && (
           <CourseStatsTable stats={courseStats} courses={courses} />
         )}
-
 
       </div>
     </AppLayout>
