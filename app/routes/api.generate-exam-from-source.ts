@@ -89,7 +89,10 @@ async function extractText(buffer: Buffer, url: string): Promise<string> {
   }
 
   if (lower.endsWith(".pdf")) {
-    const pdfParse = await import("pdf-parse") as unknown as (buf: Buffer) => Promise<{ text: string }>;
+    // pdf-parse ships as a CJS module; when bundled it may land on .default
+    // or on the module object itself — handle both cases at runtime.
+    const pdfParseModule = await import("pdf-parse") as unknown as { default?: (buf: Buffer) => Promise<{ text: string }> } & ((buf: Buffer) => Promise<{ text: string }>);
+    const pdfParse = pdfParseModule.default ?? pdfParseModule;
     const data = await pdfParse(buffer);
     return data.text;
   }
