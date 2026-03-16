@@ -21,12 +21,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - כל השאלות מבוססות אך ורק על תוכן ההרצאות שסופקו
 - כתוב בעברית
 
-חשוב מאוד: השתמש בכלי file_search כדי לאחזר:
-1. את תוכן מבחני העבר (source_type=Past exam) של הקורס (course_id) — ללמוד מהם את המבנה בלבד
-המבנה צריך להיות זהה לאחד ממבחני העבר של הקורס
-2. את תוכן הרצאות הקורס (source_type=Lecture) — לבנות מהם את השאלות החדשות
-בצע חיפוש רחב בכל המסמכים של הקורס שצורפו.
-
 החזר את המבחן בפורמט JSON כאשר השאלות מוצגות באופן הבא:
 {
   "title": "כותרת המבחן (שם הקורס + 'מבחן אימון')",
@@ -67,6 +61,45 @@ function extractJson(text: string): string {
   return text;
 }
 
+/** Build a compound filter for the vector store scoped to student + course + source_type. */
+function buildFilter(studentId: string, courseId: string, sourceType: string) {
+  return {
+    type: "and" as const,
+    filters: [
+      { type: "eq" as const, key: "student_id", value: studentId },
+      { type: "eq" as const, key: "course_id", value: courseId },
+      { type: "eq" as const, key: "source_type", value: sourceType },
+    ],
+  };
+}
+
+/**
+ * Runs a retrieval-only responses.create call to pull grounded text from the
+ * vector store without generating a full answer.  Returns the raw output text
+ * which contains the retrieved chunks inline.
+ */
+async function retrieveContent(
+  client: ReturnType<typeof getOpenAIClient>,
+  vectorStoreId: string,
+  studentId: string,
+  courseId: string,
+  sourceType: string,
+  query: string
+): Promise<string> {
+  const response = await client.responses.create({
+    model: "gpt-4o",
+    tools: [
+      {
+        type: "file_search",
+        vector_store_ids: [vectorStoreId],
+        filters: buildFilter(studentId, courseId, sourceType),
+      },
+    ],
+    input: query,
+  });
+  return response.output_text?.trim() ?? "";
+}
+
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -101,98 +134,117 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Collect vector store file IDs for all sources ────────────────────
-  const allSources = [...pastExams, ...lectures];
-  const vectorStoreFileIds = allSources
-    .map((s) => s.vector_store_file_id)
-    .filter(Boolean) as string[];
+  // ── 2. Check whether files are indexed in the vector store ───────────────
+  const pastExamFileIds = pastExams.map((s) => s.vector_store_file_id).filter(Boolean);
+  const lectureFileIds = lectures.map((s) => s.vector_store_file_id).filter(Boolean);
 
-  // ── 3. Build the user prompt listing available sources ───────────────────
-  const pastExamList = pastExams
-    .map((s) => `• ${s.topic}`)
-    .join("\n");
-
-  const lectureList = lectures
-    .map((s) => {
-      const label = s.lecture_number
-        ? `הרצאה ${s.lecture_number} — ${s.topic}`
-        : `${s.topic} (כלל הקורס)`;
-      return `• ${label}`;
-    })
-    .join("\n");
-
-  const userPrompt = `קורס: ${courseId}
-
-מבחני עבר זמינים (למד מהם את מבנה המבחן בלבד — אל תעתיק שאלות):
-${pastExamList}
-
-הרצאות הקורס הזמינות (בנה מהן את השאלות החדשות):
-${lectureList}
-
-בצע חיפוש רחב בכל המסמכים באמצעות file_search כדי לאחזר את התוכן המלא של כל אחד מהמקורות לעיל, ולאחר מכן בנה מבחן אימון חדש לפי ההוראות.`;
-
-  // ── 4. Call OpenAI with file_search (like card-feedback) ─────────────────
   const client = getOpenAIClient();
   const db = createServerClient();
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   let rawText: string;
 
-  try {
-    if (vectorStoreFileIds.length > 0) {
-      // Use the vector store — identical pattern to card-feedback
-      // Filter by student_id so only this student's files are searched
-      const response = await client.responses.create({
+  if (pastExamFileIds.length > 0 && lectureFileIds.length > 0) {
+    // ── 3a. Two-phase retrieval: past exams for STRUCTURE, lectures for CONTENT
+    //        Each retrieval is filtered strictly by source_type so there is zero
+    //        cross-contamination between the two corpora.
+    const pastExamList = pastExams.map((s) => `• ${s.topic}`).join("\n");
+    const lectureList = lectures
+      .map((s) => (s.lecture_number ? `הרצאה ${s.lecture_number} — ${s.topic}` : `${s.topic} (כלל הקורס)`))
+      .map((l) => `• ${l}`)
+      .join("\n");
+
+    let pastExamContext = "";
+    let lectureContext = "";
+
+    try {
+      [pastExamContext, lectureContext] = await Promise.all([
+        retrieveContent(
+          client,
+          vectorStoreId,
+          student.id,
+          courseId,
+          "Past exam",
+          `אחזר את כל מבחני העבר של קורס ${courseId}. מבחנים אלה:\n${pastExamList}`
+        ),
+        retrieveContent(
+          client,
+          vectorStoreId,
+          student.id,
+          courseId,
+          "Lecture",
+          `אחזר את כל תוכן הרצאות קורס ${courseId}. הרצאות:\n${lectureList}`
+        ),
+      ]);
+    } catch (err) {
+      console.error("[generate-exam-from-course] Retrieval error:", err);
+      return Response.json({ ok: false, error: "שגיאה בשליפת תוכן מהמאגר — נסה שוב" }, { status: 502 });
+    }
+
+    // ── 4a. Generate exam using the separately-retrieved contexts ─────────
+    const generationPrompt = `קורס: ${courseId}
+
+=== מבנה מבחני עבר של הקורס (השתמש ONLY לקביעת מבנה: כמות שאלות וניקוד) ===
+${pastExamContext || pastExamList}
+
+=== תוכן הרצאות הקורס (השתמש ONLY לכתיבת השאלות החדשות) ===
+${lectureContext || lectureList}
+
+בנה מבחן אימון חדש לפי ההוראות:
+- המבנה (מספר שאלות מכל סוג, ניקוד) חייב להיות זהה למבחני העבר של הקורס
+- תוכן כל שאלה חייב להתבסס אך ורק על תוכן ההרצאות`;
+
+    try {
+      const response = await client.chat.completions.create({
         model: "gpt-4o",
-        tools: [
-          {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId],
-            filters: {
-              type: "and" as const,
-              filters: [
-                { type: "eq" as const, key: "student_id", value: student.id },
-                { type: "eq" as const, key: "course_id", value: courseId },
-              ],
-            },
-          },
-        ],
-        input: [
+        messages: [
           { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: userPrompt },
+          { role: "user", content: generationPrompt },
         ],
       });
+      rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    } catch (err) {
+      console.error("[generate-exam-from-course] Generation error:", err);
+      return Response.json({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" }, { status: 502 });
+    }
+  } else {
+    // ── 3b. Fallback: no indexed files — use topic names only ─────────────
+    console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
 
-      rawText = response.output_text?.trim() ?? "";
-    } else {
-      // No vector store files — fall back to chat completion without RAG
-      // (should be rare; sources were uploaded but not indexed yet)
-      console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
+    const pastExamList = pastExams.map((s) => `• ${s.topic}`).join("\n");
+    const lectureList = lectures
+      .map((s) => (s.lecture_number ? `הרצאה ${s.lecture_number} — ${s.topic}` : `${s.topic} (כלל הקורס)`))
+      .map((l) => `• ${l}`)
+      .join("\n");
+
+    try {
       const response = await client.chat.completions.create({
         model: "gpt-4o",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
-            content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות בלבד.`,
+            content: `קורס: ${courseId}
+
+מבחני עבר זמינים (למד מהם את מבנה המבחן בלבד):
+${pastExamList}
+
+הרצאות הקורס הזמינות:
+${lectureList}
+
+שים לב: לא נמצאו קבצים מאינדקס. בנה מבחן בסיסי לפי שמות ההרצאות בלבד.`,
           },
         ],
       });
       rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    } catch (err) {
+      console.error("[generate-exam-from-course] OpenAI error:", err);
+      return Response.json({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" }, { status: 502 });
     }
-  } catch (err) {
-    console.error("[generate-exam-from-course] OpenAI error:", err);
-    return Response.json(
-      { ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" },
-      { status: 502 }
-    );
   }
 
   if (!rawText) {
-    return Response.json(
-      { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-      { status: 500 }
-    );
+    return Response.json({ ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" }, { status: 500 });
   }
 
   // ── 5. Parse and return ───────────────────────────────────────────────────
@@ -202,10 +254,7 @@ ${lectureList}
     examData = JSON.parse(jsonStr);
   } catch {
     console.error("[generate-exam-from-course] Failed to parse JSON:", rawText);
-    return Response.json(
-      { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
-      { status: 500 }
-    );
+    return Response.json({ ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" }, { status: 500 });
   }
 
   return Response.json({ ok: true, exam: examData });
