@@ -392,3 +392,115 @@
     flex-wrap: wrap;
   }
 }
+
+/* ── Saved exams section ── */
+.savedExams {
+  background: var(--color-neutral-2);
+  border-radius: var(--radius-4);
+  padding: var(--space-5) var(--space-6);
+  box-shadow: var(--shadow-2);
+  border: 1px solid var(--color-neutral-6);
+}
+
+.savedExamsHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+
+.savedExamsIcon {
+  width: 20px;
+  height: 20px;
+  color: var(--color-accent-9);
+  flex-shrink: 0;
+}
+
+.savedExamsTitle {
+  font: var(--font-subheading);
+  font-weight: 700;
+  color: var(--color-neutral-12);
+  margin: 0;
+  flex: 1;
+}
+
+.savedExamsCount {
+  font: var(--font-caption);
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-round);
+  padding: 2px var(--space-3);
+  font-weight: 700;
+}
+
+.savedExamsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.savedExamCard {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  background: var(--color-neutral-1);
+  border: 1px solid var(--color-neutral-5);
+  border-radius: var(--radius-3);
+  padding: var(--space-4) var(--space-5);
+  transition: border-color 0.15s var(--ease-out), box-shadow 0.15s var(--ease-out);
+}
+
+.savedExamCard:hover {
+  border-color: var(--color-accent-7);
+  box-shadow: var(--shadow-1);
+}
+
+.savedExamInfo {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.savedExamTitleRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.savedExamTitle {
+  font: var(--font-body);
+  font-weight: 600;
+  color: var(--color-neutral-12);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.savedExamMeta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.savedExamMetaItem {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+}
+
+@media (max-width: 480px) {
+  .savedExamCard {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .savedExams {
+    padding: var(--space-4);
+  }
+}

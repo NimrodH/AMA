@@ -4,6 +4,7 @@ import { getOpenAIClient } from "~/lib/openai.server";
 import { getStudent } from "~/services/settings.service";
 import { getSourceById } from "~/services/sources.service";
 import { createServerClient } from "~/lib/supabase";
+import { saveExam } from "~/services/exams.service";
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 ניתן לך קובץ מבחן עבר של קורס אקדמי. המשימה שלך היא לקרוא את המבחן בעיון ולהפוך אותו למבחן אינטראקטיבי.
@@ -129,6 +130,14 @@ export async function action({ request }: Route.ActionArgs) {
   if (source.content) {
     try {
       const cached = JSON.parse(source.content as string);
+      // Also save to the exams table (fire-and-forget, de-duplicates on title/date naturally)
+      saveExam({
+        studentId: student.id,
+        courseId: source.course_id,
+        title: (cached as { title?: string })?.title ?? source.topic,
+        examType: "past",
+        examContent: cached as object,
+      }).catch(() => {});
       return Response.json({ ok: true, exam: cached, sourceTopic: source.topic });
     } catch {
       // Corrupted cache — fall through to re-generate
@@ -224,6 +233,16 @@ ${examText}`,
     .then(({ error }) => {
       if (error) console.warn("[generate-exam] Failed to cache exam in DB:", error.message);
     });
+
+  // 		6. Save exam to DB (fire-and-forget) 																																
+  const examObj = examData as { title?: string };
+  saveExam({
+    studentId: student.id,
+    courseId: source.course_id,
+    title: examObj?.title ?? source.topic,
+    examType: "past",
+    examContent: examData as object,
+  }).catch((err) => console.warn("[generate-exam-from-source] save exam failed:", err));
 
   return Response.json({ ok: true, exam: examData, sourceTopic: source.topic });
 }

@@ -3,6 +3,7 @@ import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { getStudent } from "~/services/settings.service";
 import { getSourcesByCourse } from "~/services/sources.service";
+import { saveExam } from "~/services/exams.service";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -175,6 +176,16 @@ ${lectureList}
       { status: 500 }
     );
   }
+
+  // 		6. Save exam to DB (fire-and-forget) 																																
+  const examObj = examData as { title?: string };
+  saveExam({
+    studentId: student.id,
+    courseId,
+    title: examObj?.title ?? `${courseId} — מבחן אמריקאי`,
+    examType: "mc",
+    examContent: examData as object,
+  }).catch((err) => console.warn("[generate-mc-exam] save exam failed:", err));
 
   return Response.json({ ok: true, exam: examData });
 }

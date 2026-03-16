@@ -9,6 +9,9 @@ import {
   ListChecks,
   ChevronDown,
   ChevronUp,
+  BookOpen,
+  Calendar,
+  Trophy,
 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
@@ -18,7 +21,9 @@ import { Label } from "~/components/ui/label/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Input } from "~/components/ui/input/input";
+import { Badge } from "~/components/ui/badge/badge";
 import { getStudent, getActiveCourses } from "~/services/settings.service";
+import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./exams.module.css";
 
@@ -33,7 +38,6 @@ interface Question {
   type: "multiple_choice" | "open" | "true_false";
   question: string;
   options?: string[];
-  /** Present in MC exam — the correct answer string */
   correct_answer?: string;
   points: number;
 }
@@ -42,7 +46,6 @@ interface ExamData {
   title: string;
   instructions: string;
   questions: Question[];
-  /** Marks this as a pure MC exam (4 options, AI grading with explanations) */
   isMcExam?: boolean;
 }
 
@@ -63,15 +66,42 @@ interface GradingResult {
 
 export async function loader() {
   const student = await getStudent();
-  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>> };
+  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "" };
   const courses = await getActiveCourses(student.id);
-  return { courses };
+  // Load exams for all courses (we'll filter client-side by selected course)
+  const savedExams = courses.length > 0
+    ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id)))).flat()
+    : [];
+  return { courses, savedExams, studentId: student.id };
+}
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatExamDate(dateStr: string | null): string {
+  if (!dateStr) return "";
+  const d = new Date(dateStr);
+  return d.toLocaleDateString("he-IL", { day: "numeric", month: "long", year: "numeric" });
+}
+
+function examTypeLabel(type: string | null): string {
+  switch (type) {
+    case "ai": return "מבחן אימון";
+    case "mc": return "מבחן אמריקאי";
+    case "past": return "מבחן עבר";
+    default: return "מבחן";
+  }
+}
+
+function examTypeBadgeVariant(type: string | null): "default" | "secondary" | "outline" {
+  if (type === "mc") return "default";
+  if (type === "past") return "secondary";
+  return "outline";
 }
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function Exams({ loaderData }: Route.ComponentProps) {
-  const { courses } = loaderData;
+  const { courses, savedExams } = loaderData;
   const [searchParams] = useSearchParams();
   const sourceIdParam = searchParams.get("sourceId");
 
@@ -82,7 +112,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     return courses[0].course_id;
   });
 
-  // Sync selected course when courses list changes (e.g. after hydration)
   React.useEffect(() => {
     if (courses.length === 0) {
       setSelectedCourse("_empty");
@@ -108,9 +137,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [examCourseId, setExamCourseId] = React.useState<string>("");
   const [examType, setExamType] = React.useState<"past" | "ai" | "mc">("ai");
 
-  // MC exam question count selector
   const [showMcOptions, setShowMcOptions] = React.useState(false);
   const [mcQuestionCount, setMcQuestionCount] = React.useState(10);
+
+  // Saved exams filtered by selected course
+  const courseExams = React.useMemo(
+    () => savedExams.filter((e) => e.course_id === selectedCourse),
+    [savedExams, selectedCourse]
+  );
 
   // Auto-generate exam from source when sourceId is in URL
   React.useEffect(() => {
@@ -200,7 +234,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       if (!data.ok || !data.exam) {
         setGenerateError(data.error ?? "שגיאה בייצור המבחן");
       } else {
-        // Tag the exam as MC so the grading + display logic is optimised for it
         const mcExam: ExamData = { ...data.exam, isMcExam: true };
         setExam(mcExam);
         setExamCourseId(selectedCourse);
@@ -213,7 +246,22 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     }
   };
 
-  /** Grade the MC exam client-side — no server round-trip needed for pure MC */
+  /** Load a saved exam from the DB row and open it for answering. */
+  const handleOpenSavedExam = (row: ExamRow) => {
+    try {
+      const parsed = JSON.parse(row.exam_content) as ExamData;
+      const withFlag: ExamData = row.exam_type === "mc" ? { ...parsed, isMcExam: true } : parsed;
+      setExam(withFlag);
+      setExamCourseId(row.course_id);
+      setExamType((row.exam_type as "ai" | "mc" | "past") ?? "ai");
+      setAnswers({});
+      setResults(null);
+      setGenerateError(null);
+    } catch {
+      setGenerateError("לא ניתן לטעון את המבחן — הנתון פגום");
+    }
+  };
+
   const gradeMcExamLocally = (): GradingResult => {
     if (!exam) throw new Error("No exam");
 
@@ -249,25 +297,18 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       recommendations = ["קרא מחדש את כל הרצאות הקורס", "השתמש בכרטיסיות הלמידה", "פנה לעזרה מהמרצה אם נדרש"];
     }
 
-    return {
-      total_grade: pct,
-      question_grades,
-      overall_feedback,
-      recommendations,
-    };
+    return { total_grade: pct, question_grades, overall_feedback, recommendations };
   };
 
   const handleSubmitExam = async () => {
     if (!exam) return;
 
-    // Pure MC exams (generated by AI) — grade fully locally
     if (exam.isMcExam) {
       const localResults = gradeMcExamLocally();
       setResults(localResults);
       return;
     }
 
-    // Past exams: grade MC/true_false locally, send open questions to AI
     if (examType === "past") {
       setIsGrading(true);
       setGradeError(null);
@@ -278,7 +319,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         );
         const openQuestions = exam.questions.filter((q) => q.type === "open");
 
-        // ── Grade MC / true-false locally ──────────────────────────────────
         const closedGrades = closedQuestions.map((q) => {
           const selected = answers[q.id] ?? "";
           const isCorrect = selected === q.correct_answer;
@@ -293,7 +333,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           };
         });
 
-        // ── Grade open questions via AI ────────────────────────────────────
         let openGrades: GradingResult["question_grades"] = [];
         let aiOverallFeedback = "";
         let aiRecommendations: string[] = [];
@@ -322,7 +361,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           aiRecommendations = data.results.recommendations ?? [];
         }
 
-        // ── Merge results ──────────────────────────────────────────────────
         const allGrades = [...closedGrades, ...openGrades].sort(
           (a, b) => a.question_id - b.question_id
         );
@@ -339,12 +377,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           else overall_feedback = `ציון נמוך — ${pct}% (${earned}/${total} נקודות). מומלץ לעבור שוב על החומר.`;
         }
 
-        setResults({
-          total_grade: pct,
-          question_grades: allGrades,
-          overall_feedback,
-          recommendations: aiRecommendations,
-        });
+        setResults({ total_grade: pct, question_grades: allGrades, overall_feedback, recommendations: aiRecommendations });
       } catch {
         setGradeError("שגיאת רשת — נסה שוב");
       } finally {
@@ -353,7 +386,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    // AI / summary exam — send everything to AI
     setIsGrading(true);
     setGradeError(null);
 
@@ -395,7 +427,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setGradeError(null);
   };
 
-  // Loading state — generating exam from source
+  // Loading state
   if (isGenerating) {
     return (
       <AppLayout title="מבחנים">
@@ -426,131 +458,198 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     <AppLayout title="מבחנים">
       <div className={styles.exams}>
         {!exam ? (
-          <div className={styles.generator}>
-            <div className={styles.generatorHeader}>
-              <div className={styles.generatorIcon}>
-                <GraduationCap />
+          <>
+            {/* ── Generator card ── */}
+            <div className={styles.generator}>
+              <div className={styles.generatorHeader}>
+                <div className={styles.generatorIcon}>
+                  <GraduationCap />
+                </div>
+                <h2 className={styles.generatorTitle}>צור מבחן אימון חדש</h2>
               </div>
-              <h2 className={styles.generatorTitle}>צור מבחן אימון חדש</h2>
-            </div>
 
-            {generateError && (
-              <div className={styles.generateError}>
-                <p>{generateError}</p>
-              </div>
-            )}
+              {generateError && (
+                <div className={styles.generateError}>
+                  <p>{generateError}</p>
+                </div>
+              )}
 
-            <form className={styles.generatorForm}>
-              <div>
-                <Label htmlFor="examCourse">קורס</Label>
-                <Select
-                  value={selectedCourse}
-                  onValueChange={(v) => {
-                    setSelectedCourse(v);
-                    writeSelectedCourse(v);
-                  }}
-                >
-                  <SelectTrigger id="examCourse">
-                    <SelectValue placeholder="בחר קורס" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {courses.length === 0 ? (
-                      <SelectItem value="_empty" disabled>
-                        אין קורסים — הוסף קורס בהגדרות
-                      </SelectItem>
-                    ) : (
-                      courses.map((course) => (
-                        <SelectItem key={course.id} value={course.course_id}>
-                          {course.course_name}
+              <form className={styles.generatorForm}>
+                <div>
+                  <Label htmlFor="examCourse">קורס</Label>
+                  <Select
+                    value={selectedCourse}
+                    onValueChange={(v) => {
+                      setSelectedCourse(v);
+                      writeSelectedCourse(v);
+                    }}
+                  >
+                    <SelectTrigger id="examCourse">
+                      <SelectValue placeholder="בחר קורס" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {courses.length === 0 ? (
+                        <SelectItem value="_empty" disabled>
+                          אין קורסים — הוסף קורס בהגדרות
                         </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
-              </div>
+                      ) : (
+                        courses.map((course) => (
+                          <SelectItem key={course.id} value={course.course_id}>
+                            {course.course_name}
+                          </SelectItem>
+                        ))
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              <div>
-                <Label htmlFor="examTopic">נושאים (אופציונלי)</Label>
-                <Select>
-                  <SelectTrigger id="examTopic">
-                    <SelectValue placeholder="כל הנושאים" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="all">כל הנושאים</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
+                <div>
+                  <Label htmlFor="examTopic">נושאים (אופציונלי)</Label>
+                  <Select>
+                    <SelectTrigger id="examTopic">
+                      <SelectValue placeholder="כל הנושאים" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">כל הנושאים</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
 
-              {/* ── Action buttons ── */}
-              <div className={styles.examButtons}>
-                {/* Existing: full summary exam (renamed) */}
-                <Button
-                  type="button"
-                  onClick={handleGenerateExam}
-                  disabled={isGenerating || selectedCourse === "_empty"}
-                  size="lg"
-                  variant="outline"
-                >
-                  <Sparkles style={{ marginLeft: "var(--space-2)" }} />
-                  צור מבחן סיכום
-                </Button>
-
-                {/* New: MC quiz */}
-                <div className={styles.mcButtonGroup}>
+                <div className={styles.examButtons}>
                   <Button
                     type="button"
-                    onClick={() => setShowMcOptions((v) => !v)}
+                    onClick={handleGenerateExam}
                     disabled={isGenerating || selectedCourse === "_empty"}
                     size="lg"
+                    variant="outline"
                   >
-                    <ListChecks style={{ marginLeft: "var(--space-2)" }} />
-                    צור מבחן אמריקאי
-                    {showMcOptions ? (
-                      <ChevronUp style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
-                    ) : (
-                      <ChevronDown style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
-                    )}
+                    <Sparkles style={{ marginLeft: "var(--space-2)" }} />
+                    צור מבחן סיכום
                   </Button>
 
-                  {showMcOptions && (
-                    <div className={styles.mcOptions}>
-                      <Label htmlFor="mcCount">מספר שאלות</Label>
-                      <div className={styles.mcCountRow}>
-                        <Input
-                          id="mcCount"
-                          type="number"
-                          min={5}
-                          max={50}
-                          value={mcQuestionCount}
-                          onChange={(e) =>
-                            setMcQuestionCount(Math.max(5, Math.min(50, parseInt(e.target.value) || 10)))
-                          }
-                          className={styles.mcCountInput}
-                        />
+                  <div className={styles.mcButtonGroup}>
+                    <Button
+                      type="button"
+                      onClick={() => setShowMcOptions((v) => !v)}
+                      disabled={isGenerating || selectedCourse === "_empty"}
+                      size="lg"
+                    >
+                      <ListChecks style={{ marginLeft: "var(--space-2)" }} />
+                      צור מבחן אמריקאי
+                      {showMcOptions ? (
+                        <ChevronUp style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
+                      ) : (
+                        <ChevronDown style={{ marginRight: "var(--space-2)", width: 16, height: 16 }} />
+                      )}
+                    </Button>
+
+                    {showMcOptions && (
+                      <div className={styles.mcOptions}>
+                        <Label htmlFor="mcCount">מספר שאלות</Label>
+                        <div className={styles.mcCountRow}>
+                          <Input
+                            id="mcCount"
+                            type="number"
+                            min={5}
+                            max={50}
+                            value={mcQuestionCount}
+                            onChange={(e) =>
+                              setMcQuestionCount(Math.max(5, Math.min(50, parseInt(e.target.value) || 10)))
+                            }
+                            className={styles.mcCountInput}
+                          />
+                          <Button
+                            type="button"
+                            onClick={handleGenerateMcExam}
+                            disabled={isGenerating || selectedCourse === "_empty"}
+                            size="lg"
+                          >
+                            <Sparkles style={{ marginLeft: "var(--space-2)" }} />
+                            בנה מבחן
+                          </Button>
+                        </div>
+                        <p className={styles.mcHint}>5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className={styles.fromSourceHint}>
+                  <ClipboardList style={{ width: 16, height: 16, flexShrink: 0 }} />
+                  <span>
+                    כדי לתרגל מבחן עבר ספציפי, עבור למקורות לימוד ולחץ על <strong>הצג כבחינה</strong> על מבחן עבר
+                  </span>
+                </div>
+              </form>
+            </div>
+
+            {/* ── Saved exams list ── */}
+            {courseExams.length > 0 && (
+              <div className={styles.savedExams}>
+                <div className={styles.savedExamsHeader}>
+                  <BookOpen className={styles.savedExamsIcon} />
+                  <h3 className={styles.savedExamsTitle}>מבחנים שמורים לקורס זה</h3>
+                  <span className={styles.savedExamsCount}>{courseExams.length}</span>
+                </div>
+
+                <div className={styles.savedExamsList}>
+                  {courseExams.map((row) => {
+                    const questionCount = (() => {
+                      try {
+                        const parsed = JSON.parse(row.exam_content) as { questions?: unknown[] };
+                        return parsed.questions?.length ?? 0;
+                      } catch {
+                        return 0;
+                      }
+                    })();
+
+                    return (
+                      <div key={row.id} className={styles.savedExamCard}>
+                        <div className={styles.savedExamInfo}>
+                          <div className={styles.savedExamTitleRow}>
+                            <span className={styles.savedExamTitle}>{row.title ?? "מבחן ללא כותרת"}</span>
+                            <Badge variant={examTypeBadgeVariant(row.exam_type)}>
+                              {examTypeLabel(row.exam_type)}
+                            </Badge>
+                          </div>
+
+                          <div className={styles.savedExamMeta}>
+                            {row.created_at && (
+                              <span className={styles.savedExamMetaItem}>
+                                <Calendar style={{ width: 13, height: 13 }} />
+                                {formatExamDate(row.created_at)}
+                              </span>
+                            )}
+                            {questionCount > 0 && (
+                              <span className={styles.savedExamMetaItem}>
+                                <ClipboardList style={{ width: 13, height: 13 }} />
+                                {questionCount} שאלות
+                              </span>
+                            )}
+                            {row.grade !== null && (
+                              <span className={styles.savedExamMetaItem}>
+                                <Trophy style={{ width: 13, height: 13 }} />
+                                ציון אחרון: {row.grade}%
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
                         <Button
-                          type="button"
-                          onClick={handleGenerateMcExam}
-                          disabled={isGenerating || selectedCourse === "_empty"}
-                          size="lg"
+                          size="sm"
+                          variant="outline"
+                          onClick={() => handleOpenSavedExam(row)}
                         >
-                          <Sparkles style={{ marginLeft: "var(--space-2)" }} />
-                          בנה מבחן
+                          <BookOpen style={{ width: 14, height: 14, marginLeft: "var(--space-1)" }} />
+                          פתח מבחן
                         </Button>
                       </div>
-                      <p className={styles.mcHint}>5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות</p>
-                    </div>
-                  )}
+                    );
+                  })}
                 </div>
               </div>
-
-              <div className={styles.fromSourceHint}>
-                <ClipboardList style={{ width: 16, height: 16, flexShrink: 0 }} />
-                <span>
-                  כדי לתרגל מבחן עבר ספציפי, עבור למקורות לימוד ולחץ על <strong>הצג כבחינה</strong> על מבחן עבר
-                </span>
-              </div>
-            </form>
-          </div>
+            )}
+          </>
         ) : (
           <>
             <div className={styles.exam}>
@@ -623,7 +722,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                         </div>
                       )}
 
-                      {/* Per-question feedback after grading */}
                       {results && questionGrade && (
                         <div
                           className={`${styles.questionFeedback} ${
