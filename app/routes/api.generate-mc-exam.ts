@@ -117,9 +117,11 @@ ${lectureList}
             type: "file_search",
             vector_store_ids: [vectorStoreId],
             filters: {
-              type: "eq" as const,
-              key: "student_id",
-              value: student.id,
+              type: "and" as const,
+              filters: [
+                { type: "eq" as const, key: "student_id", value: student.id },
+                { type: "eq" as const, key: "course_id", value: courseId },
+              ],
             },
           },
         ],
