@@ -20,6 +20,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - השאלות עצמן חייבות להיות שונות לחלוטין מהמבחן המקורי
 - כל השאלות מבוססות אך ורק על תוכן ההרצאות שסופקו
 - כתוב בעברית
+- חובה: הפלט חייב להיות אובייקט JSON תקני בלבד — ללא הסברים, ללא הקדמות, ללא סיומות, ללא markdown
 
 החזר את המבחן בפורמט JSON כאשר השאלות מוצגות באופן הבא:
 {
@@ -47,9 +48,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
       "points": 15
     }
   ]
-}
-
-החזר JSON בלבד, ללא טקסט נוסף.`;
+}`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -59,6 +58,19 @@ function extractJson(text: string): string {
   const bareObject = text.match(/\{[\s\S]*\}/);
   if (bareObject) return bareObject[0].trim();
   return text;
+}
+
+/**
+ * Returns true if the text looks like a natural-language refusal / empty response
+ * rather than a JSON payload we can parse.
+ */
+function isRefusal(text: string): boolean {
+  if (!text) return true;
+  const trimmed = text.trim();
+  // If it starts with a JSON object/array it's likely valid content
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return false;
+  // Heuristic: short text without a JSON structure is probably a refusal
+  return trimmed.length < 200;
 }
 
 /** Build a compound filter for the vector store scoped to student + course + source_type. */
@@ -182,21 +194,27 @@ export async function action({ request }: Route.ActionArgs) {
     }
 
     // ── 4a. Generate exam using the separately-retrieved contexts ─────────
+    // If the retrieval returned a refusal/empty string, fall back to topic names
+    const examContextSection = isRefusal(pastExamContext) ? pastExamList : pastExamContext;
+    const lectureContextSection = isRefusal(lectureContext) ? lectureList : lectureContext;
+
     const generationPrompt = `קורס: ${courseId}
 
 === מבנה מבחני עבר של הקורס (השתמש ONLY לקביעת מבנה: כמות שאלות וניקוד) ===
-${pastExamContext || pastExamList}
+${examContextSection}
 
 === תוכן הרצאות הקורס (השתמש ONLY לכתיבת השאלות החדשות) ===
-${lectureContext || lectureList}
+${lectureContextSection}
 
 בנה מבחן אימון חדש לפי ההוראות:
 - המבנה (מספר שאלות מכל סוג, ניקוד) חייב להיות זהה למבחני העבר של הקורס
-- תוכן כל שאלה חייב להתבסס אך ורק על תוכן ההרצאות`;
+- תוכן כל שאלה חייב להתבסס אך ורק על תוכן ההרצאות
+- ענה ב-JSON בלבד`;
 
     try {
       const response = await client.chat.completions.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: generationPrompt },
@@ -220,6 +238,7 @@ ${lectureContext || lectureList}
     try {
       const response = await client.chat.completions.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
@@ -232,7 +251,7 @@ ${pastExamList}
 הרצאות הקורס הזמינות:
 ${lectureList}
 
-שים לב: לא נמצאו קבצים מאינדקס. בנה מבחן בסיסי לפי שמות ההרצאות בלבד.`,
+שים לב: לא נמצאו קבצים מאינדקס. בנה מבחן בסיסי לפי שמות ההרצאות בלבד. ענה ב-JSON בלבד.`,
           },
         ],
       });
