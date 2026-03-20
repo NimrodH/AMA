@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, redirect } from "react-router";
-import { ChevronLeft, BookOpen, Hash } from "lucide-react";
+import { ChevronLeft, BookOpen, Hash, Download } from "lucide-react";
 import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -63,6 +63,15 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
               חזרה למקורות
             </Link>
           </Button>
+
+          {isPdf && source.file_url && (
+            <Button asChild variant="outline" size="sm">
+              <a href={source.file_url} download target="_blank" rel="noopener noreferrer">
+                <Download style={{ width: 16, height: 16, marginLeft: 4 }} />
+                הורד קובץ
+              </a>
+            </Button>
+          )}
 
           {(courseName || source.lecture_number != null) && (
             <div className={styles.metaChips}>
