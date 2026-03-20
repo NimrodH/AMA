@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Bell, Code, X, Trash2 } from "lucide-react";
+import { Plus, Bell, X, Trash2 } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -42,10 +42,7 @@ export async function loader() {
   const student = await getStudent();
   if (!student) return { student: null, courses: [], reminders: [] };
 
-  const [courses, reminders] = await Promise.all([
-    getCourses(student.id),
-    getReminders(student.id),
-  ]);
+  const [courses, reminders] = await Promise.all([getCourses(student.id), getReminders(student.id)]);
 
   return { student, courses, reminders };
 }
@@ -135,12 +132,7 @@ function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) 
   return (
     <AlertDialog open={open} onOpenChange={handleOpenChange}>
       <AlertDialogTrigger asChild>
-        <Button
-          variant="outline"
-          size="sm"
-          className={styles.deleteCourseBtn}
-          title="Delete course permanently"
-        >
+        <Button variant="outline" size="sm" className={styles.deleteCourseBtn} title="Delete course permanently">
           <Trash2 size={15} />
         </Button>
       </AlertDialogTrigger>
@@ -148,10 +140,10 @@ function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) 
         <AlertDialogHeader>
           <AlertDialogTitle>Delete "{courseName}"?</AlertDialogTitle>
           <AlertDialogDescription>
-            This will permanently delete the course and{" "}
-            <strong>all its cards, sources, and exams</strong>. This action cannot be
-            undone.
-            <br /><br />
+            This will permanently delete the course and <strong>all its cards, sources, and exams</strong>. This action
+            cannot be undone.
+            <br />
+            <br />
             Type <strong>{CONFIRM_PHRASE}</strong> to confirm:
           </AlertDialogDescription>
         </AlertDialogHeader>
@@ -160,7 +152,9 @@ function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) 
           onChange={(e) => setInputValue(e.target.value)}
           placeholder={CONFIRM_PHRASE}
           autoFocus
-          onKeyDown={(e) => { if (e.key === "Enter") handleConfirm(); }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") handleConfirm();
+          }}
         />
         <AlertDialogFooter>
           <AlertDialogCancel>Cancel</AlertDialogCancel>
@@ -212,9 +206,7 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   if (!student) {
     return (
       <AppLayout title="הגדרות">
-        <p style={{ padding: "var(--space-6)", color: "var(--color-error-11)" }}>
-          לא נמצא סטודנט במסד הנתונים.
-        </p>
+        <p style={{ padding: "var(--space-6)", color: "var(--color-error-11)" }}>לא נמצא סטודנט במסד הנתונים.</p>
       </AppLayout>
     );
   }
@@ -248,7 +240,103 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   return (
     <AppLayout title="הגדרות">
       <div className={styles.settings}>
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>תזכורות</h2>
+            <p className={styles.sectionDescription}>הגדר תזכורות לפעולות שונות</p>
+          </div>
 
+          <div className={styles.remindersList}>
+            {reminders.map((reminder) => (
+              <div key={reminder.id} className={styles.reminderItem}>
+                <div className={styles.reminderInfo}>
+                  <div className={styles.reminderIcon}>
+                    <Bell />
+                  </div>
+                  <div className={styles.reminderDetails}>
+                    <h3 className={styles.reminderType}>{reminder.reminder_type}</h3>
+                    <p className={styles.reminderTime}>{formatReminderTime(reminder.reminder_time)}</p>
+                  </div>
+                </div>
+                <div className={styles.reminderActions}>
+                  <Switch
+                    checked={reminder.is_active}
+                    onCheckedChange={(checked) =>
+                      submitIntent({ intent: "toggle_reminder", id: reminder.id, is_active: String(checked) })
+                    }
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => submitIntent({ intent: "delete_reminder", id: reminder.id })}
+                    className={styles.removeReminderBtn}
+                  >
+                    <X />
+                  </Button>
+                </div>
+              </div>
+            ))}
+
+            {showAddReminder && (
+              <form className={styles.addCourseForm} onSubmit={handleAddReminder}>
+                <div className={styles.addCourseFields}>
+                  <Input
+                    placeholder="תיאור התזכורת (למשל: לחזור על חומר)"
+                    value={newReminderType}
+                    onChange={(e) => setNewReminderType(e.target.value)}
+                    autoFocus
+                  />
+                  <div className={styles.reminderTimeRow}>
+                    <select
+                      className={styles.reminderSelect}
+                      value={newReminderDay}
+                      onChange={(e) => setNewReminderDay(e.target.value)}
+                    >
+                      {DAY_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
+                    <span className={styles.reminderTimeLabel}>בשעה</span>
+                    <input
+                      type="time"
+                      className={styles.reminderSelect}
+                      value={newReminderHour}
+                      onChange={(e) => setNewReminderHour(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className={styles.addFormActions}>
+                  <Button type="submit" size="sm" disabled={!newReminderType.trim() || fetcher.state !== "idle"}>
+                    הוסף
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddReminder(false);
+                      setNewReminderType("");
+                      setNewReminderDay("daily");
+                      setNewReminderHour("08:00");
+                    }}
+                  >
+                    <X style={{ marginLeft: "var(--space-2)" }} />
+                    ביטול
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          {!showAddReminder && (
+            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddReminder(true)}>
+              <Plus style={{ marginLeft: "var(--space-2)" }} />
+              הוסף תזכורת חדשה
+            </Button>
+          )}
+        </div>
         {/* Personal Info */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
@@ -334,7 +422,11 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                     type="button"
                     variant="outline"
                     size="sm"
-                    onClick={() => { setShowAddCourse(false); setNewCourseId(""); setNewCourseName(""); }}
+                    onClick={() => {
+                      setShowAddCourse(false);
+                      setNewCourseId("");
+                      setNewCourseName("");
+                    }}
                   >
                     <X style={{ marginLeft: "var(--space-2)" }} />
                     ביטול
@@ -345,182 +437,11 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
           </div>
 
           {!showAddCourse && (
-            <Button
-              variant="outline"
-              style={{ marginTop: "var(--space-4)" }}
-              onClick={() => setShowAddCourse(true)}
-            >
+            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddCourse(true)}>
               <Plus style={{ marginLeft: "var(--space-2)" }} />
               הוסף קורס חדש
             </Button>
           )}
-        </div>
-
-        {/* Reminders */}
-        <div className={styles.section}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle}>תזכורות</h2>
-            <p className={styles.sectionDescription}>הגדר תזכורות לפעולות שונות</p>
-          </div>
-
-          <div className={styles.remindersList}>
-            {reminders.map((reminder) => (
-              <div key={reminder.id} className={styles.reminderItem}>
-                <div className={styles.reminderInfo}>
-                  <div className={styles.reminderIcon}>
-                    <Bell />
-                  </div>
-                  <div className={styles.reminderDetails}>
-                    <h3 className={styles.reminderType}>{reminder.reminder_type}</h3>
-                    <p className={styles.reminderTime}>{formatReminderTime(reminder.reminder_time)}</p>
-                  </div>
-                </div>
-                <div className={styles.reminderActions}>
-                  <Switch
-                    checked={reminder.is_active}
-                    onCheckedChange={(checked) =>
-                      submitIntent({ intent: "toggle_reminder", id: reminder.id, is_active: String(checked) })
-                    }
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => submitIntent({ intent: "delete_reminder", id: reminder.id })}
-                    className={styles.removeReminderBtn}
-                  >
-                    <X />
-                  </Button>
-                </div>
-              </div>
-            ))}
-
-            {showAddReminder && (
-              <form className={styles.addCourseForm} onSubmit={handleAddReminder}>
-                <div className={styles.addCourseFields}>
-                  <Input
-                    placeholder="תיאור התזכורת (למשל: לחזור על חומר)"
-                    value={newReminderType}
-                    onChange={(e) => setNewReminderType(e.target.value)}
-                    autoFocus
-                  />
-                  <div className={styles.reminderTimeRow}>
-                    <select
-                      className={styles.reminderSelect}
-                      value={newReminderDay}
-                      onChange={(e) => setNewReminderDay(e.target.value)}
-                    >
-                      {DAY_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>{opt.label}</option>
-                      ))}
-                    </select>
-                    <span className={styles.reminderTimeLabel}>בשעה</span>
-                    <input
-                      type="time"
-                      className={styles.reminderSelect}
-                      value={newReminderHour}
-                      onChange={(e) => setNewReminderHour(e.target.value)}
-                    />
-                  </div>
-                </div>
-                <div className={styles.addFormActions}>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!newReminderType.trim() || fetcher.state !== "idle"}
-                  >
-                    הוסף
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => { setShowAddReminder(false); setNewReminderType(""); setNewReminderDay("daily"); setNewReminderHour("08:00"); }}
-                  >
-                    <X style={{ marginLeft: "var(--space-2)" }} />
-                    ביטול
-                  </Button>
-                </div>
-              </form>
-            )}
-          </div>
-
-          {!showAddReminder && (
-            <Button
-              variant="outline"
-              style={{ marginTop: "var(--space-4)" }}
-              onClick={() => setShowAddReminder(true)}
-            >
-              <Plus style={{ marginLeft: "var(--space-2)" }} />
-              הוסף תזכורת חדשה
-            </Button>
-          )}
-        </div>
-
-        {/* API Settings */}
-        <div className={`${styles.section} ${styles.apiSection}`}>
-          <div className={styles.sectionHeader}>
-            <h2 className={styles.sectionTitle} style={{ color: "var(--color-accent-12)" }}>
-              <Code style={{ display: "inline", marginLeft: "var(--space-2)", verticalAlign: "middle" }} />
-              הגדרות API ופרומפטים
-            </h2>
-            <p className={styles.sectionDescription} style={{ color: "var(--color-accent-11)" }}>
-              הוראות להגדרת חשבונות Supabase ו-OpenAI
-            </p>
-          </div>
-
-          <div className={styles.apiInstructions}>
-            <h3>הגדרת Supabase:</h3>
-            <ol>
-              <li>
-                היכנס ל-
-                <a href="https://supabase.com" target="_blank" rel="noopener noreferrer">
-                  supabase.com
-                </a>{" "}
-                וצור פרויקט חדש
-              </li>
-              <li>
-                צור את הטבלאות הבאות בפרויקט שלך:
-                <ul style={{ marginTop: "var(--space-2)" }}>
-                  <li><code>students</code> - פרטי סטודנטים</li>
-                  <li><code>courses</code> - קורסים</li>
-                  <li><code>sources</code> - מקורות לימוד</li>
-                  <li><code>exams</code> - מבחנים</li>
-                  <li><code>reminders</code> - תזכורות</li>
-                </ul>
-              </li>
-              <li>העתק את ה-URL וה-anon key מהגדרות הפרויקט</li>
-              <li>
-                הוסף אותם לקובץ <code>.env</code>:
-                <br />
-                <code>SUPABASE_PROJECT_URL=your-url</code>
-                <br />
-                <code>SUPABASE_API_KEY=your-key</code>
-              </li>
-            </ol>
-
-            <h3 style={{ marginTop: "var(--space-5)" }}>הגדרת OpenAI API:</h3>
-            <ol>
-              <li>
-                היכנס ל-
-                <a href="https://platform.openai.com" target="_blank" rel="noopener noreferrer">
-                  platform.openai.com
-                </a>
-              </li>
-              <li>עבור ל-API Keys ויצור מפתח חדש</li>
-              <li>
-                הוסף את המפתח לקובץ <code>.env</code>:
-                <br />
-                <code>OPENAI_API_KEY=your-api-key</code>
-              </li>
-            </ol>
-
-            <h3 style={{ marginTop: "var(--space-5)" }}>עריכת פרומפטים:</h3>
-            <p>
-              כל הפרומפטים של ה-AI נמצאים בקובץ <code>app/lib/openai.ts</code> באובייקט <code>PROMPTS</code>.
-              <br />
-              תוכל לערוך אותם בקלות כדי להתאים את התגובות של ה-AI לצרכים שלך.
-            </p>
-          </div>
         </div>
       </div>
     </AppLayout>
