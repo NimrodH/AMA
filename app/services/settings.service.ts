@@ -144,3 +144,44 @@ export async function deleteReminder(id: string): Promise<void> {
   const db = createServerClient();
   await db.from("reminders").delete().eq("id", id);
 }
+
+// ─── Article Analysis Questions ──────────────────────────────────────────────
+
+export type ArticleQuestionRow = {
+  id: string;
+  question: string;
+  sort_order: number;
+};
+
+/** Fetch all article analysis questions for a student. */
+export async function getArticleQuestions(studentId: string): Promise<ArticleQuestionRow[]> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("article_analysis_questions")
+    .select("id, question, sort_order")
+    .eq("student_id", studentId)
+    .order("sort_order", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []) as ArticleQuestionRow[];
+}
+
+/** Add a new article analysis question. */
+export async function addArticleQuestion(
+  studentId: string,
+  question: string,
+  sortOrder: number
+): Promise<void> {
+  const db = createServerClient();
+  await db.from("article_analysis_questions").insert({
+    student_id: studentId,
+    question,
+    sort_order: sortOrder,
+  });
+}
+
+/** Delete an article analysis question by its primary key. */
+export async function deleteArticleQuestion(id: string): Promise<void> {
+  const db = createServerClient();
+  await db.from("article_analysis_questions").delete().eq("id", id);
+}

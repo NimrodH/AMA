@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Bell, X, Trash2 } from "lucide-react";
+import { Plus, Bell, X, Trash2, HelpCircle, GripVertical } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -28,6 +28,10 @@ import {
   addReminder,
   toggleReminder,
   deleteReminder,
+  getArticleQuestions,
+  addArticleQuestion,
+  deleteArticleQuestion,
+  type ArticleQuestionRow,
 } from "~/services/settings.service";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import styles from "./settings.module.css";
@@ -40,11 +44,15 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader() {
   const student = await getStudent();
-  if (!student) return { student: null, courses: [], reminders: [] };
+  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [] };
 
-  const [courses, reminders] = await Promise.all([getCourses(student.id), getReminders(student.id)]);
+  const [courses, reminders, articleQuestions] = await Promise.all([
+    getCourses(student.id),
+    getReminders(student.id),
+    getArticleQuestions(student.id),
+  ]);
 
-  return { student, courses, reminders };
+  return { student, courses, reminders, articleQuestions };
 }
 
 // ─── Action ──────────────────────────────────────────────────────────────────
@@ -97,6 +105,17 @@ export async function action({ request }: Route.ActionArgs) {
     case "delete_reminder": {
       const id = formData.get("id") as string;
       if (id) await deleteReminder(id);
+      break;
+    }
+    case "add_article_question": {
+      const question = formData.get("question") as string;
+      const sortOrder = parseInt(formData.get("sort_order") as string, 10) || 0;
+      if (question?.trim()) await addArticleQuestion(studentId, question.trim(), sortOrder);
+      break;
+    }
+    case "delete_article_question": {
+      const id = formData.get("id") as string;
+      if (id) await deleteArticleQuestion(id);
       break;
     }
   }
@@ -174,13 +193,17 @@ function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { student, courses, reminders } = loaderData;
+  const { student, courses, reminders, articleQuestions } = loaderData;
   const fetcher = useFetcher();
 
   // Add course form state
   const [showAddCourse, setShowAddCourse] = React.useState(false);
   const [newCourseId, setNewCourseId] = React.useState("");
   const [newCourseName, setNewCourseName] = React.useState("");
+
+  // Add article question form state
+  const [showAddQuestion, setShowAddQuestion] = React.useState(false);
+  const [newQuestion, setNewQuestion] = React.useState("");
 
   // Add reminder form state
   const [showAddReminder, setShowAddReminder] = React.useState(false);
@@ -199,9 +222,21 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
       setNewReminderType("");
       setNewReminderDay("daily");
       setNewReminderHour("08:00");
+      setShowAddQuestion(false);
+      setNewQuestion("");
     }
     prevFetcherState.current = fetcher.state;
   }, [fetcher.state]);
+
+  function handleAddQuestion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newQuestion.trim()) return;
+    submitIntent({
+      intent: "add_article_question",
+      question: newQuestion,
+      sort_order: String(articleQuestions.length),
+    });
+  }
 
   if (!student) {
     return (
@@ -440,6 +475,82 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
             <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddCourse(true)}>
               <Plus style={{ marginLeft: "var(--space-2)" }} />
               הוסף קורס חדש
+            </Button>
+          )}
+        </div>
+        {/* Article Analysis Questions */}
+        <div className={styles.section}>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>שאלות לניתוח מאמר</h2>
+            <p className={styles.sectionDescription}>
+              הגדר את רשימת השאלות שישמשו לניתוח מאמרים. השאלות יוצגו בעמוד ניתוח המאמר.
+            </p>
+          </div>
+
+          <div className={styles.questionsList}>
+            {articleQuestions.map((q, idx) => (
+              <div key={q.id} className={styles.questionItem}>
+                <div className={styles.questionIndex}>
+                  <GripVertical size={16} />
+                  <span>{idx + 1}</span>
+                </div>
+                <p className={styles.questionText}>{q.question}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => submitIntent({ intent: "delete_article_question", id: q.id })}
+                  className={styles.removeReminderBtn}
+                  title="מחק שאלה"
+                >
+                  <X />
+                </Button>
+              </div>
+            ))}
+
+            {articleQuestions.length === 0 && !showAddQuestion && (
+              <div className={styles.emptyQuestions}>
+                <HelpCircle size={32} />
+                <p>טרם הוגדרו שאלות לניתוח מאמר</p>
+              </div>
+            )}
+
+            {showAddQuestion && (
+              <form className={styles.addCourseForm} onSubmit={handleAddQuestion}>
+                <div className={styles.addCourseFields}>
+                  <textarea
+                    className={styles.questionTextarea}
+                    placeholder="כתוב את השאלה כאן..."
+                    value={newQuestion}
+                    onChange={(e) => setNewQuestion(e.target.value)}
+                    rows={3}
+                    autoFocus
+                  />
+                </div>
+                <div className={styles.addFormActions}>
+                  <Button type="submit" size="sm" disabled={!newQuestion.trim() || fetcher.state !== "idle"}>
+                    הוסף
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      setShowAddQuestion(false);
+                      setNewQuestion("");
+                    }}
+                  >
+                    <X style={{ marginLeft: "var(--space-2)" }} />
+                    ביטול
+                  </Button>
+                </div>
+              </form>
+            )}
+          </div>
+
+          {!showAddQuestion && (
+            <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddQuestion(true)}>
+              <Plus style={{ marginLeft: "var(--space-2)" }} />
+              הוסף שאלה חדשה
             </Button>
           )}
         </div>
