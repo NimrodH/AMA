@@ -8,6 +8,7 @@ export default [
   route("sources/:id/view", "routes/source-view.tsx"),
   route("cards", "routes/cards.tsx"),
   route("learn", "routes/learn.tsx"),
+  route("article-analysis", "routes/article-analysis.tsx"),
   route("exams", "routes/exams.tsx"),
   route("settings", "routes/settings.tsx"),
   route("setup", "routes/setup.tsx"),
