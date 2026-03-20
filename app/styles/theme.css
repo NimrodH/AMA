@@ -81,4 +81,9 @@ html {
   --color-card-1: var(--violet-1);
   --color-card-9: var(--violet-9);
   --color-card-11: var(--violet-11);
+
+  --color-article-1: var(--indigo-1);
+  --color-article-9: var(--indigo-9);
+  --color-article-11: var(--indigo-11);
+  --color-article-contrast: var(--indigo-contrast);
 }

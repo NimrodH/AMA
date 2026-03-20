@@ -17,6 +17,8 @@ export function createServerClient(): SupabaseClient {
   return createClient(url, key);
 }
 
+export type SourceType = "Lecture" | "Card" | "Past exam" | "Article";
+
 export type Database = {
   public: {
     Tables: {
@@ -65,7 +67,7 @@ export type Database = {
           id: string;
           student_id: string;
           course_id: string;
-          source_type: "Lecture" | "Card" | "Past exam";
+          source_type: SourceType;
           lecture_number?: number;
           topic: string;
           language: string;
@@ -81,7 +83,7 @@ export type Database = {
           id?: string;
           student_id: string;
           course_id: string;
-          source_type: "Lecture" | "Card" | "Past exam";
+          source_type: SourceType;
           lecture_number?: number;
           topic: string;
           language: string;
@@ -97,7 +99,7 @@ export type Database = {
           id?: string;
           student_id?: string;
           course_id?: string;
-          source_type?: "Lecture" | "Card" | "Past exam";
+          source_type?: SourceType;
           lecture_number?: number;
           topic?: string;
           language?: string;

@@ -31,6 +31,11 @@
   background: linear-gradient(135deg, var(--color-neutral-2) 0%, var(--color-exam-1) 100%);
 }
 
+.cardArticle {
+  border-color: var(--color-article-9);
+  background: linear-gradient(135deg, var(--color-neutral-2) 0%, var(--color-article-1) 100%);
+}
+
 /* ── Deleting state ─────────────────────────────────────────────────────── */
 
 .cardDeleting {
@@ -79,6 +84,11 @@
 .typeExam {
   background: var(--color-exam-9);
   color: var(--color-exam-contrast);
+}
+
+.typeArticle {
+  background: var(--color-article-9);
+  color: var(--color-article-contrast);
 }
 
 .topMeta {

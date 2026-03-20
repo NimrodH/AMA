@@ -29,7 +29,7 @@ export async function getSourceById(id: string, studentId: string): Promise<Sour
 export async function getSourcesByCourse(
   studentId: string,
   courseId: string,
-  sourceType?: "Lecture" | "Card" | "Past exam"
+  sourceType?: "Lecture" | "Card" | "Past exam" | "Article"
 ): Promise<SourceRow[]> {
   const db = createServerClient();
   let query = db
@@ -64,7 +64,7 @@ interface AddSourceParams {
   studentId: string;
   courseId: string;
   courseName: string;
-  sourceType: "Lecture" | "Card" | "Past exam";
+  sourceType: "Lecture" | "Card" | "Past exam" | "Article";
   topic: string;
   lectureNumber: number | null;
   file: File;
@@ -227,7 +227,7 @@ interface AddSourceFromUrlParams {
   studentId: string;
   courseId: string;
   courseName: string;
-  sourceType: "Lecture" | "Card" | "Past exam";
+  sourceType: "Lecture" | "Card" | "Past exam" | "Article";
   topic: string;
   lectureNumber: number | null;
   googleDocsUrl: string;

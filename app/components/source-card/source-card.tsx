@@ -25,10 +25,11 @@ interface SourceCardProps {
   className?: string;
 }
 
-const TYPE_LABELS: Record<Source["source_type"], string> = {
+const TYPE_LABELS: Record<string, string> = {
   Lecture: "הרצאה",
   Card: "כרטיס",
   "Past exam": "מבחן עבר",
+  Article: "מאמר",
 };
 
 const POLL_INTERVAL_MS = 3000;
@@ -123,16 +124,20 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
   const typeClass =
     source.source_type === "Lecture"
       ? styles.cardLecture
-      : source.source_type === "Card"
-        ? styles.cardCard
-        : styles.cardExam;
+      : source.source_type === "Article"
+        ? styles.cardArticle
+        : source.source_type === "Card"
+          ? styles.cardCard
+          : styles.cardExam;
 
   const typeStyle =
     source.source_type === "Lecture"
       ? styles.typeLecture
-      : source.source_type === "Card"
-        ? styles.typeCard
-        : styles.typeExam;
+      : source.source_type === "Article"
+        ? styles.typeArticle
+        : source.source_type === "Card"
+          ? styles.typeCard
+          : styles.typeExam;
 
   const formattedDate = source.upload_date
     ? new Date(source.upload_date).toLocaleDateString("he-IL")
@@ -245,7 +250,7 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             </Link>
           </Button>
         )}
-        {source.file_url && source.source_type !== "Past exam" && (
+        {source.file_url && (source.source_type === "Lecture" || source.source_type === "Article") && (
           <Button asChild variant="outline" size="sm" style={{ flex: 1 }}>
             <Link to={`/sources/${source.id}/view`}>
               <Eye style={{ width: 14, height: 14, marginLeft: "var(--space-2)" }} />
