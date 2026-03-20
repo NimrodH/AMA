@@ -9,6 +9,35 @@
   max-width: 280px;
 }
 
+/* ── Article picker ────────────────────────────────────────────── */
+
+.pickerSection {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  background: var(--color-neutral-2);
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-4);
+}
+
+.pickerLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--font-subheading);
+  color: var(--color-neutral-11);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.articleSelect {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Placeholder ──────────────────────────────────────────────── */
+
 .placeholder {
   display: flex;
   flex-direction: column;
@@ -48,10 +77,149 @@
   margin: 0;
 }
 
+/* ── Questions accordion ──────────────────────────────────────── */
+
+.questionsSection {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.loadingAnswers {
+  text-align: center;
+  padding: var(--space-6);
+  font: var(--font-body);
+  color: var(--color-neutral-9);
+}
+
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.accordionItem {
+  background: var(--color-neutral-1);
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-4) !important;
+  overflow: hidden;
+}
+
+.accordionTrigger {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  width: 100%;
+  text-align: right;
+}
+
+.questionNumber {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+  border-radius: var(--radius-round);
+  font: var(--font-caption);
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.questionText {
+  flex: 1;
+  font: var(--font-body);
+  color: var(--color-neutral-12);
+  text-align: right;
+  line-height: 1.5;
+}
+
+.answeredBadge {
+  font: var(--font-caption);
+  color: var(--color-success-10);
+  background: var(--color-success-3);
+  border: 1px solid var(--color-success-6);
+  border-radius: var(--radius-round);
+  padding: 2px var(--space-3);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── Answer area ────────────────────────────────────────────────── */
+
+.answerArea {
+  padding: var(--space-4) var(--space-5) var(--space-5);
+  border-top: 1px solid var(--color-neutral-5);
+  background: var(--color-neutral-2);
+}
+
+.answerTextarea {
+  width: 100%;
+  box-sizing: border-box;
+  padding: var(--space-3) var(--space-4);
+  background: var(--color-neutral-1);
+  border: 1px solid var(--color-neutral-7);
+  border-radius: var(--radius-3);
+  font: var(--font-body);
+  color: var(--color-neutral-12);
+  resize: vertical;
+  min-height: 110px;
+  transition: border-color 0.15s;
+  direction: rtl;
+}
+
+.answerTextarea:focus {
+  outline: none;
+  border-color: var(--color-accent-8);
+  box-shadow: 0 0 0 2px var(--color-accent-4);
+}
+
+.answerTextarea::placeholder {
+  color: var(--color-neutral-9);
+}
+
+/* ── Save row ───────────────────────────────────────────────────── */
+
+.saveRow {
+  display: flex;
+  justify-content: flex-end;
+}
+
+.saveButton {
+  padding: var(--space-3) var(--space-6);
+  background: var(--color-accent-9);
+  color: var(--color-accent-contrast);
+  border: none;
+  border-radius: var(--radius-3);
+  font: var(--font-subheading);
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.saveButton:hover:not(:disabled) {
+  background: var(--color-accent-10);
+}
+
+.saveButton:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 480px) {
   .headerCourseSelect {
     min-width: 0;
     max-width: none;
     width: 100%;
+  }
+
+  .pickerSection {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .pickerLabel {
+    justify-content: center;
   }
 }

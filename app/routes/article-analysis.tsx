@@ -1,9 +1,10 @@
 import * as React from "react";
-import { FileSearch } from "lucide-react";
+import { FileSearch, BookOpen, HelpCircle } from "lucide-react";
 import type { Route } from "./+types/article-analysis";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { getStudent, getActiveCourses } from "~/services/settings.service";
+import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
+import { getStudent, getActiveCourses, getArticleQuestions, getArticleAnswers, saveArticleAnswers } from "~/services/settings.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./article-analysis.module.css";
 
@@ -13,13 +14,34 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({}: Route.LoaderArgs) {
   const student = await getStudent();
-  if (!student) return { courses: [] };
+  if (!student) return { courses: [], sources: [], questions: [], answers: {}, studentId: "" };
+
   const courses = await getActiveCourses(student.id);
-  return { courses };
+  const questions = await getArticleQuestions(student.id);
+
+  return { courses, questions, studentId: student.id };
+}
+
+export async function action({ request }: Route.ActionArgs) {
+  const formData = await request.formData();
+  const intent = formData.get("intent") as string;
+
+  if (intent === "save_answers") {
+    const student = await getStudent();
+    if (!student) return { ok: false };
+    const sourceId = formData.get("source_id") as string;
+    const answersJson = formData.get("answers") as string;
+    let answers: Record<string, string> = {};
+    try { answers = JSON.parse(answersJson); } catch { answers = {}; }
+    await saveArticleAnswers(student.id, sourceId, answers);
+    return { ok: true };
+  }
+
+  return { ok: false };
 }
 
 export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
-  const { courses } = loaderData;
+  const { courses, questions, studentId } = loaderData;
 
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => {
     const stored = readSelectedCourse();
@@ -27,9 +49,61 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
     return courses[0]?.course_id ?? "";
   });
 
+  const [articles, setArticles] = React.useState<{ id: string; topic: string }[]>([]);
+  const [selectedArticleId, setSelectedArticleId] = React.useState<string>("");
+  const [answers, setAnswers] = React.useState<Record<string, string>>({});
+  const [loadingArticles, setLoadingArticles] = React.useState(false);
+  const [loadingAnswers, setLoadingAnswers] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+
+  // Fetch articles (sources of type "Article") for selected course
+  React.useEffect(() => {
+    if (!selectedCourse || !studentId) return;
+    setLoadingArticles(true);
+    setSelectedArticleId("");
+    setAnswers({});
+
+    fetch(`/api/article-sources?studentId=${encodeURIComponent(studentId)}&courseId=${encodeURIComponent(selectedCourse)}`)
+      .then((r) => r.json())
+      .then((data) => {
+        setArticles(data.sources ?? []);
+      })
+      .catch(() => setArticles([]))
+      .finally(() => setLoadingArticles(false));
+  }, [selectedCourse, studentId]);
+
+  // Fetch saved answers when article changes
+  React.useEffect(() => {
+    if (!selectedArticleId || !studentId) { setAnswers({}); return; }
+    setLoadingAnswers(true);
+    fetch(`/api/article-answers?studentId=${encodeURIComponent(studentId)}&sourceId=${encodeURIComponent(selectedArticleId)}`)
+      .then((r) => r.json())
+      .then((data) => setAnswers(data.answers ?? {}))
+      .catch(() => setAnswers({}))
+      .finally(() => setLoadingAnswers(false));
+  }, [selectedArticleId, studentId]);
+
   const handleCourseChange = (value: string) => {
     setSelectedCourse(value);
     writeSelectedCourse(value);
+  };
+
+  const handleAnswerChange = (questionId: string, text: string) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: text }));
+  };
+
+  const handleSave = async () => {
+    if (!selectedArticleId) return;
+    setSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append("intent", "save_answers");
+      formData.append("source_id", selectedArticleId);
+      formData.append("answers", JSON.stringify(answers));
+      await fetch("", { method: "POST", body: formData });
+    } finally {
+      setSaving(false);
+    }
   };
 
   const courseSelector = (
@@ -39,29 +113,115 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
       </SelectTrigger>
       <SelectContent>
         {courses.length === 0 ? (
-          <SelectItem value="_none" disabled>
-            אין קורסים — הוסף קורס בהגדרות
-          </SelectItem>
+          <SelectItem value="_none" disabled>אין קורסים — הוסף קורס בהגדרות</SelectItem>
         ) : (
           courses.map((course) => (
-            <SelectItem key={course.id} value={course.course_id}>
-              {course.course_name}
-            </SelectItem>
+            <SelectItem key={course.id} value={course.course_id}>{course.course_name}</SelectItem>
           ))
         )}
       </SelectContent>
     </Select>
   );
 
+  const hasQuestions = questions.length > 0;
+  const hasArticle = !!selectedArticleId;
+
   return (
     <AppLayout title="ניתוח מאמר" headerExtra={courseSelector}>
       <div className={styles.page}>
-        <div className={styles.placeholder}>
-          <FileSearch className={styles.placeholderIcon} />
-          <h2 className={styles.placeholderTitle}>ניתוח מאמר</h2>
-          <p className={styles.placeholderText}>כאן תוכל לנתח מאמרים אקדמיים בעזרת בינה מלאכותית.</p>
-          <p className={styles.placeholderSub}>הפונקציונליות תתווסף בקרוב.</p>
+
+        {/* Article picker */}
+        <div className={styles.pickerSection}>
+          <label className={styles.pickerLabel}>
+            <BookOpen size={16} />
+            בחר מאמר
+          </label>
+          <Select
+            value={selectedArticleId}
+            onValueChange={setSelectedArticleId}
+            disabled={loadingArticles || articles.length === 0}
+          >
+            <SelectTrigger className={styles.articleSelect}>
+              <SelectValue placeholder={
+                loadingArticles ? "טוען..." :
+                articles.length === 0 ? "אין מאמרים בקורס זה" :
+                "בחר מאמר לניתוח"
+              } />
+            </SelectTrigger>
+            <SelectContent>
+              {articles.map((a) => (
+                <SelectItem key={a.id} value={a.id}>{a.topic}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
+
+        {/* Questions accordion */}
+        {!hasArticle && (
+          <div className={styles.placeholder}>
+            <FileSearch className={styles.placeholderIcon} />
+            <h2 className={styles.placeholderTitle}>בחר מאמר לניתוח</h2>
+            <p className={styles.placeholderText}>לאחר בחירת מאמר תוכל לענות על שאלות הניתוח.</p>
+            {!hasQuestions && (
+              <p className={styles.placeholderSub}>הגדר שאלות ניתוח בדף ההגדרות כדי להתחיל.</p>
+            )}
+          </div>
+        )}
+
+        {hasArticle && !hasQuestions && (
+          <div className={styles.placeholder}>
+            <HelpCircle className={styles.placeholderIcon} />
+            <h2 className={styles.placeholderTitle}>אין שאלות מוגדרות</h2>
+            <p className={styles.placeholderText}>הוסף שאלות ניתוח מאמר בדף ההגדרות.</p>
+          </div>
+        )}
+
+        {hasArticle && hasQuestions && (
+          <div className={styles.questionsSection}>
+            {loadingAnswers ? (
+              <div className={styles.loadingAnswers}>טוען תשובות...</div>
+            ) : (
+              <>
+                <Accordion type="multiple" className={styles.accordion}>
+                  {questions.map((q, idx) => (
+                    <AccordionItem key={q.id} value={q.id} className={styles.accordionItem}>
+                      <AccordionTrigger className={styles.accordionTrigger}>
+                        <span className={styles.questionNumber}>{idx + 1}</span>
+                        <span className={styles.questionText}>{q.question}</span>
+                        {answers[q.id]?.trim() && (
+                          <span className={styles.answeredBadge}>✓ נענה</span>
+                        )}
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className={styles.answerArea}>
+                          <textarea
+                            className={styles.answerTextarea}
+                            placeholder="כתוב את תשובתך כאן..."
+                            value={answers[q.id] ?? ""}
+                            onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                            rows={5}
+                            dir="rtl"
+                          />
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+
+                <div className={styles.saveRow}>
+                  <button
+                    className={styles.saveButton}
+                    onClick={handleSave}
+                    disabled={saving}
+                  >
+                    {saving ? "שומר..." : "שמור תשובות"}
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+
       </div>
     </AppLayout>
   );

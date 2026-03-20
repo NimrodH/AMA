@@ -185,3 +185,43 @@ export async function deleteArticleQuestion(id: string): Promise<void> {
   const db = createServerClient();
   await db.from("article_analysis_questions").delete().eq("id", id);
 }
+
+// ─── Article Analysis Answers ────────────────────────────────────────────────
+
+/** Map of question_id → answer text for a single article. */
+export type ArticleAnswersMap = Record<string, string>;
+
+/** Fetch saved answers for a given source (article). Returns {} if none yet. */
+export async function getArticleAnswers(
+  studentId: string,
+  sourceId: string
+): Promise<ArticleAnswersMap> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("article_analysis_answers")
+    .select("answers")
+    .eq("student_id", studentId)
+    .eq("source_id", sourceId)
+    .single();
+
+  if (error || !data) return {};
+  return (data.answers ?? {}) as ArticleAnswersMap;
+}
+
+/** Upsert the full answers map for a source. */
+export async function saveArticleAnswers(
+  studentId: string,
+  sourceId: string,
+  answers: ArticleAnswersMap
+): Promise<void> {
+  const db = createServerClient();
+  await db.from("article_analysis_answers").upsert(
+    {
+      student_id: studentId,
+      source_id: sourceId,
+      answers,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: "student_id,source_id" }
+  );
+}
