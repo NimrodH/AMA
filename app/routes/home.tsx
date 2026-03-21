@@ -30,6 +30,8 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
+  const isGuestSession = session.accountType === "guest";
+  // For guests, studentId points to the owner student — fetch their name
   const student = await getStudentById(session.studentId, request);
 
   const [allReminders, courses, courseStats] = await Promise.all([
@@ -43,7 +45,10 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return {
     studentId: student?.id ?? null,
+    // Owner student's name (for guests: the student they belong to)
     studentName: student?.name ?? null,
+    // Guest's own display name — only set for guest accounts
+    guestName: isGuestSession ? session.studentName : null,
     accountType: session.accountType as "student" | "guest",
     activeReminders,
     courses,
@@ -153,6 +158,7 @@ type LoaderData = Awaited<ReturnType<typeof loader>>;
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     studentName,
+    guestName,
     accountType,
     activeReminders,
     courses,
@@ -203,7 +209,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className={styles.welcome}>
           <div className={styles.welcomeTop}>
             <div>
-              <h1 className={styles.welcomeTitle}>שלום, {studentName ?? "סטודנט"}!</h1>
+              <h1 className={styles.welcomeTitle}>
+                {isGuest
+                  ? `שלום, ${guestName ?? "אורח"}, אורח/ת של ${studentName ?? "סטודנט"}!`
+                  : `שלום, ${studentName ?? "סטודנט"}!`}
+              </h1>
               <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
             </div>
             {courses.length > 0 && (
