@@ -34,7 +34,7 @@ import {
   type ArticleQuestionRow,
 } from "~/services/settings.service";
 import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
-import { requireSession, getAccessTokenFromRequest } from "~/lib/auth.server";
+import { requireSession } from "~/lib/auth.server";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./settings.module.css";
@@ -50,14 +50,12 @@ export async function loader({ request }: Route.LoaderArgs) {
   const student = await getStudentById(session.studentId, request);
   if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
 
-  const accessToken = getAccessTokenFromRequest(request) ?? "";
-
   const [courses, reminders, articleQuestions, guests] = await Promise.all([
     getCourses(student.id, request),
     getReminders(student.id, request),
     getArticleQuestions(student.id, request),
     session.accountType === "student"
-      ? listGuests(accessToken).catch(() => [] as GuestRow[])
+      ? listGuests(session.studentId, request).catch(() => [] as GuestRow[])
       : Promise.resolve([] as GuestRow[]),
   ]);
 
@@ -74,7 +72,6 @@ export async function action({ request }: Route.ActionArgs) {
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
   const studentId = session.studentId;
-  const accessToken = getAccessTokenFromRequest(request) ?? "";
 
   switch (intent) {
     case "update_name": {
@@ -148,7 +145,7 @@ export async function action({ request }: Route.ActionArgs) {
       const guestPassword = (formData.get("guest_password") as string)?.trim();
       if (guestName && guestEmail && guestPassword) {
         try {
-          await createGuest(guestName, guestEmail, guestPassword, accessToken);
+          await createGuest(guestName, guestEmail, guestPassword, studentId, request);
         } catch (err) {
           return { ok: false, error: (err as Error).message };
         }
@@ -160,7 +157,7 @@ export async function action({ request }: Route.ActionArgs) {
       const guestId = formData.get("guest_id") as string;
       if (guestId) {
         try {
-          await deleteGuest(guestId, accessToken);
+          await deleteGuest(guestId, studentId, request);
         } catch (err) {
           return { ok: false, error: (err as Error).message };
         }
