@@ -25,12 +25,12 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
   const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], cards: [] };
+  if (!student) return { courses: [], cards: [], accountType: session.accountType };
   const [courses, cards] = await Promise.all([
     getActiveCourses(student.id, request),
     getCards(student.id, request),
   ]);
-  return { courses, cards };
+  return { courses, cards, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -39,7 +39,8 @@ clientLoader.hydrate = true;
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Learn({ loaderData }: Route.ComponentProps) {
-  const { courses, cards } = loaderData as LoaderData;
+  const { courses, cards, accountType } = loaderData as LoaderData;
+  const isGuest = accountType === "guest";
 
   const [selectedCourse, setSelectedCourse] = React.useState(() => {
     const stored = readSelectedCourse();
@@ -72,8 +73,8 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
   const pickNextCard = () => {
     if (filteredCards.length === 0) return;
 
-    // Track the session for the selected course (skip "all courses" mode)
-    if (selectedCourse !== "__all__") {
+    // Track the session for the selected course (skip "all courses" mode and guest users)
+    if (selectedCourse !== "__all__" && !isGuest) {
       fetch("/api/track-learn-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
