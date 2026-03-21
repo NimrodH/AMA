@@ -2,7 +2,6 @@ import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration }
 
 import type { Route } from "./+types/root";
 import { Toaster } from "./components/ui/toaster/toaster";
-import { AuthSync } from "./components/auth-sync/auth-sync";
 import { getSession } from "./lib/auth.server";
 import colorSchemeApi from "@dazl/color-scheme/client?url";
 
@@ -50,7 +49,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
       </head>
       <body>
         {children}
-        <AuthSync />
         <Toaster />
         <ScrollRestoration />
         <Scripts />

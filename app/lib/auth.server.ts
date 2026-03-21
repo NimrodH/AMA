@@ -145,13 +145,14 @@ export async function signIn(
   };
 }
 
-/** Build a Set-Cookie header that stores the JWT in auth_token (non-HttpOnly so JS can also write it). */
+/** Build a Set-Cookie header that stores the JWT in auth_token. */
 export function buildAuthCookie(accessToken: string): string {
-  const maxAge = 60 * 60 * 24 * 7; // 7 days
-  return `auth_token=${encodeURIComponent(accessToken)}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
+  // 7 days
+  const maxAge = 60 * 60 * 24 * 7;
+  return `auth_token=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 /** Build a cookie that clears the auth_token. */
 export function buildClearAuthCookie(): string {
-  return `auth_token=; Path=/; SameSite=Lax; Max-Age=0`;
+  return `auth_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
 }
