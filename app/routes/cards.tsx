@@ -22,7 +22,7 @@ import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
-import { makeClientLoader } from "~/lib/client-auth-loader";
+import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./cards.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -39,6 +39,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export const clientLoader = makeClientLoader<typeof loader>();
 clientLoader.hydrate = true;
+
+export const clientAction = makeClientAction<typeof action>();
 
 export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);

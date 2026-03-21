@@ -14,7 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudentById } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
-import { makeClientLoader } from "~/lib/client-auth-loader";
+import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import {
   getSources,
   getCoursesForStudent,
@@ -43,6 +43,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export const clientLoader = makeClientLoader<typeof loader>();
 clientLoader.hydrate = true;
+
+export const clientAction = makeClientAction<typeof action>();
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 

@@ -36,7 +36,7 @@ import {
 import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
 import { requireSession } from "~/lib/auth.server";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
-import { makeClientLoader } from "~/lib/client-auth-loader";
+import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./settings.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -64,6 +64,8 @@ export async function loader({ request }: Route.LoaderArgs) {
 
 export const clientLoader = makeClientLoader<typeof loader>();
 clientLoader.hydrate = true;
+
+export const clientAction = makeClientAction<typeof action>();
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
