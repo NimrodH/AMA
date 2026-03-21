@@ -91,6 +91,21 @@ function LogoutButton() {
   );
 }
 
+function HeaderLogoutButton() {
+  const navigate = useNavigate();
+
+  function handleLogout() {
+    clearToken();
+    navigate("/login");
+  }
+
+  return (
+    <button type="button" onClick={handleLogout} className={styles.headerLogoutBtn} title="יציאה">
+      <LogOut size={18} />
+    </button>
+  );
+}
+
 export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra }: AppLayoutProps) {
   return (
     <SidebarProvider>
@@ -130,6 +145,7 @@ export function AppLayout({ children, title = "מערכת ניהול לימוד�
         <main className={styles.main}>
           <header className={styles.header}>
             <div className={styles.headerActions}>
+              <HeaderLogoutButton />
               <ColorSchemeToggle />
               <SidebarTrigger />
             </div>

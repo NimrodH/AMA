@@ -54,6 +54,26 @@
   margin: 0 auto;
 }
 
+.headerLogoutBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: none;
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-2);
+  color: var(--color-neutral-10);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.headerLogoutBtn:hover {
+  color: var(--color-error-11);
+  background: var(--color-error-2);
+  border-color: var(--color-error-6);
+}
+
 .logoutBtn {
   display: flex;
   align-items: center;
