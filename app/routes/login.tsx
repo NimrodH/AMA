@@ -1,5 +1,6 @@
 import * as React from "react";
 import { createClient } from "@supabase/supabase-js";
+import { useNavigate } from "react-router";
 import type { Route } from "./+types/login";
 import { Button } from "~/components/ui/button/button";
 import { Input } from "~/components/ui/input/input";
@@ -20,6 +21,7 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
 export default function Login() {
+  const navigate = useNavigate();
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [error, setError] = React.useState<string | null>(null);
@@ -48,8 +50,9 @@ export default function Login() {
       // Save token to localStorage + cookie so server loaders can authenticate
       saveToken(data.session.access_token);
 
-      // Full page reload so the server sees the cookie on the very first request
-      window.location.href = "/";
+      // Use client-side navigation so the clientLoader on "/" picks up the token
+      // from localStorage. Avoids full-page reload which breaks in iframe previews.
+      navigate("/");
     } catch {
       setError("שגיאה בהתחברות. אנא נסה שנית.");
     } finally {

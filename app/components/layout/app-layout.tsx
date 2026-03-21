@@ -1,5 +1,5 @@
 import * as React from "react";
-import { NavLink } from "react-router";
+import { NavLink, useNavigate } from "react-router";
 import { clearToken } from "~/lib/auth.client";
 import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch, LogOut } from "lucide-react";
 import classNames from "classnames";
@@ -76,9 +76,11 @@ const navigationItems = [
 ];
 
 function LogoutButton() {
+  const navigate = useNavigate();
+
   function handleLogout() {
     clearToken();
-    window.location.href = "/login";
+    navigate("/login");
   }
 
   return (

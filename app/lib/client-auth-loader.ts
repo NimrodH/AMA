@@ -14,6 +14,7 @@
  *   clientLoader.hydrate = true;
  */
 
+import { redirect } from "react-router";
 import { getToken } from "~/lib/auth.client";
 
 type ServerLoaderFn<T> = () => Promise<T>;
@@ -34,12 +35,9 @@ export function makeClientLoader<TLoader extends AnyFn>() {
     const token = getToken();
 
     if (!token) {
-      // No token — redirect to login immediately from the client side.
-      if (typeof window !== "undefined") {
-        window.location.href = "/login";
-      }
-      // Return a never-resolving promise so nothing tries to render.
-      return new Promise(() => {});
+      // No token — use React Router's redirect to navigate to login.
+      // This works correctly in both regular and iframe (preview) environments.
+      throw redirect("/login");
     }
 
     // Temporarily patch globalThis.fetch to inject the Authorization header
