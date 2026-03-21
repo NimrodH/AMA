@@ -1,0 +1,103 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: var(--space-4);
+}
+
+/* ─── Top bar ─────────────────────────────────────────────────── */
+
+.topBar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.courseSelect {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.courseLabel {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+  white-space: nowrap;
+}
+
+.selectTrigger {
+  min-width: 220px;
+}
+
+.noCourses {
+  font: var(--font-caption);
+  color: var(--color-neutral-9);
+}
+
+.saveArea {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.savedMsg {
+  font: var(--font-caption);
+  color: var(--color-success-10);
+}
+
+.errorMsg {
+  font: var(--font-caption);
+  color: var(--color-error-10);
+}
+
+/* ─── Editor area ─────────────────────────────────────────────── */
+
+.editorArea {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  gap: var(--space-3);
+}
+
+.editorTitle {
+  font: var(--font-subheading);
+  color: var(--color-neutral-12);
+  margin: 0;
+}
+
+.editor {
+  flex: 1;
+  min-height: 0;
+}
+
+.editorLoading {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--color-neutral-9);
+  font: var(--font-body);
+  border: var(--border-size-1) solid var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  padding: var(--space-7);
+}
+
+/* ─── Empty state ─────────────────────────────────────────────── */
+
+.emptyState {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  color: var(--color-neutral-8);
+  font: var(--font-body);
+}

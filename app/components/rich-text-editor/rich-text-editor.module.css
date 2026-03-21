@@ -1,0 +1,131 @@
+.editorWrapper {
+  display: flex;
+  flex-direction: column;
+  border: var(--border-size-1) solid var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  background: var(--color-neutral-1);
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
+/* ─── Toolbar ─────────────────────────────────────────────────── */
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-3);
+  border-bottom: var(--border-size-1) solid var(--color-neutral-6);
+  background: var(--color-neutral-2);
+  flex-shrink: 0;
+}
+
+.toolbarBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border: none;
+  border-radius: var(--radius-2);
+  background: transparent;
+  color: var(--color-neutral-11);
+  cursor: pointer;
+  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+}
+
+.toolbarBtn:hover {
+  background: var(--color-neutral-4);
+  color: var(--color-neutral-12);
+}
+
+.toolbarBtn:active {
+  background: var(--color-accent-4);
+  color: var(--color-accent-11);
+}
+
+.toolbarDivider {
+  width: 1px;
+  height: 20px;
+  background: var(--color-neutral-6);
+  margin: 0 var(--space-1);
+}
+
+/* ─── Editor Container ────────────────────────────────────────── */
+
+.editorContainer {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+}
+
+.editorContent {
+  flex: 1;
+  min-height: 300px;
+  padding: var(--space-5) var(--space-6);
+  outline: none;
+  font: var(--font-body);
+  color: var(--color-neutral-12);
+  line-height: 1.75;
+  direction: rtl;
+  text-align: right;
+}
+
+.editorContent p {
+  margin: 0 0 var(--space-3);
+}
+
+.editorContent ul,
+.editorContent ol {
+  padding-inline-start: var(--space-7);
+  margin: 0 0 var(--space-3);
+}
+
+.editorContent li {
+  margin-bottom: var(--space-2);
+}
+
+.editorContent strong {
+  font-weight: 700;
+}
+
+.editorContent em {
+  font-style: italic;
+}
+
+.editorContent u {
+  text-decoration: underline;
+}
+
+.editorContent h1 {
+  font: var(--font-heading);
+  margin: 0 0 var(--space-4);
+}
+
+.editorContent h2 {
+  font: var(--font-subheading);
+  margin: 0 0 var(--space-3);
+}
+
+.editorContent blockquote {
+  border-inline-start: 3px solid var(--color-accent-7);
+  padding-inline-start: var(--space-4);
+  color: var(--color-neutral-10);
+  margin: 0 0 var(--space-3);
+}
+
+/* ─── Placeholder ─────────────────────────────────────────────── */
+
+.editorPlaceholder {
+  position: absolute;
+  top: var(--space-5);
+  right: var(--space-6);
+  color: var(--color-neutral-8);
+  font: var(--font-body);
+  pointer-events: none;
+  user-select: none;
+}

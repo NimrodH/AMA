@@ -1,7 +1,7 @@
 import * as React from "react";
 import { NavLink, useNavigate } from "react-router";
 import { clearToken } from "~/lib/auth.client";
-import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch, LogOut } from "lucide-react";
+import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch, LogOut, NotebookText } from "lucide-react";
 import classNames from "classnames";
 import {
   Sidebar,
@@ -75,6 +75,11 @@ const navigationItems: NavItem[] = [
     title: "ניתוח מאמר",
     url: "/article-analysis",
     icon: FileSearch,
+  },
+  {
+    title: "סיכומים",
+    url: "/summary",
+    icon: NotebookText,
   },
   {
     title: "מבחנים",
