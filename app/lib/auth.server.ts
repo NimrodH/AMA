@@ -64,17 +64,18 @@ export type SessionUser = {
  * Returns null if unauthenticated.
  */
 export async function getSession(request: Request): Promise<SessionUser | null> {
-  const client = createAuthClient(request);
+  // Use the user's own auth client so auth.uid() resolves correctly for RLS
+  const userClient = createAuthClient(request);
   const {
     data: { user },
     error,
-  } = await client.auth.getUser();
+  } = await userClient.auth.getUser();
 
   if (error || !user) return null;
 
-  // Load profile — uses service-role client since profiles may be RLS-guarded
-  const serviceClient = createServiceClient();
-  const { data: profile } = await serviceClient
+  // Fetch profile using the user's authenticated client — RLS policy allows
+  // `id = auth.uid()` which resolves to this user's id via their JWT.
+  const { data: profile } = await userClient
     .from("profiles")
     .select("student_id, account_type")
     .eq("id", user.id)
@@ -82,7 +83,7 @@ export async function getSession(request: Request): Promise<SessionUser | null> 
 
   if (!profile) return null;
 
-  const { data: student } = await serviceClient
+  const { data: student } = await userClient
     .from("students")
     .select("name")
     .eq("id", profile.student_id)
@@ -107,7 +108,12 @@ export async function requireSession(request: Request): Promise<SessionUser> {
   return session;
 }
 
-/** Service-role client for admin operations. */
+/**
+ * Service-role client for admin operations.
+ * NOTE: We only have the anon key available (SUPABASE_API_KEY), so this client
+ * bypasses RLS only for tables that allow anon access or via SQL functions.
+ * For profile lookups use the user's own client instead.
+ */
 export function createServiceClient(): SupabaseClient {
   const serviceKey = process.env.SUPABASE_API_KEY ?? "";
   return createClient(SUPABASE_URL, serviceKey, {
