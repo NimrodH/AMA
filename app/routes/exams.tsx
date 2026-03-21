@@ -309,8 +309,71 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     return { total_grade: pct, question_grades, overall_feedback, recommendations };
   };
 
+  /**
+   * Grade exam for guest users — only multiple-choice / true-false questions
+   * that already have a `correct_answer` stored in the exam data.
+   * Never calls OpenAI.
+   */
+  const gradeExamAsGuest = (): GradingResult => {
+    if (!exam) throw new Error("No exam");
+
+    // Only grade closed questions that have a correct_answer set
+    const gradableQuestions = exam.questions.filter(
+      (q) =>
+        (q.type === "multiple_choice" || q.type === "true_false") &&
+        q.correct_answer != null &&
+        q.correct_answer !== ""
+    );
+
+    const question_grades = gradableQuestions.map((q) => {
+      const selected = answers[q.id] ?? "";
+      const isCorrect = selected === q.correct_answer;
+      return {
+        question_id: q.id,
+        grade: isCorrect ? q.points : 0,
+        max_points: q.points,
+        feedback: isCorrect
+          ? "✓ תשובה נכונה"
+          : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
+        correct_answer: q.correct_answer,
+      };
+    });
+
+    const earned = question_grades.reduce((sum, g) => sum + g.grade, 0);
+    const total = question_grades.reduce((sum, g) => sum + g.max_points, 0);
+    const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
+
+    let overall_feedback: string;
+    let recommendations: string[] = [];
+
+    if (gradableQuestions.length === 0) {
+      overall_feedback = "אין שאלות אמריקאיות עם תשובות מוגדרות במבחן זה.";
+    } else if (pct >= 90) {
+      overall_feedback = `מצוין! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). שליטה מעולה בחומר.`;
+    } else if (pct >= 70) {
+      overall_feedback = `טוב! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). יש מקום לשיפור.`;
+      recommendations = ["חזור על הנושאים שבהם טעית"];
+    } else if (pct >= 50) {
+      overall_feedback = `יש מקום לשיפור — ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%).`;
+      recommendations = ["חזור על חומרי הקורס", "שים לב לנושאים שבהם טעית"];
+    } else {
+      overall_feedback = `ציון נמוך — ${pct}% (${earned}/${total} שאלות). מומלץ לעבור מחדש על כל ההרצאות.`;
+      recommendations = ["קרא מחדש את הרצאות הקורס", "בקש עזרה מהמרצה אם נדרש"];
+    }
+
+    return { total_grade: pct, question_grades, overall_feedback, recommendations };
+  };
+
   const handleSubmitExam = async () => {
     if (!exam) return;
+
+    // Guests: grade only multiple-choice / true-false questions that have
+    // correct_answer set in the exam data. Never call OpenAI.
+    if (isGuest) {
+      const guestResults = gradeExamAsGuest();
+      setResults(guestResults);
+      return;
+    }
 
     if (exam.isMcExam) {
       const localResults = gradeMcExamLocally();
@@ -685,7 +748,9 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                         <span className={styles.questionNumber}>שאלה {question.id}</span>
                         <p className={styles.questionText}>{question.question}</p>
                         <span className={styles.questionPoints}>
-                          {results ? `${questionGrade?.grade ?? 0}/${question.points}` : `${question.points} נקודות`}
+                          {results && questionGrade && (!isGuest || ((question.type === "multiple_choice" || question.type === "true_false") && question.correct_answer != null))
+                            ? `${questionGrade.grade}/${question.points}`
+                            : `${question.points} נקודות`}
                         </span>
                       </div>
 
@@ -733,7 +798,9 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                         </div>
                       )}
 
-                      {results && questionGrade && (
+                      {results && questionGrade &&
+                        /* For guests: only show feedback on MC/true-false with correct_answer set */
+                        (!isGuest || ((question.type === "multiple_choice" || question.type === "true_false") && question.correct_answer != null)) && (
                         <div
                           className={`${styles.questionFeedback} ${
                             questionGrade.grade === questionGrade.max_points
