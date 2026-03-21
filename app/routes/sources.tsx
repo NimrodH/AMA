@@ -14,6 +14,7 @@ import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudentById } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import {
   getSources,
   getCoursesForStudent,
@@ -39,6 +40,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return { sources, courses, studentId: student.id };
 }
+
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
@@ -328,8 +332,10 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Sources({ loaderData }: Route.ComponentProps) {
-  const { sources, courses, studentId } = loaderData;
+  const { sources, courses, studentId } = loaderData as LoaderData;
   const [selectedType, setSelectedType] = React.useState<FilterType>("all");
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>(() => {
     const stored = readSelectedCourse();

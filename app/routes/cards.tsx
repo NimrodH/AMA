@@ -22,6 +22,7 @@ import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./cards.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -35,6 +36,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   const [courses, cards] = await Promise.all([getActiveCourses(student.id), getCards(student.id)]);
   return { courses, cards };
 }
+
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
 
 export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
@@ -80,8 +84,10 @@ export async function action({ request }: Route.ActionArgs) {
   });
 }
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Cards({ loaderData }: Route.ComponentProps) {
-  const { courses, cards } = loaderData;
+  const { courses, cards } = loaderData as LoaderData;
   const fetcher = useFetcher<typeof action>();
   const isSaving = fetcher.state !== "idle";
   const actionData = fetcher.data;

@@ -7,6 +7,7 @@ import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/
 import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./article-analysis.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -23,6 +24,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return { courses, questions, studentId: student.id };
 }
+
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
 
 export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
@@ -41,8 +45,10 @@ export async function action({ request }: Route.ActionArgs) {
   return { ok: false };
 }
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
-  const { courses, questions, studentId } = loaderData;
+  const { courses, questions, studentId } = loaderData as LoaderData;
 
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => {
     const stored = readSelectedCourse();

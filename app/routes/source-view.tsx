@@ -7,6 +7,7 @@ import { Button } from "~/components/ui/button/button";
 import { getSourceById } from "~/services/sources.service";
 import { getStudentById, getCourses } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./source-view.module.css";
 
 /**
@@ -25,8 +26,11 @@ const PdfViewer = React.lazy(() => import("~/components/pdf-viewer/pdf-viewer.cl
 
 // ─── Meta ────────────────────────────────────────────────────────────────────
 
+type LoaderData = { source: { topic: string; file_url: string | null; lecture_number: number | null; course_id: string; [key: string]: unknown }; courseName: string | null };
+
 export function meta({ data }: Route.MetaArgs) {
-  const title = data?.source?.topic ?? "צפייה במקור";
+  const loaderData = data as LoaderData | undefined;
+  const title = loaderData?.source?.topic ?? "צפייה במקור";
   return [{ title: `${title} — מקורות לימוד` }];
 }
 
@@ -49,10 +53,13 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   return { source, courseName };
 }
 
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
+
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function SourceView({ loaderData }: Route.ComponentProps) {
-  const { source, courseName } = loaderData;
+  const { source, courseName } = loaderData as LoaderData;
   const isPdf = source.file_url?.toLowerCase().endsWith(".pdf") ?? false;
 
   return (

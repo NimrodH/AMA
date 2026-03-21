@@ -15,6 +15,7 @@ import {
   completeReminder,
 } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -49,6 +50,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     courseStats,
   };
 }
+
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
 
@@ -144,13 +148,15 @@ function CourseStatsTable({
 
 // ─── Page ─────────────────────────────────────────────────────────────────────
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     studentName,
     activeReminders,
     courses,
     courseStats,
-  } = loaderData;
+  } = loaderData as LoaderData;
 
   // Selected course — persisted in localStorage
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => readSelectedCourse());

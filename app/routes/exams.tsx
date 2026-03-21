@@ -26,6 +26,7 @@ import { getStudentById, getActiveCourses } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
 import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./exams.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -77,6 +78,9 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { courses, savedExams, studentId: student.id };
 }
 
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
+
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatExamDate(dateStr: string | null): string {
@@ -102,8 +106,10 @@ function examTypeBadgeVariant(type: string | null): "default" | "secondary" | "o
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Exams({ loaderData }: Route.ComponentProps) {
-  const { courses, savedExams } = loaderData;
+  const { courses, savedExams } = loaderData as LoaderData;
   const [searchParams] = useSearchParams();
   const sourceIdParam = searchParams.get("sourceId");
 

@@ -3,7 +3,6 @@ import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration }
 
 import type { Route } from "./+types/root";
 import { Toaster } from "./components/ui/toaster/toaster";
-import { getSession } from "./lib/auth.server";
 import colorSchemeApi from "@dazl/color-scheme/client?url";
 
 import "./styles/reset.css";
@@ -37,22 +36,6 @@ export const links: Route.LinksFunction = () => [
   },
 ];
 
-/**
- * Runs synchronously in <head> before hydration.
- * Reads the JWT from localStorage and writes it to document.cookie
- * so the server receives it on the very first GET request after login.
- */
-const TOKEN_SYNC_SCRIPT = `
-  (function() {
-    try {
-      var token = localStorage.getItem('auth_token');
-      if (token) {
-        document.cookie = 'auth_token=' + encodeURIComponent(token) + '; path=/; max-age=604800; samesite=lax';
-      }
-    } catch(e) {}
-  })()
-`;
-
 export function Layout({ children }: { children: React.ReactNode }) {
   const { rootCssClass, resolvedScheme } = useColorScheme();
   return (
@@ -61,8 +44,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
         <meta charSet="utf-8" />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
         <Meta />
-        {/* Sync localStorage token → cookie before any navigation so server loaders receive auth */}
-        <script dangerouslySetInnerHTML={{ __html: TOKEN_SYNC_SCRIPT }} />
         <script src={colorSchemeApi}></script>
         <Links />
       </head>
@@ -76,13 +57,8 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  return {
-    session: session
-      ? { studentName: session.studentName, accountType: session.accountType }
-      : null,
-  };
+export function loader() {
+  return {};
 }
 
 export default function App() {

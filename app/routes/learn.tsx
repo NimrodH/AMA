@@ -15,6 +15,7 @@ import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./learn.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -32,8 +33,13 @@ export async function loader({ request }: Route.LoaderArgs) {
   return { courses, cards };
 }
 
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
+
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Learn({ loaderData }: Route.ComponentProps) {
-  const { courses, cards } = loaderData;
+  const { courses, cards } = loaderData as LoaderData;
 
   const [selectedCourse, setSelectedCourse] = React.useState(() => {
     const stored = readSelectedCourse();

@@ -36,6 +36,7 @@ import {
 import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
 import { requireSession, getAccessTokenFromRequest } from "~/lib/auth.server";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
+import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./settings.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -60,6 +61,9 @@ export async function loader({ request }: Route.LoaderArgs) {
 
   return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
 }
+
+export const clientLoader = makeClientLoader<typeof loader>();
+clientLoader.hydrate = true;
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
@@ -327,8 +331,10 @@ function GuestsSection({ guests, onAdd, onDelete, isBusy, actionError }: GuestsS
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
+type LoaderData = Awaited<ReturnType<typeof loader>>;
+
 export default function Settings({ loaderData, actionData }: Route.ComponentProps) {
-  const { student, courses, reminders, articleQuestions, guests, accountType } = loaderData;
+  const { student, courses, reminders, articleQuestions, guests, accountType } = loaderData as LoaderData;
   const fetcher = useFetcher<typeof action>();
 
   // Add course form state
