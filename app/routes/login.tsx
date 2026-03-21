@@ -1,44 +1,61 @@
 import * as React from "react";
-import { redirect } from "react-router";
+import { createClient } from "@supabase/supabase-js";
 import type { Route } from "./+types/login";
 import { Button } from "~/components/ui/button/button";
 import { Input } from "~/components/ui/input/input";
 import { Label } from "~/components/ui/label/label";
-import { signIn, buildAuthCookie, getSession } from "~/lib/auth.server";
+import { saveToken } from "~/lib/auth.client";
 import styles from "./login.module.css";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "כניסה - מערכת ניהול לימודים" }];
 }
 
-// Redirect already-authenticated users to home
-export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (session) throw redirect("/");
+// No server loader needed — the page is fully public
+export function loader() {
   return {};
 }
 
-export async function action({ request }: Route.ActionArgs) {
-  const formData = await request.formData();
-  const email = (formData.get("email") as string)?.trim();
-  const password = (formData.get("password") as string)?.trim();
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY as string;
 
-  if (!email || !password) {
-    return { error: "נא למלא אימייל וסיסמה" };
+export default function Login() {
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+  const [error, setError] = React.useState<string | null>(null);
+  const [isLoading, setIsLoading] = React.useState(false);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setError(null);
+    setIsLoading(true);
+
+    try {
+      const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
+        auth: { autoRefreshToken: false, persistSession: false },
+      });
+
+      const { data, error: authError } = await client.auth.signInWithPassword({
+        email: email.trim(),
+        password: password.trim(),
+      });
+
+      if (authError || !data.session) {
+        setError("אימייל או סיסמה שגויים. אנא נסה שנית.");
+        return;
+      }
+
+      // Save token to localStorage + cookie so server loaders can authenticate
+      saveToken(data.session.access_token);
+
+      // Full page reload so the server sees the cookie on the very first request
+      window.location.href = "/";
+    } catch {
+      setError("שגיאה בהתחברות. אנא נסה שנית.");
+    } finally {
+      setIsLoading(false);
+    }
   }
-
-  try {
-    const { accessToken } = await signIn(email, password);
-    return redirect("/", {
-      headers: { "Set-Cookie": buildAuthCookie(accessToken) },
-    });
-  } catch (err) {
-    return { error: "אימייל או סיסמה שגויים. אנא נסה שנית." };
-  }
-}
-
-export default function Login({ actionData }: Route.ComponentProps) {
-  const error = actionData?.error;
 
   return (
     <div className={styles.page}>
@@ -48,7 +65,7 @@ export default function Login({ actionData }: Route.ComponentProps) {
           <p className={styles.tagline}>כניסה לחשבון</p>
         </div>
 
-        <form method="post" className={styles.form}>
+        <form onSubmit={handleSubmit} className={styles.form}>
           <div className={styles.field}>
             <Label htmlFor="email">אימייל</Label>
             <Input
@@ -59,6 +76,8 @@ export default function Login({ actionData }: Route.ComponentProps) {
               autoComplete="email"
               autoFocus
               dir="ltr"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
             />
           </div>
 
@@ -71,13 +90,15 @@ export default function Login({ actionData }: Route.ComponentProps) {
               placeholder="••••••••"
               autoComplete="current-password"
               dir="ltr"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
             />
           </div>
 
           {error && <p className={styles.error}>{error}</p>}
 
-          <Button type="submit" className={styles.submitBtn}>
-            כניסה
+          <Button type="submit" className={styles.submitBtn} disabled={isLoading}>
+            {isLoading ? "מתחבר..." : "כניסה"}
           </Button>
         </form>
       </div>

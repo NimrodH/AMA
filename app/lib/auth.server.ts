@@ -121,38 +121,4 @@ export function createServiceClient(): SupabaseClient {
   });
 }
 
-/**
- * Sign in with email + password.
- * Returns { accessToken, refreshToken } or throws on error.
- */
-export async function signIn(
-  email: string,
-  password: string
-): Promise<{ accessToken: string; refreshToken: string }> {
-  const client = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
 
-  const { data, error } = await client.auth.signInWithPassword({ email, password });
-
-  if (error || !data.session) {
-    throw new Error(error?.message ?? "Login failed");
-  }
-
-  return {
-    accessToken: data.session.access_token,
-    refreshToken: data.session.refresh_token,
-  };
-}
-
-/** Build a Set-Cookie header that stores the JWT in auth_token. */
-export function buildAuthCookie(accessToken: string): string {
-  // 7 days — no HttpOnly so the browser doesn't strip it in iframe/cross-origin preview envs
-  const maxAge = 60 * 60 * 24 * 7;
-  return `auth_token=${encodeURIComponent(accessToken)}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
-}
-
-/** Build a cookie that clears the auth_token. */
-export function buildClearAuthCookie(): string {
-  return `auth_token=; Path=/; SameSite=Lax; Max-Age=0`;
-}
