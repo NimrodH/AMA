@@ -56,7 +56,9 @@ export async function loader({ request }: Route.LoaderArgs) {
     getCourses(student.id, request),
     getReminders(student.id, request),
     getArticleQuestions(student.id, request),
-    session.accountType === "student" ? listGuests(accessToken) : Promise.resolve([] as GuestRow[]),
+    session.accountType === "student"
+      ? listGuests(accessToken).catch(() => [] as GuestRow[])
+      : Promise.resolve([] as GuestRow[]),
   ]);
 
   return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
