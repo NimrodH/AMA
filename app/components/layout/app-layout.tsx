@@ -35,9 +35,21 @@ interface AppLayoutProps {
    * Extra content rendered inline with the header title (e.g., a course selector)
    */
   headerExtra?: React.ReactNode;
+  /**
+   * The current user's account type — controls which nav items are shown.
+   */
+  accountType?: "student" | "guest";
 }
 
-const navigationItems = [
+interface NavItem {
+  title: string;
+  url: string;
+  icon: React.ElementType;
+  /** If true, only visible to students (not guests) */
+  studentOnly?: boolean;
+}
+
+const navigationItems: NavItem[] = [
   {
     title: "דף הבית",
     url: "/",
@@ -52,6 +64,7 @@ const navigationItems = [
     title: "בניית כרטיסים",
     url: "/cards",
     icon: BookOpen,
+    studentOnly: true,
   },
   {
     title: "שינון כרטיסים",
@@ -72,6 +85,7 @@ const navigationItems = [
     title: "הגדרות",
     url: "/settings",
     icon: Settings,
+    studentOnly: true,
   },
 ];
 
@@ -106,7 +120,10 @@ function HeaderLogoutButton() {
   );
 }
 
-export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra }: AppLayoutProps) {
+export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra, accountType }: AppLayoutProps) {
+  const isGuest = accountType === "guest";
+  const visibleNavItems = navigationItems.filter((item) => !item.studentOnly || !isGuest);
+
   return (
     <SidebarProvider>
       <div className={styles.layout}>
@@ -123,7 +140,7 @@ export function AppLayout({ children, title = "מערכת ניהול לימוד�
               <SidebarGroupLabel>ניווט ראשי</SidebarGroupLabel>
               <SidebarGroupContent>
                 <SidebarMenu>
-                  {navigationItems.map((item) => (
+                  {visibleNavItems.map((item) => (
                     <SidebarMenuItem key={item.url}>
                       <SidebarMenuButton asChild>
                         <NavLink to={item.url}>

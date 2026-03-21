@@ -44,7 +44,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   return {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
-    accountType: session.accountType,
+    accountType: session.accountType as "student" | "guest",
     activeReminders,
     courses,
     courseStats,
@@ -153,10 +153,13 @@ type LoaderData = Awaited<ReturnType<typeof loader>>;
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
     studentName,
+    accountType,
     activeReminders,
     courses,
     courseStats,
   } = loaderData as LoaderData;
+
+  const isGuest = accountType === "guest";
 
   // Selected course — persisted in localStorage
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => readSelectedCourse());
@@ -195,7 +198,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <AppLayout title="דף הבית">
+    <AppLayout title="דף הבית" accountType={accountType}>
       <div className={styles.home}>
         <div className={styles.welcome}>
           <div className={styles.welcomeTop}>
@@ -240,8 +243,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
           </div>
         )}
 
-        {/* Course Activity Table */}
-        {courseStats.length > 0 && (
+        {/* Course Activity Table — hidden for guests */}
+        {!isGuest && courseStats.length > 0 && (
           <CourseStatsTable stats={courseStats} courses={courses} />
         )}
 

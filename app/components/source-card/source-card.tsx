@@ -23,6 +23,8 @@ interface SourceCardProps {
   source: Source;
   studentId: string;
   className?: string;
+  /** When true, shows only view/exam buttons — hides admin actions */
+  isGuest?: boolean;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -35,7 +37,7 @@ const TYPE_LABELS: Record<string, string> = {
 const POLL_INTERVAL_MS = 3000;
 const MAX_POLL_ATTEMPTS = 20;
 
-export function SourceCard({ source, studentId, className }: SourceCardProps) {
+export function SourceCard({ source, studentId, className, isGuest = false }: SourceCardProps) {
   const fetcher = useFetcher();
   const reuploadFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string; newVectorStoreFileId?: string }>();
   const refreshFetcher = useFetcher<{ ok: boolean; message?: string; error?: string; fileStatus?: string; newVectorStoreFileId?: string }>();
@@ -258,7 +260,7 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             </Link>
           </Button>
         )}
-        {source.google_docs_url && (
+        {!isGuest && source.google_docs_url && (
           <Button
             variant="outline"
             size="sm"
@@ -271,42 +273,46 @@ export function SourceCard({ source, studentId, className }: SourceCardProps) {
             {isRefreshing ? "מרענן..." : "רענן"}
           </Button>
         )}
-        <Button
-          variant="outline"
-          size="sm"
-          className={styles.reuploadBtn}
-          onClick={handleReupload}
-          disabled={isAnyLoading || isPolling}
-          title="העלה מחדש ל-OpenAI"
-        >
-          <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || (isPolling && !!reuploadResult)) ? "var(--animation-spin)" : "none" }} />
-          {isReuploading ? "מעלה..." : isPolling ? "מאנדקס..." : "סנכרן"}
-        </Button>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              className={styles.deleteBtn}
-              title="מחק מקור"
-            >
-              <Trash2 style={{ width: 14, height: 14 }} />
-              מחיקה
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>מחיקת מקור</AlertDialogTitle>
-              <AlertDialogDescription>
-                האם אתה בטוח שברצונך למחוק את &quot;{source.topic}&quot;? פעולה זו אינה הפיכה.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>ביטול</AlertDialogCancel>
-              <AlertDialogAction onClick={handleDelete}>מחק</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        {!isGuest && (
+          <Button
+            variant="outline"
+            size="sm"
+            className={styles.reuploadBtn}
+            onClick={handleReupload}
+            disabled={isAnyLoading || isPolling}
+            title="העלה מחדש ל-OpenAI"
+          >
+            <RefreshCw style={{ width: 14, height: 14, animation: (isReuploading || (isPolling && !!reuploadResult)) ? "var(--animation-spin)" : "none" }} />
+            {isReuploading ? "מעלה..." : isPolling ? "מאנדקס..." : "סנכרן"}
+          </Button>
+        )}
+        {!isGuest && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                className={styles.deleteBtn}
+                title="מחק מקור"
+              >
+                <Trash2 style={{ width: 14, height: 14 }} />
+                מחיקה
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>מחיקת מקור</AlertDialogTitle>
+                <AlertDialogDescription>
+                  האם אתה בטוח שברצונך למחוק את &quot;{source.topic}&quot;? פעולה זו אינה הפיכה.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>ביטול</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDelete}>מחק</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
       </div>
     </div>
   );

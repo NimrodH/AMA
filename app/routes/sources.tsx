@@ -34,11 +34,11 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
   const student = await getStudentById(session.studentId, request);
-  if (!student) return { sources: [], courses: [], studentId: "" };
+  if (!student) return { sources: [], courses: [], studentId: "", accountType: session.accountType as "student" | "guest" };
 
   const [sources, courses] = await Promise.all([getSources(student.id, request), getCoursesForStudent(student.id, request)]);
 
-  return { sources, courses, studentId: student.id };
+  return { sources, courses, studentId: student.id, accountType: session.accountType as "student" | "guest" };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -339,7 +339,8 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Sources({ loaderData }: Route.ComponentProps) {
-  const { sources, courses, studentId } = loaderData as LoaderData;
+  const { sources, courses, studentId, accountType } = loaderData as LoaderData;
+  const isGuest = accountType === "guest";
   const [selectedType, setSelectedType] = React.useState<FilterType>("all");
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>(() => {
     const stored = readSelectedCourse();
@@ -357,7 +358,7 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
   }, [sources, selectedType, selectedCourseId]);
 
   return (
-    <AppLayout title="מקורות לימוד">
+    <AppLayout title="מקורות לימוד" accountType={accountType}>
       <div className={styles.sources}>
         <div className={styles.header}>
           <div className={styles.filters}>
@@ -393,25 +394,27 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
             </Select>
           </div>
 
-          <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>
-                <Upload style={{ marginLeft: "var(--space-2)" }} />
-                העלה מקור חדש
-              </Button>
-            </DialogTrigger>
-            <DialogContent className={styles.uploadDialog}>
-              <DialogHeader>
-                <DialogTitle>העלאת מקור לימוד חדש</DialogTitle>
-              </DialogHeader>
-              <UploadDialog studentId={studentId} courses={courses} onClose={() => setIsDialogOpen(false)} />
-            </DialogContent>
-          </Dialog>
+          {!isGuest && (
+            <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+              <DialogTrigger asChild>
+                <Button>
+                  <Upload style={{ marginLeft: "var(--space-2)" }} />
+                  העלה מקור חדש
+                </Button>
+              </DialogTrigger>
+              <DialogContent className={styles.uploadDialog}>
+                <DialogHeader>
+                  <DialogTitle>העלאת מקור לימוד חדש</DialogTitle>
+                </DialogHeader>
+                <UploadDialog studentId={studentId} courses={courses} onClose={() => setIsDialogOpen(false)} />
+              </DialogContent>
+            </Dialog>
+          )}
         </div>
 
         <div className={styles.grid}>
           {filteredSources.map((source) => (
-            <SourceCard key={source.id} source={source} studentId={studentId} />
+            <SourceCard key={source.id} source={source} studentId={studentId} isGuest={isGuest} />
           ))}
           {filteredSources.length === 0 && (
             <p style={{ color: "var(--color-neutral-10)", gridColumn: "1/-1" }}>

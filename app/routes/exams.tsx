@@ -69,13 +69,13 @@ interface GradingResult {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
   const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "" };
+  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: session.accountType as "student" | "guest" };
   const courses = await getActiveCourses(student.id, request);
   // Load exams for all courses (we'll filter client-side by selected course)
   const savedExams = courses.length > 0
     ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id, request)))).flat()
     : [];
-  return { courses, savedExams, studentId: student.id };
+  return { courses, savedExams, studentId: student.id, accountType: session.accountType as "student" | "guest" };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -109,7 +109,8 @@ function examTypeBadgeVariant(type: string | null): "default" | "secondary" | "o
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Exams({ loaderData }: Route.ComponentProps) {
-  const { courses, savedExams } = loaderData as LoaderData;
+  const { courses, savedExams, accountType } = loaderData as LoaderData;
+  const isGuest = accountType === "guest";
   const [searchParams] = useSearchParams();
   const sourceIdParam = searchParams.get("sourceId");
 
@@ -438,7 +439,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   // Loading state
   if (isGenerating) {
     return (
-      <AppLayout title="מבחנים">
+      <AppLayout title="מבחנים" accountType={accountType}>
         <div className={styles.exams}>
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
@@ -463,11 +464,12 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <AppLayout title="מבחנים">
+    <AppLayout title="מבחנים" accountType={accountType}>
       <div className={styles.exams}>
         {!exam ? (
           <>
-            {/* ── Generator card ── */}
+            {/* ── Generator card — hidden for guests ── */}
+            {!isGuest && (
             <div className={styles.generator}>
               <div className={styles.generatorHeader}>
                 <div className={styles.generatorIcon}>
@@ -590,6 +592,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                 </div>
               </form>
             </div>
+            )}
 
             {/* ── Saved exams list ── */}
             {courseExams.length > 0 && (
