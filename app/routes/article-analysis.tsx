@@ -17,12 +17,12 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
   const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], sources: [], questions: [], answers: {}, studentId: "" };
+  if (!student) return { courses: [], sources: [], questions: [], answers: {}, studentId: "", accountType: session.accountType };
 
   const courses = await getActiveCourses(student.id, request);
   const questions = await getArticleQuestions(student.id, request);
 
-  return { courses, questions, studentId: student.id };
+  return { courses, questions, studentId: student.id, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -50,7 +50,8 @@ export async function action({ request }: Route.ActionArgs) {
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
-  const { courses, questions, studentId } = loaderData as LoaderData;
+  const { courses, questions, studentId, accountType } = loaderData as LoaderData;
+  const isGuest = accountType === "guest";
 
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => {
     const stored = readSelectedCourse();
@@ -220,7 +221,8 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
                             className={styles.answerTextarea}
                             placeholder="כתוב את תשובתך כאן..."
                             value={answers[q.id] ?? ""}
-                            onChange={(e) => handleAnswerChange(q.id, e.target.value)}
+                            onChange={isGuest ? undefined : (e) => handleAnswerChange(q.id, e.target.value)}
+                            readOnly={isGuest}
                             rows={5}
                             dir="rtl"
                           />
@@ -230,15 +232,17 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
                   ))}
                 </Accordion>
 
-                <div className={styles.saveRow}>
-                  <button
-                    className={styles.saveButton}
-                    onClick={handleSave}
-                    disabled={saving}
-                  >
-                    {saving ? "שומר..." : "שמור תשובות"}
-                  </button>
-                </div>
+                {!isGuest && (
+                  <div className={styles.saveRow}>
+                    <button
+                      className={styles.saveButton}
+                      onClick={handleSave}
+                      disabled={saving}
+                    >
+                      {saving ? "שומר..." : "שמור תשובות"}
+                    </button>
+                  </div>
+                )}
               </>
             )}
           </div>
