@@ -4,7 +4,8 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { getStudent, getReminders, getActiveCourses } from "~/services/settings.service";
+import { getStudentById, getReminders, getActiveCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import {
   isReminderDueToday,
@@ -26,8 +27,10 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({}: Route.LoaderArgs) {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
+
   const [allReminders, courses, courseStats] = await Promise.all([
     student ? getReminders(student.id) : Promise.resolve([]),
     student ? getActiveCourses(student.id) : Promise.resolve([]),
@@ -40,6 +43,7 @@ export async function loader({}: Route.LoaderArgs) {
   return {
     studentId: student?.id ?? null,
     studentName: student?.name ?? null,
+    accountType: session.accountType,
     activeReminders,
     courses,
     courseStats,

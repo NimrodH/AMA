@@ -54,6 +54,29 @@
   margin: 0 auto;
 }
 
+.logoutBtn {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: none;
+  border: none;
+  border-top: 1px solid var(--color-neutral-6);
+  color: var(--color-neutral-10);
+  font: var(--font-body);
+  font-size: 0.875rem;
+  cursor: pointer;
+  text-align: start;
+  transition: color 0.15s, background 0.15s;
+  border-radius: 0;
+}
+
+.logoutBtn:hover {
+  color: var(--color-error-11);
+  background: var(--color-error-2);
+}
+
 @media (max-width: 768px) {
   .content {
     padding: var(--space-4);

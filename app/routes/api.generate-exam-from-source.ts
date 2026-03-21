@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
 import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
-import { getStudent } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { getSourceById } from "~/services/sources.service";
 import { createServerClient } from "~/lib/supabase";
 import { saveExam } from "~/services/exams.service";
@@ -108,10 +108,8 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "sourceId is required" }, { status: 400 });
   }
 
-  const student = await getStudent();
-  if (!student) {
-    return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
-  }
+  const session = await requireSession(request);
+  const student = { id: session.studentId };
 
   const source = await getSourceById(sourceId, student.id);
   if (!source) {

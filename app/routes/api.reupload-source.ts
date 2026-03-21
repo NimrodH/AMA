@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.reupload-source";
 import { getOpenAIClient, getOrCreateVectorStore, uploadToVectorStore, deleteFromVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
-import { getStudent } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 
 /**
  * POST /api/reupload-source
@@ -21,10 +21,8 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Missing sourceId" }, { status: 400 });
   }
 
-  const student = await getStudent();
-  if (!student) {
-    return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
-  }
+  const session = await requireSession(request);
+  const student = { id: session.studentId };
 
   const db = createServerClient();
 

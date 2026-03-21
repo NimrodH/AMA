@@ -19,7 +19,26 @@ export type StudentRow = {
   name: string;
 };
 
-/** Fetch the first student in the table (single-student app). */
+/**
+ * Fetch a student by their student_id (profiles.student_id).
+ * Used after session resolution.
+ */
+export async function getStudentById(studentId: string): Promise<StudentRow | null> {
+  const db = createServerClient();
+  const { data, error } = await db
+    .from("students")
+    .select("id, name")
+    .eq("id", studentId)
+    .single();
+
+  if (error) return null;
+  return data as StudentRow;
+}
+
+/**
+ * @deprecated Use getStudentById after session resolution instead.
+ * Kept for backward compatibility during migration.
+ */
 export async function getStudent(): Promise<StudentRow | null> {
   const db = createServerClient();
   const { data, error } = await db

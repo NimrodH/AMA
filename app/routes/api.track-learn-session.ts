@@ -1,5 +1,5 @@
 import type { Route } from "./+types/api.track-learn-session";
-import { getStudent } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { createServerClient } from "~/lib/supabase";
 
 /**
@@ -16,10 +16,8 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "courseId is required" }, { status: 400 });
   }
 
-  const student = await getStudent();
-  if (!student) {
-    return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
-  }
+  const session = await requireSession(request);
+  const student = { id: session.studentId };
 
   try {
     const db = createServerClient();

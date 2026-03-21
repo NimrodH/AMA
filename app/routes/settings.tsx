@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Plus, Bell, X, Trash2, HelpCircle, GripVertical } from "lucide-react";
+import { Plus, Bell, X, Trash2, HelpCircle, GripVertical, Users, Mail, Lock } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/settings";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -18,7 +18,7 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import {
-  getStudent,
+  getStudentById,
   getCourses,
   getReminders,
   updateStudentName,
@@ -33,6 +33,8 @@ import {
   deleteArticleQuestion,
   type ArticleQuestionRow,
 } from "~/services/settings.service";
+import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
+import { requireSession, getAccessTokenFromRequest } from "~/lib/auth.server";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import styles from "./settings.module.css";
 
@@ -42,33 +44,41 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-export async function loader() {
-  const student = await getStudent();
-  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [] };
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
+  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
 
-  const [courses, reminders, articleQuestions] = await Promise.all([
+  const accessToken = getAccessTokenFromRequest(request) ?? "";
+
+  const [courses, reminders, articleQuestions, guests] = await Promise.all([
     getCourses(student.id),
     getReminders(student.id),
     getArticleQuestions(student.id),
+    session.accountType === "student" ? listGuests(accessToken) : Promise.resolve([] as GuestRow[]),
   ]);
 
-  return { student, courses, reminders, articleQuestions };
+  return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
 }
 
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
+  const session = await requireSession(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
-  const studentId = formData.get("student_id") as string;
+  const studentId = session.studentId;
+  const accessToken = getAccessTokenFromRequest(request) ?? "";
 
   switch (intent) {
     case "update_name": {
+      if (session.accountType !== "student") break;
       const name = formData.get("name") as string;
       if (name?.trim()) await updateStudentName(studentId, name.trim());
       break;
     }
     case "add_course": {
+      if (session.accountType !== "student") break;
       const courseId = formData.get("course_id") as string;
       const courseName = formData.get("course_name") as string;
       if (courseId?.trim() && courseName?.trim()) {
@@ -77,18 +87,21 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     }
     case "toggle_course": {
+      if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const isActive = formData.get("is_active") === "true";
       if (id) await toggleCourse(id, isActive);
       break;
     }
     case "delete_course": {
+      if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const courseId = formData.get("course_id") as string;
       if (id && studentId && courseId) await deleteCourse(id, studentId, courseId);
       break;
     }
     case "add_reminder": {
+      if (session.accountType !== "student") break;
       const reminderType = formData.get("reminder_type") as string;
       const reminderTime = formData.get("reminder_time") as string;
       if (reminderType?.trim() && reminderTime?.trim()) {
@@ -97,25 +110,55 @@ export async function action({ request }: Route.ActionArgs) {
       break;
     }
     case "toggle_reminder": {
+      if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const isActive = formData.get("is_active") === "true";
       if (id) await toggleReminder(id, isActive);
       break;
     }
     case "delete_reminder": {
+      if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       if (id) await deleteReminder(id);
       break;
     }
     case "add_article_question": {
+      if (session.accountType !== "student") break;
       const question = formData.get("question") as string;
       const sortOrder = parseInt(formData.get("sort_order") as string, 10) || 0;
       if (question?.trim()) await addArticleQuestion(studentId, question.trim(), sortOrder);
       break;
     }
     case "delete_article_question": {
+      if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       if (id) await deleteArticleQuestion(id);
+      break;
+    }
+    case "add_guest": {
+      if (session.accountType !== "student") break;
+      const guestName = (formData.get("guest_name") as string)?.trim();
+      const guestEmail = (formData.get("guest_email") as string)?.trim();
+      const guestPassword = (formData.get("guest_password") as string)?.trim();
+      if (guestName && guestEmail && guestPassword) {
+        try {
+          await createGuest(guestName, guestEmail, guestPassword, accessToken);
+        } catch (err) {
+          return { ok: false, error: (err as Error).message };
+        }
+      }
+      break;
+    }
+    case "delete_guest": {
+      if (session.accountType !== "student") break;
+      const guestId = formData.get("guest_id") as string;
+      if (guestId) {
+        try {
+          await deleteGuest(guestId, accessToken);
+        } catch (err) {
+          return { ok: false, error: (err as Error).message };
+        }
+      }
       break;
     }
   }
@@ -190,11 +233,103 @@ function CourseDeleteDialog({ courseName, onConfirm }: CourseDeleteDialogProps) 
   );
 }
 
+// ─── Guests Section ──────────────────────────────────────────────────────────
+
+interface GuestsSectionProps {
+  guests: GuestRow[];
+  onAdd: (name: string, email: string, password: string) => void;
+  onDelete: (guestId: string) => void;
+  isBusy: boolean;
+  actionError?: string | null;
+}
+
+function GuestsSection({ guests, onAdd, onDelete, isBusy, actionError }: GuestsSectionProps) {
+  const [showForm, setShowForm] = React.useState(false);
+  const [name, setName] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [password, setPassword] = React.useState("");
+
+  function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!name.trim() || !email.trim() || !password.trim()) return;
+    onAdd(name.trim(), email.trim(), password.trim());
+    setShowForm(false);
+    setName(""); setEmail(""); setPassword("");
+  }
+
+  return (
+    <div className={styles.section}>
+      <div className={styles.sectionHeader}>
+        <h2 className={styles.sectionTitle}>אורחים</h2>
+        <p className={styles.sectionDescription}>אורחים יכולים לצפות בכל הנתונים שלך במצב קריאה בלבד</p>
+      </div>
+
+      {actionError && <p className={styles.guestError}>{actionError}</p>}
+
+      <div className={styles.guestsList}>
+        {guests.length === 0 && !showForm && (
+          <div className={styles.emptyGuests}>
+            <Users size={32} />
+            <p>לא הוגדרו אורחים עדיין</p>
+          </div>
+        )}
+        {guests.map((guest) => (
+          <div key={guest.id} className={styles.guestItem}>
+            <div className={styles.guestInfo}>
+              <div className={styles.guestIcon}><Users size={18} /></div>
+              <div className={styles.guestDetails}>
+                <h3 className={styles.guestName}>{guest.guest_name}</h3>
+                <p className={styles.guestEmail}>{guest.guest_email}</p>
+              </div>
+            </div>
+            <Button variant="outline" size="sm" className={styles.removeReminderBtn}
+              onClick={() => onDelete(guest.guest_id)} title="מחק אורח">
+              <X />
+            </Button>
+          </div>
+        ))}
+        {showForm && (
+          <form className={styles.addCourseForm} onSubmit={handleSubmit}>
+            <div className={styles.addCourseFields}>
+              <div className={styles.guestFieldRow}>
+                <Users size={16} className={styles.guestFieldIcon} />
+                <Input placeholder="שם האורח" value={name} onChange={(e) => setName(e.target.value)} autoFocus />
+              </div>
+              <div className={styles.guestFieldRow}>
+                <Mail size={16} className={styles.guestFieldIcon} />
+                <Input type="email" placeholder="אימייל" value={email} onChange={(e) => setEmail(e.target.value)} dir="ltr" />
+              </div>
+              <div className={styles.guestFieldRow}>
+                <Lock size={16} className={styles.guestFieldIcon} />
+                <Input type="text" placeholder="סיסמה" value={password} onChange={(e) => setPassword(e.target.value)} dir="ltr" />
+              </div>
+            </div>
+            <div className={styles.addFormActions}>
+              <Button type="submit" size="sm" disabled={!name.trim() || !email.trim() || !password.trim() || isBusy}>
+                הוסף
+              </Button>
+              <Button type="button" variant="outline" size="sm"
+                onClick={() => { setShowForm(false); setName(""); setEmail(""); setPassword(""); }}>
+                <X style={{ marginLeft: "var(--space-2)" }} />ביטול
+              </Button>
+            </div>
+          </form>
+        )}
+      </div>
+      {!showForm && (
+        <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowForm(true)}>
+          <Plus style={{ marginLeft: "var(--space-2)" }} />הוסף אורח חדש
+        </Button>
+      )}
+    </div>
+  );
+}
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function Settings({ loaderData }: Route.ComponentProps) {
-  const { student, courses, reminders, articleQuestions } = loaderData;
-  const fetcher = useFetcher();
+export default function Settings({ loaderData, actionData }: Route.ComponentProps) {
+  const { student, courses, reminders, articleQuestions, guests, accountType } = loaderData;
+  const fetcher = useFetcher<typeof action>();
 
   // Add course form state
   const [showAddCourse, setShowAddCourse] = React.useState(false);
@@ -216,27 +351,14 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   React.useEffect(() => {
     if (prevFetcherState.current !== "idle" && fetcher.state === "idle") {
       setShowAddCourse(false);
-      setNewCourseId("");
-      setNewCourseName("");
+      setNewCourseId(""); setNewCourseName("");
       setShowAddReminder(false);
-      setNewReminderType("");
-      setNewReminderDay("daily");
-      setNewReminderHour("08:00");
+      setNewReminderType(""); setNewReminderDay("daily"); setNewReminderHour("08:00");
       setShowAddQuestion(false);
       setNewQuestion("");
     }
     prevFetcherState.current = fetcher.state;
   }, [fetcher.state]);
-
-  function handleAddQuestion(e: React.FormEvent) {
-    e.preventDefault();
-    if (!newQuestion.trim()) return;
-    submitIntent({
-      intent: "add_article_question",
-      question: newQuestion,
-      sort_order: String(articleQuestions.length),
-    });
-  }
 
   if (!student) {
     return (
@@ -247,131 +369,104 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
   }
 
   function submitIntent(data: Record<string, string>) {
-    fetcher.submit({ student_id: student!.id, ...data }, { method: "POST" });
+    fetcher.submit({ ...data }, { method: "POST" });
   }
 
   function handleAddCourse(e: React.FormEvent) {
     e.preventDefault();
     if (!newCourseId.trim() || !newCourseName.trim()) return;
-    submitIntent({
-      intent: "add_course",
-      course_id: newCourseId,
-      course_name: newCourseName,
-    });
+    submitIntent({ intent: "add_course", course_id: newCourseId, course_name: newCourseName });
   }
 
   function handleAddReminder(e: React.FormEvent) {
     e.preventDefault();
     if (!newReminderType.trim() || !newReminderHour.trim()) return;
-    // Store as structured "DAY_CODE|HH:MM" string
     const reminderTime = `${newReminderDay}|${newReminderHour}`;
-    submitIntent({
-      intent: "add_reminder",
-      reminder_type: newReminderType,
-      reminder_time: reminderTime,
-    });
+    submitIntent({ intent: "add_reminder", reminder_type: newReminderType, reminder_time: reminderTime });
   }
+
+  function handleAddQuestion(e: React.FormEvent) {
+    e.preventDefault();
+    if (!newQuestion.trim()) return;
+    submitIntent({ intent: "add_article_question", question: newQuestion, sort_order: String(articleQuestions.length) });
+  }
+
+  const fetcherActionData = fetcher.data as { ok: boolean; error?: string } | undefined;
+  const guestActionError = fetcherActionData?.ok === false ? fetcherActionData.error : null;
 
   return (
     <AppLayout title="הגדרות">
       <div className={styles.settings}>
+
+        {/* Reminders */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
             <h2 className={styles.sectionTitle}>תזכורות</h2>
             <p className={styles.sectionDescription}>הגדר תזכורות לפעולות שונות</p>
           </div>
-
           <div className={styles.remindersList}>
             {reminders.map((reminder) => (
               <div key={reminder.id} className={styles.reminderItem}>
                 <div className={styles.reminderInfo}>
-                  <div className={styles.reminderIcon}>
-                    <Bell />
-                  </div>
+                  <div className={styles.reminderIcon}><Bell /></div>
                   <div className={styles.reminderDetails}>
                     <h3 className={styles.reminderType}>{reminder.reminder_type}</h3>
                     <p className={styles.reminderTime}>{formatReminderTime(reminder.reminder_time)}</p>
                   </div>
                 </div>
                 <div className={styles.reminderActions}>
-                  <Switch
-                    checked={reminder.is_active}
-                    onCheckedChange={(checked) =>
-                      submitIntent({ intent: "toggle_reminder", id: reminder.id, is_active: String(checked) })
-                    }
-                  />
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => submitIntent({ intent: "delete_reminder", id: reminder.id })}
-                    className={styles.removeReminderBtn}
-                  >
-                    <X />
-                  </Button>
+                  {accountType === "student" && (
+                    <Switch
+                      checked={reminder.is_active}
+                      onCheckedChange={(checked) =>
+                        submitIntent({ intent: "toggle_reminder", id: reminder.id, is_active: String(checked) })
+                      }
+                    />
+                  )}
+                  {accountType === "student" && (
+                    <Button variant="outline" size="sm"
+                      onClick={() => submitIntent({ intent: "delete_reminder", id: reminder.id })}
+                      className={styles.removeReminderBtn}>
+                      <X />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))}
-
             {showAddReminder && (
               <form className={styles.addCourseForm} onSubmit={handleAddReminder}>
                 <div className={styles.addCourseFields}>
-                  <Input
-                    placeholder="תיאור התזכורת (למשל: לחזור על חומר)"
-                    value={newReminderType}
-                    onChange={(e) => setNewReminderType(e.target.value)}
-                    autoFocus
-                  />
+                  <Input placeholder="תיאור התזכורת (למשל: לחזור על חומר)" value={newReminderType}
+                    onChange={(e) => setNewReminderType(e.target.value)} autoFocus />
                   <div className={styles.reminderTimeRow}>
-                    <select
-                      className={styles.reminderSelect}
-                      value={newReminderDay}
-                      onChange={(e) => setNewReminderDay(e.target.value)}
-                    >
+                    <select className={styles.reminderSelect} value={newReminderDay}
+                      onChange={(e) => setNewReminderDay(e.target.value)}>
                       {DAY_OPTIONS.map((opt) => (
-                        <option key={opt.value} value={opt.value}>
-                          {opt.label}
-                        </option>
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
                       ))}
                     </select>
                     <span className={styles.reminderTimeLabel}>בשעה</span>
-                    <input
-                      type="time"
-                      className={styles.reminderSelect}
-                      value={newReminderHour}
-                      onChange={(e) => setNewReminderHour(e.target.value)}
-                    />
+                    <input type="time" className={styles.reminderSelect} value={newReminderHour}
+                      onChange={(e) => setNewReminderHour(e.target.value)} />
                   </div>
                 </div>
                 <div className={styles.addFormActions}>
-                  <Button type="submit" size="sm" disabled={!newReminderType.trim() || fetcher.state !== "idle"}>
-                    הוסף
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowAddReminder(false);
-                      setNewReminderType("");
-                      setNewReminderDay("daily");
-                      setNewReminderHour("08:00");
-                    }}
-                  >
-                    <X style={{ marginLeft: "var(--space-2)" }} />
-                    ביטול
+                  <Button type="submit" size="sm" disabled={!newReminderType.trim() || fetcher.state !== "idle"}>הוסף</Button>
+                  <Button type="button" variant="outline" size="sm"
+                    onClick={() => { setShowAddReminder(false); setNewReminderType(""); setNewReminderDay("daily"); setNewReminderHour("08:00"); }}>
+                    <X style={{ marginLeft: "var(--space-2)" }} />ביטול
                   </Button>
                 </div>
               </form>
             )}
           </div>
-
-          {!showAddReminder && (
+          {!showAddReminder && accountType === "student" && (
             <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddReminder(true)}>
-              <Plus style={{ marginLeft: "var(--space-2)" }} />
-              הוסף תזכורת חדשה
+              <Plus style={{ marginLeft: "var(--space-2)" }} />הוסף תזכורת חדשה
             </Button>
           )}
         </div>
+
         {/* Personal Info */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
@@ -380,18 +475,17 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
           </div>
           <fetcher.Form method="POST" className={styles.form}>
             <input type="hidden" name="intent" value="update_name" />
-            <input type="hidden" name="student_id" value={student.id} />
             <div>
               <Label htmlFor="studentName">שם מלא</Label>
-              <Input id="studentName" name="name" defaultValue={student.name} />
+              <Input id="studentName" name="name" defaultValue={student.name} disabled={accountType !== "student"} />
             </div>
             <div>
               <Label htmlFor="studentId">מזהה סטודנט</Label>
               <Input id="studentId" value={student.id} disabled />
             </div>
-            <Button type="submit" disabled={fetcher.state !== "idle"}>
-              שמור שינויים
-            </Button>
+            {accountType === "student" && (
+              <Button type="submit" disabled={fetcher.state !== "idle"}>שמור שינויים</Button>
+            )}
           </fetcher.Form>
         </div>
 
@@ -401,7 +495,6 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
             <h2 className={styles.sectionTitle}>הקורסים שלי</h2>
             <p className={styles.sectionDescription}>נהל את רשימת הקורסים שלך</p>
           </div>
-
           <div className={styles.coursesList}>
             {courses.map((course) => (
               <div key={course.id} className={styles.courseItem}>
@@ -410,74 +503,46 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   <p className={styles.courseId}>{course.course_id}</p>
                 </div>
                 <div className={styles.courseActions}>
-                  <Switch
-                    checked={course.is_active}
-                    onCheckedChange={(checked) =>
-                      submitIntent({ intent: "toggle_course", id: course.id, is_active: String(checked) })
-                    }
-                  />
-                  <CourseDeleteDialog
-                    courseName={course.course_name}
-                    onConfirm={() =>
-                      submitIntent({
-                        intent: "delete_course",
-                        id: course.id,
-                        course_id: course.course_id,
-                      })
-                    }
-                  />
+                  {accountType === "student" && (
+                    <>
+                      <Switch
+                        checked={course.is_active}
+                        onCheckedChange={(checked) =>
+                          submitIntent({ intent: "toggle_course", id: course.id, is_active: String(checked) })
+                        }
+                      />
+                      <CourseDeleteDialog
+                        courseName={course.course_name}
+                        onConfirm={() => submitIntent({ intent: "delete_course", id: course.id, course_id: course.course_id })}
+                      />
+                    </>
+                  )}
                 </div>
               </div>
             ))}
-
             {showAddCourse && (
               <form className={styles.addCourseForm} onSubmit={handleAddCourse}>
                 <div className={styles.addCourseFields}>
-                  <Input
-                    placeholder="שם הקורס"
-                    value={newCourseName}
-                    onChange={(e) => setNewCourseName(e.target.value)}
-                    autoFocus
-                  />
-                  <Input
-                    placeholder="קוד קורס (לדוג׳ chem101)"
-                    value={newCourseId}
-                    onChange={(e) => setNewCourseId(e.target.value)}
-                  />
+                  <Input placeholder="שם הקורס" value={newCourseName} onChange={(e) => setNewCourseName(e.target.value)} autoFocus />
+                  <Input placeholder="קוד קורס (לדוג׳ chem101)" value={newCourseId} onChange={(e) => setNewCourseId(e.target.value)} />
                 </div>
                 <div className={styles.addFormActions}>
-                  <Button
-                    type="submit"
-                    size="sm"
-                    disabled={!newCourseName.trim() || !newCourseId.trim() || fetcher.state !== "idle"}
-                  >
-                    הוסף
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowAddCourse(false);
-                      setNewCourseId("");
-                      setNewCourseName("");
-                    }}
-                  >
-                    <X style={{ marginLeft: "var(--space-2)" }} />
-                    ביטול
+                  <Button type="submit" size="sm" disabled={!newCourseName.trim() || !newCourseId.trim() || fetcher.state !== "idle"}>הוסף</Button>
+                  <Button type="button" variant="outline" size="sm"
+                    onClick={() => { setShowAddCourse(false); setNewCourseId(""); setNewCourseName(""); }}>
+                    <X style={{ marginLeft: "var(--space-2)" }} />ביטול
                   </Button>
                 </div>
               </form>
             )}
           </div>
-
-          {!showAddCourse && (
+          {!showAddCourse && accountType === "student" && (
             <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddCourse(true)}>
-              <Plus style={{ marginLeft: "var(--space-2)" }} />
-              הוסף קורס חדש
+              <Plus style={{ marginLeft: "var(--space-2)" }} />הוסף קורס חדש
             </Button>
           )}
         </div>
+
         {/* Article Analysis Questions */}
         <div className={styles.section}>
           <div className={styles.sectionHeader}>
@@ -486,7 +551,6 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
               הגדר את רשימת השאלות שישמשו לניתוח מאמרים. השאלות יוצגו בעמוד ניתוח המאמר.
             </p>
           </div>
-
           <div className={styles.questionsList}>
             {articleQuestions.map((q, idx) => (
               <div key={q.id} className={styles.questionItem}>
@@ -495,65 +559,56 @@ export default function Settings({ loaderData }: Route.ComponentProps) {
                   <span>{idx + 1}</span>
                 </div>
                 <p className={styles.questionText}>{q.question}</p>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => submitIntent({ intent: "delete_article_question", id: q.id })}
-                  className={styles.removeReminderBtn}
-                  title="מחק שאלה"
-                >
-                  <X />
-                </Button>
+                {accountType === "student" && (
+                  <Button variant="outline" size="sm"
+                    onClick={() => submitIntent({ intent: "delete_article_question", id: q.id })}
+                    className={styles.removeReminderBtn} title="מחק שאלה">
+                    <X />
+                  </Button>
+                )}
               </div>
             ))}
-
             {articleQuestions.length === 0 && !showAddQuestion && (
               <div className={styles.emptyQuestions}>
                 <HelpCircle size={32} />
                 <p>טרם הוגדרו שאלות לניתוח מאמר</p>
               </div>
             )}
-
             {showAddQuestion && (
               <form className={styles.addCourseForm} onSubmit={handleAddQuestion}>
                 <div className={styles.addCourseFields}>
-                  <textarea
-                    className={styles.questionTextarea}
-                    placeholder="כתוב את השאלה כאן..."
-                    value={newQuestion}
-                    onChange={(e) => setNewQuestion(e.target.value)}
-                    rows={3}
-                    autoFocus
-                  />
+                  <textarea className={styles.questionTextarea} placeholder="כתוב את השאלה כאן..."
+                    value={newQuestion} onChange={(e) => setNewQuestion(e.target.value)} rows={3} autoFocus />
                 </div>
                 <div className={styles.addFormActions}>
-                  <Button type="submit" size="sm" disabled={!newQuestion.trim() || fetcher.state !== "idle"}>
-                    הוסף
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setShowAddQuestion(false);
-                      setNewQuestion("");
-                    }}
-                  >
-                    <X style={{ marginLeft: "var(--space-2)" }} />
-                    ביטול
+                  <Button type="submit" size="sm" disabled={!newQuestion.trim() || fetcher.state !== "idle"}>הוסף</Button>
+                  <Button type="button" variant="outline" size="sm"
+                    onClick={() => { setShowAddQuestion(false); setNewQuestion(""); }}>
+                    <X style={{ marginLeft: "var(--space-2)" }} />ביטול
                   </Button>
                 </div>
               </form>
             )}
           </div>
-
-          {!showAddQuestion && (
+          {!showAddQuestion && accountType === "student" && (
             <Button variant="outline" style={{ marginTop: "var(--space-4)" }} onClick={() => setShowAddQuestion(true)}>
-              <Plus style={{ marginLeft: "var(--space-2)" }} />
-              הוסף שאלה חדשה
+              <Plus style={{ marginLeft: "var(--space-2)" }} />הוסף שאלה חדשה
             </Button>
           )}
         </div>
+
+        {/* Guests — only for students */}
+        {accountType === "student" && (
+          <GuestsSection
+            guests={guests}
+            onAdd={(name, email, password) =>
+              submitIntent({ intent: "add_guest", guest_name: name, guest_email: email, guest_password: password })
+            }
+            onDelete={(guestId) => submitIntent({ intent: "delete_guest", guest_id: guestId })}
+            isBusy={fetcher.state !== "idle"}
+            actionError={guestActionError}
+          />
+        )}
       </div>
     </AppLayout>
   );

@@ -3,6 +3,8 @@ import { type RouteConfig, index, prefix, route } from "@react-router/dev/routes
 const devRoutes = import.meta.env.DEV ? prefix("dev", [route("components", "dev/components.tsx")]) : [];
 
 export default [
+  route("login", "routes/login.tsx"),
+  route("logout", "routes/logout.ts"),
   index("routes/home.tsx"),
   route("sources", "routes/sources.tsx"),
   route("sources/:id/view", "routes/source-view.tsx"),

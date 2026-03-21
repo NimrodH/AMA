@@ -11,7 +11,8 @@ import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
-import { getStudent } from "~/services/settings.service";
+import { getStudentById } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import {
   getSources,
@@ -29,8 +30,9 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-export async function loader() {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return { sources: [], courses: [], studentId: "" };
 
   const [sources, courses] = await Promise.all([getSources(student.id), getCoursesForStudent(student.id)]);

@@ -22,7 +22,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Input } from "~/components/ui/input/input";
 import { Badge } from "~/components/ui/badge/badge";
-import { getStudent, getActiveCourses } from "~/services/settings.service";
+import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./exams.module.css";
@@ -64,8 +65,9 @@ interface GradingResult {
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
-export async function loader() {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "" };
   const courses = await getActiveCourses(student.id);
   // Load exams for all courses (we'll filter client-side by selected course)

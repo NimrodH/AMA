@@ -1,6 +1,6 @@
 import * as React from "react";
-import { NavLink } from "react-router";
-import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch } from "lucide-react";
+import { NavLink, useFetcher } from "react-router";
+import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch, LogOut } from "lucide-react";
 import classNames from "classnames";
 import {
   Sidebar,
@@ -14,6 +14,7 @@ import {
   SidebarProvider,
   SidebarTrigger,
   SidebarHeader,
+  SidebarFooter,
 } from "~/components/ui/sidebar/sidebar";
 import { ColorSchemeToggle } from "~/components/ui/color-scheme-toggle/color-scheme-toggle";
 import styles from "./app-layout.module.css";
@@ -73,6 +74,18 @@ const navigationItems = [
   },
 ];
 
+function LogoutButton() {
+  const fetcher = useFetcher();
+  return (
+    <fetcher.Form method="post" action="/logout">
+      <button type="submit" className={styles.logoutBtn} title="יציאה">
+        <LogOut size={16} />
+        <span>יציאה</span>
+      </button>
+    </fetcher.Form>
+  );
+}
+
 export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra }: AppLayoutProps) {
   return (
     <SidebarProvider>
@@ -104,6 +117,9 @@ export function AppLayout({ children, title = "מערכת ניהול לימוד�
               </SidebarGroupContent>
             </SidebarGroup>
           </SidebarContent>
+          <SidebarFooter>
+            <LogoutButton />
+          </SidebarFooter>
         </Sidebar>
 
         <main className={styles.main}>

@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select/select";
-import { getStudent, getActiveCourses } from "~/services/settings.service";
+import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -20,8 +21,9 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "למד בכרטיסים - מערכת ניהול לימודים" }];
 }
 
-export async function loader() {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return { courses: [], cards: [] };
   const [courses, cards] = await Promise.all([
     getActiveCourses(student.id),

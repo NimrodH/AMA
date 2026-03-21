@@ -17,7 +17,8 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
-import { getStudent, getActiveCourses } from "~/services/settings.service";
+import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -27,14 +28,16 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "כרטיסי סיכום - מערכת ניהול לימודים" }];
 }
 
-export async function loader() {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return { courses: [], cards: [] };
   const [courses, cards] = await Promise.all([getActiveCourses(student.id), getCards(student.id)]);
   return { courses, cards };
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const session = await requireSession(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
@@ -66,13 +69,8 @@ export async function action({ request }: Route.ActionArgs) {
     return updateCard({ id: cardId, title, topic, lectureNumber, cardNumber, content });
   }
 
-  const student = await getStudent();
-  if (!student) {
-    return { ok: false, error: "לא נמצא סטודנט — הגדר סטודנט בהגדרות" };
-  }
-
   return addCard({
-    studentId: student.id,
+    studentId: session.studentId,
     courseId,
     title,
     topic,

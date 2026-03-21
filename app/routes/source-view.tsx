@@ -5,7 +5,8 @@ import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { getSourceById } from "~/services/sources.service";
-import { getStudent, getCourses } from "~/services/settings.service";
+import { getStudentById, getCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import styles from "./source-view.module.css";
 
 /**
@@ -31,8 +32,9 @@ export function meta({ data }: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-export async function loader({ params }: Route.LoaderArgs) {
-  const student = await getStudent();
+export async function loader({ params, request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return redirect("/setup");
 
   const [source, courses] = await Promise.all([

@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.generate-mc-exam";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
-import { getStudent } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
 
@@ -63,10 +63,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   const count = Math.max(5, Math.min(50, questionCount || 10));
 
-  const student = await getStudent();
-  if (!student) {
-    return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
-  }
+  const session = await requireSession(request);
+  const student = { id: session.studentId };
 
   // ── 1. Fetch all lecture sources for this course ─────────────────────────
   const lectures = await getSourcesByCourse(student.id, courseId, "Lecture");

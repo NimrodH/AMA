@@ -4,7 +4,8 @@ import type { Route } from "./+types/article-analysis";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
-import { getStudent, getActiveCourses, getArticleQuestions, getArticleAnswers, saveArticleAnswers } from "~/services/settings.service";
+import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./article-analysis.module.css";
 
@@ -12,8 +13,9 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "ניתוח מאמר - מערכת ניהול לימודים" }];
 }
 
-export async function loader({}: Route.LoaderArgs) {
-  const student = await getStudent();
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await requireSession(request);
+  const student = await getStudentById(session.studentId);
   if (!student) return { courses: [], sources: [], questions: [], answers: {}, studentId: "" };
 
   const courses = await getActiveCourses(student.id);
@@ -23,17 +25,16 @@ export async function loader({}: Route.LoaderArgs) {
 }
 
 export async function action({ request }: Route.ActionArgs) {
+  const session = await requireSession(request);
   const formData = await request.formData();
   const intent = formData.get("intent") as string;
 
   if (intent === "save_answers") {
-    const student = await getStudent();
-    if (!student) return { ok: false };
     const sourceId = formData.get("source_id") as string;
     const answersJson = formData.get("answers") as string;
     let answers: Record<string, string> = {};
     try { answers = JSON.parse(answersJson); } catch { answers = {}; }
-    await saveArticleAnswers(student.id, sourceId, answers);
+    await saveArticleAnswers(session.studentId, sourceId, answers);
     return { ok: true };
   }
 

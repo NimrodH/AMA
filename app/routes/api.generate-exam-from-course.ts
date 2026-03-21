@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.generate-exam-from-course";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
-import { getStudent } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
 
@@ -77,10 +77,8 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "courseId is required" }, { status: 400 });
   }
 
-  const student = await getStudent();
-  if (!student) {
-    return Response.json({ ok: false, error: "Student not found" }, { status: 401 });
-  }
+  const session = await requireSession(request);
+  const student = { id: session.studentId };
 
   // ── 1. Verify sources exist ──────────────────────────────────────────────
   const [pastExams, lectures] = await Promise.all([

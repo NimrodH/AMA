@@ -313,6 +313,98 @@
   margin: 0;
 }
 
+/* ─── Guests Section ─────────────────────────────────────────────────── */
+
+.guestsList {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.guestItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4);
+  background: var(--color-neutral-1);
+  border-radius: var(--radius-2);
+  border: 1px solid var(--color-neutral-5);
+}
+
+.guestInfo {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.guestIcon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-2);
+  background: var(--color-success-3);
+  color: var(--color-success-11);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.guestDetails {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.guestName {
+  font: var(--font-subheading);
+  color: var(--color-neutral-12);
+  margin: 0;
+}
+
+.guestEmail {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+  margin: 0;
+  direction: ltr;
+  text-align: right;
+}
+
+.guestFieldRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.guestFieldIcon {
+  color: var(--color-neutral-9);
+  flex-shrink: 0;
+}
+
+.emptyGuests {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  color: var(--color-neutral-9);
+  font: var(--font-body);
+  text-align: center;
+}
+
+.emptyGuests p {
+  margin: 0;
+}
+
+.guestError {
+  background: var(--color-error-3);
+  border: 1px solid var(--color-error-6);
+  color: var(--color-error-11);
+  border-radius: var(--radius-2);
+  padding: var(--space-3) var(--space-4);
+  font: var(--font-body);
+  margin: 0 0 var(--space-4) 0;
+}
+
 @media (max-width: 480px) {
   .section {
     padding: var(--space-4);
