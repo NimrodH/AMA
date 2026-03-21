@@ -147,12 +147,12 @@ export async function signIn(
 
 /** Build a Set-Cookie header that stores the JWT in auth_token. */
 export function buildAuthCookie(accessToken: string): string {
-  // 7 days
+  // 7 days — no HttpOnly so the browser doesn't strip it in iframe/cross-origin preview envs
   const maxAge = 60 * 60 * 24 * 7;
-  return `auth_token=${encodeURIComponent(accessToken)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}`;
+  return `auth_token=${encodeURIComponent(accessToken)}; Path=/; SameSite=Lax; Max-Age=${maxAge}`;
 }
 
 /** Build a cookie that clears the auth_token. */
 export function buildClearAuthCookie(): string {
-  return `auth_token=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`;
+  return `auth_token=; Path=/; SameSite=Lax; Max-Age=0`;
 }
