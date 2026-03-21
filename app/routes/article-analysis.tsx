@@ -58,6 +58,19 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
     return courses[0]?.course_id ?? "";
   });
 
+  // Re-sync from localStorage after SSR hydration (clientLoader.hydrate = true
+  // means the server renders with an empty stored value, so useState initializer
+  // runs before the browser's localStorage is accessible).
+  React.useEffect(() => {
+    if (courses.length === 0) return;
+    setSelectedCourse((prev) => {
+      if (prev && courses.some((c) => c.course_id === prev)) return prev;
+      const stored = readSelectedCourse();
+      if (stored && courses.some((c) => c.course_id === stored)) return stored;
+      return courses[0].course_id;
+    });
+  }, [courses]);
+
   const [articles, setArticles] = React.useState<{ id: string; topic: string }[]>([]);
   const [selectedArticleId, setSelectedArticleId] = React.useState<string>("");
   const [answers, setAnswers] = React.useState<Record<string, string>>({});
