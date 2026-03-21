@@ -23,7 +23,7 @@ export async function action({ request }: Route.ActionArgs) {
   // - Always include sources with lecture_number = NULL (course-wide materials)
   // - If the card has a lecture_number, also include sources matching that number
   // - Never exclude course-wide sources just because the card has a lecture number
-  const db = createServerClient();
+  const db = createServerClient(request);
   const lectureNum = lectureNumber ? parseInt(lectureNumber, 10) : null;
 
   // Fetch ALL lecture sources for this course with a vector store file

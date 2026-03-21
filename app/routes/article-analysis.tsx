@@ -16,11 +16,11 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [], sources: [], questions: [], answers: {}, studentId: "" };
 
-  const courses = await getActiveCourses(student.id);
-  const questions = await getArticleQuestions(student.id);
+  const courses = await getActiveCourses(student.id, request);
+  const questions = await getArticleQuestions(student.id, request);
 
   return { courses, questions, studentId: student.id };
 }
@@ -38,7 +38,7 @@ export async function action({ request }: Route.ActionArgs) {
     const answersJson = formData.get("answers") as string;
     let answers: Record<string, string> = {};
     try { answers = JSON.parse(answersJson); } catch { answers = {}; }
-    await saveArticleAnswers(session.studentId, sourceId, answers);
+    await saveArticleAnswers(session.studentId, sourceId, answers, request);
     return { ok: true };
   }
 

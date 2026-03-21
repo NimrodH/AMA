@@ -24,11 +24,11 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [], cards: [] };
   const [courses, cards] = await Promise.all([
-    getActiveCourses(student.id),
-    getCards(student.id),
+    getActiveCourses(student.id, request),
+    getCards(student.id, request),
   ]);
   return { courses, cards };
 }

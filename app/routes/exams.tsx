@@ -68,12 +68,12 @@ interface GradingResult {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "" };
-  const courses = await getActiveCourses(student.id);
+  const courses = await getActiveCourses(student.id, request);
   // Load exams for all courses (we'll filter client-side by selected course)
   const savedExams = courses.length > 0
-    ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id)))).flat()
+    ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id, request)))).flat()
     : [];
   return { courses, savedExams, studentId: student.id };
 }

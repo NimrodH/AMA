@@ -12,8 +12,8 @@ const SOURCE_SELECT_FIELDS =
   "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, extracted_text, created_at";
 
 /** Fetch a single source by ID (must belong to the student). */
-export async function getSourceById(id: string, studentId: string): Promise<SourceRow | null> {
-  const db = createServerClient();
+export async function getSourceById(id: string, studentId: string, request?: Request): Promise<SourceRow | null> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("sources")
     .select(SOURCE_SELECT_FIELDS)
@@ -29,9 +29,10 @@ export async function getSourceById(id: string, studentId: string): Promise<Sour
 export async function getSourcesByCourse(
   studentId: string,
   courseId: string,
-  sourceType?: "Lecture" | "Card" | "Past exam" | "Article"
+  sourceType?: "Lecture" | "Card" | "Past exam" | "Article",
+  request?: Request
 ): Promise<SourceRow[]> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   let query = db
     .from("sources")
     .select(SOURCE_SELECT_FIELDS)
@@ -48,8 +49,8 @@ export async function getSourcesByCourse(
 }
 
 /** Fetch all sources for a student. */
-export async function getSources(studentId: string): Promise<SourceRow[]> {
-  const db = createServerClient();
+export async function getSources(studentId: string, request?: Request): Promise<SourceRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("sources")
     .select(SOURCE_SELECT_FIELDS)
@@ -85,8 +86,9 @@ export async function addSource({
   topic,
   lectureNumber,
   file,
-}: AddSourceParams): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+  request,
+}: AddSourceParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
 
   // Build a unique storage path: studentId/courseId/timestamp_filename
   // Supabase Storage only allows ASCII-safe key characters.
@@ -181,12 +183,13 @@ export async function addSource({
  */
 export async function deleteSource(
   id: string,
-  studentId: string
+  studentId: string,
+  request?: Request
 ): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+  const db = createServerClient(request);
 
   // 1. Fetch source record
-  const source = await getSourceById(id, studentId);
+  const source = await getSourceById(id, studentId, request);
   if (!source) return { ok: false, error: "מקור לא נמצא" };
 
   // 2. Delete from Supabase Storage (extract path from public URL)
@@ -246,8 +249,9 @@ export async function addSourceFromUrl({
   topic,
   lectureNumber,
   googleDocsUrl,
-}: AddSourceFromUrlParams): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+  request,
+}: AddSourceFromUrlParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
 
   // ── Fetch & convert Google Doc to PDF buffer ─────────────────────────────
   let fileBuffer: Buffer;
@@ -351,11 +355,12 @@ interface RefreshSourceFromGoogleDocsParams {
 export async function refreshSourceFromGoogleDocs({
   sourceId,
   studentId,
-}: RefreshSourceFromGoogleDocsParams): Promise<{ ok: boolean; error?: string; fileStatus?: string; newVectorStoreFileId?: string }> {
-  const db = createServerClient();
+  request,
+}: RefreshSourceFromGoogleDocsParams & { request?: Request }): Promise<{ ok: boolean; error?: string; fileStatus?: string; newVectorStoreFileId?: string }> {
+  const db = createServerClient(request);
 
   // ── 1. Fetch the source row ──────────────────────────────────────────────
-  const source = await getSourceById(sourceId, studentId);
+  const source = await getSourceById(sourceId, studentId, request);
   if (!source) return { ok: false, error: "מקור לא נמצא" };
   if (!source.google_docs_url) return { ok: false, error: "למקור זה אין כתובת Google Docs" };
 
@@ -439,8 +444,8 @@ export async function refreshSourceFromGoogleDocs({
 }
 
 /** Fetch active courses for a student (used to populate the upload dialog dropdown). */
-export async function getCoursesForStudent(studentId: string): Promise<CourseRow[]> {
-  const db = createServerClient();
+export async function getCoursesForStudent(studentId: string, request?: Request): Promise<CourseRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("courses")
     .select("id, course_id, course_name, is_active")

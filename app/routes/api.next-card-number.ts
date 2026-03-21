@@ -9,6 +9,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     return Response.json({ error: "courseId is required" }, { status: 400 });
   }
 
-  const nextNumber = await getNextCardNumber(courseId);
+  const nextNumber = await getNextCardNumber(courseId, request);
   return Response.json({ nextNumber });
 }

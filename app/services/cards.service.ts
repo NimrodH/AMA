@@ -13,8 +13,8 @@ export type CardRow = {
 };
 
 /** Fetch all cards for a student, newest first. */
-export async function getCards(studentId: string): Promise<CardRow[]> {
-  const db = createServerClient();
+export async function getCards(studentId: string, request?: Request): Promise<CardRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("cards")
     .select("id, student_id, course_id, title, topic, lecture_number, card_number, content, created_at")
@@ -31,8 +31,8 @@ export async function getCards(studentId: string): Promise<CardRow[]> {
  * than the largest card number in the course (so 1.1 → 2, 3 → 4).
  * Returns 1 if no numbered cards exist yet.
  */
-export async function getNextCardNumber(courseId: string): Promise<number> {
-  const db = createServerClient();
+export async function getNextCardNumber(courseId: string, request?: Request): Promise<number> {
+  const db = createServerClient(request);
   const { data } = await db
     .from("cards")
     .select("card_number")
@@ -72,8 +72,9 @@ export async function updateCard({
   lectureNumber,
   cardNumber,
   content,
-}: UpdateCardParams): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+  request,
+}: UpdateCardParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
 
   const { error } = await db
     .from("cards")
@@ -89,8 +90,8 @@ export async function updateCard({
 }
 
 /** Delete a card by id. */
-export async function deleteCard(id: string): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+export async function deleteCard(id: string, request?: Request): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
   const { error } = await db.from("cards").delete().eq("id", id);
   if (error) {
     console.error("Card delete error:", error);
@@ -108,8 +109,9 @@ export async function addCard({
   lectureNumber,
   cardNumber,
   content,
-}: AddCardParams): Promise<{ ok: boolean; error?: string }> {
-  const db = createServerClient();
+  request,
+}: AddCardParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
 
   const { error } = await db.from("cards").insert({
     student_id: studentId,

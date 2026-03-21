@@ -38,12 +38,12 @@ export function meta({ data }: Route.MetaArgs) {
 
 export async function loader({ params, request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return redirect("/setup");
 
   const [source, courses] = await Promise.all([
-    getSourceById(params.id, student.id),
-    getCourses(student.id),
+    getSourceById(params.id, student.id, request),
+    getCourses(student.id, request),
   ]);
   if (!source) throw new Response("Not Found", { status: 404 });
 

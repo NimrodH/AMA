@@ -20,7 +20,7 @@ export async function action({ request }: Route.ActionArgs) {
   const student = { id: session.studentId };
 
   try {
-    const db = createServerClient();
+    const db = createServerClient(request);
 
     // Ensure the row exists
     await db.from("course_stats").upsert(

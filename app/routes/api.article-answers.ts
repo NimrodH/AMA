@@ -10,6 +10,6 @@ export async function loader({ request }: Route.LoaderArgs) {
     return Response.json({ answers: {} });
   }
 
-  const answers = await getArticleAnswers(studentId, sourceId);
+  const answers = await getArticleAnswers(studentId, sourceId, request);
   return Response.json({ answers });
 }

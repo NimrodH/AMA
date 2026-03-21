@@ -31,9 +31,9 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [], cards: [] };
-  const [courses, cards] = await Promise.all([getActiveCourses(student.id), getCards(student.id)]);
+  const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
   return { courses, cards };
 }
 
@@ -49,7 +49,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "delete") {
     const cardId = formData.get("cardId") as string;
     if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
-    return deleteCard(cardId);
+    return deleteCard(cardId, request);
   }
 
   // For create / edit, all fields are required
@@ -70,7 +70,7 @@ export async function action({ request }: Route.ActionArgs) {
   if (intent === "edit") {
     const cardId = formData.get("cardId") as string;
     if (!cardId) return { ok: false, error: "מזהה הכרטיס חסר" };
-    return updateCard({ id: cardId, title, topic, lectureNumber, cardNumber, content });
+    return updateCard({ id: cardId, title, topic, lectureNumber, cardNumber, content, request });
   }
 
   return addCard({
@@ -81,6 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
     lectureNumber,
     cardNumber,
     content,
+    request,
   });
 }
 

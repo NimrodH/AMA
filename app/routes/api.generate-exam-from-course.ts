@@ -82,8 +82,8 @@ export async function action({ request }: Route.ActionArgs) {
 
   // ── 1. Verify sources exist ──────────────────────────────────────────────
   const [pastExams, lectures] = await Promise.all([
-    getSourcesByCourse(student.id, courseId, "Past exam"),
-    getSourcesByCourse(student.id, courseId, "Lecture"),
+    getSourcesByCourse(student.id, courseId, "Past exam", request),
+    getSourcesByCourse(student.id, courseId, "Lecture", request),
   ]);
 
   if (pastExams.length === 0) {
@@ -132,7 +132,7 @@ ${lectureList}
 
   // ── 4. Call OpenAI with file_search (like card-feedback) ─────────────────
   const client = getOpenAIClient();
-  const db = createServerClient();
+  const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   let rawText: string;
@@ -215,6 +215,7 @@ ${lectureList}
     title: examObj?.title ?? "מבחן אימון",
     examType: "ai",
     examContent: examData as object,
+    request,
   }).catch((err) => console.warn("[generate-exam-from-course] save exam failed:", err));
 
   return Response.json({ ok: true, exam: examData });

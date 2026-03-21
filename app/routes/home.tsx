@@ -30,12 +30,12 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
 
   const [allReminders, courses, courseStats] = await Promise.all([
-    student ? getReminders(student.id) : Promise.resolve([]),
-    student ? getActiveCourses(student.id) : Promise.resolve([]),
-    student ? getAllCourseStats(student.id) : Promise.resolve([]),
+    student ? getReminders(student.id, request) : Promise.resolve([]),
+    student ? getActiveCourses(student.id, request) : Promise.resolve([]),
+    student ? getAllCourseStats(student.id, request) : Promise.resolve([]),
   ]);
 
   // Return all active reminders — client-side manages which are pending/visible

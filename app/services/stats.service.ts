@@ -18,9 +18,10 @@ type IncrementField = "learn_sessions" | "past_exam_attempts" | "ai_exam_attempt
 export async function incrementCourseStat(
   studentId: string,
   courseId: string,
-  field: IncrementField
+  field: IncrementField,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
 
   // Upsert with conflict target — insert defaults if row doesn't exist,
   // then add 1 to the target field in both cases.
@@ -43,9 +44,10 @@ export async function recordExamResult(
   studentId: string,
   courseId: string,
   grade: number,
-  examType: "past" | "ai"
+  examType: "past" | "ai",
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   const field: IncrementField =
     examType === "past" ? "past_exam_attempts" : "ai_exam_attempts";
 
@@ -91,8 +93,8 @@ export async function recordExamResult(
 /**
  * Get stats for all courses of a student.
  */
-export async function getAllCourseStats(studentId: string): Promise<CourseStats[]> {
-  const db = createServerClient();
+export async function getAllCourseStats(studentId: string, request?: Request): Promise<CourseStats[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("course_stats")
     .select("*")

@@ -1,10 +1,49 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 
 /**
- * Creates a Supabase client for server-side operations (loaders/actions).
- * Uses SUPABASE_PROJECT_URL and SUPABASE_API_KEY env vars set by the Dazl integration.
+ * Extract the JWT from a Request's Authorization header or auth_token cookie.
+ * Duplicated here (instead of importing from auth.server.ts) because this
+ * module is imported by both client and server bundles and React Router v7
+ * strips `.server` modules from client builds.
  */
-export function createServerClient(): SupabaseClient {
+function extractAccessToken(request: Request): string | null {
+  // Authorization header
+  const authHeader = request.headers.get("Authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    return authHeader.slice(7);
+  }
+  // Cookie fallback
+  const cookie = request.headers.get("Cookie") ?? "";
+  const parts = cookie.split(";").map((s) => s.trim());
+  for (const part of parts) {
+    if (part.startsWith("auth_token=")) {
+      return decodeURIComponent(part.slice("auth_token=".length));
+    }
+    if (part.includes("-auth-token=")) {
+      try {
+        const raw = decodeURIComponent(part.split("=").slice(1).join("="));
+        const parsed = JSON.parse(raw);
+        return parsed?.access_token ?? null;
+      } catch {
+        // ignore
+      }
+    }
+  }
+  return null;
+}
+
+/**
+ * Creates a Supabase client for server-side operations (loaders/actions).
+ *
+ * When a `Request` is passed, the user's JWT is extracted from the
+ * `Authorization` header or cookie and injected into the Supabase client
+ * so that `auth.uid()` resolves correctly for RLS policies.
+ *
+ * Without a `Request`, the client uses the anon key only — suitable for
+ * unauthenticated / setup endpoints, but **RLS-protected tables will
+ * return empty results**.
+ */
+export function createServerClient(request?: Request): SupabaseClient {
   const url = process.env.SUPABASE_PROJECT_URL;
   const key = process.env.SUPABASE_API_KEY;
 
@@ -14,7 +53,17 @@ export function createServerClient(): SupabaseClient {
     );
   }
 
-  return createClient(url, key);
+  const accessToken = request ? extractAccessToken(request) : null;
+
+  return createClient(url, key, {
+    global: {
+      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
+    },
+    auth: {
+      autoRefreshToken: false,
+      persistSession: false,
+    },
+  });
 }
 
 export type SourceType = "Lecture" | "Card" | "Past exam" | "Article";

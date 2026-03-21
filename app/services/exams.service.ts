@@ -31,8 +31,9 @@ export async function saveExam({
   title,
   examType,
   examContent,
-}: SaveExamParams): Promise<string | null> {
-  const db = createServerClient();
+  request,
+}: SaveExamParams & { request?: Request }): Promise<string | null> {
+  const db = createServerClient(request);
 
   const { data, error } = await db
     .from("exams")
@@ -59,9 +60,10 @@ export async function saveExam({
  */
 export async function getExamsByCourse(
   studentId: string,
-  courseId: string
+  courseId: string,
+  request?: Request
 ): Promise<ExamRow[]> {
-  const db = createServerClient();
+  const db = createServerClient(request);
 
   const { data, error } = await db
     .from("exams")

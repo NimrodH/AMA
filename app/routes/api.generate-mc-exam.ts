@@ -67,7 +67,7 @@ export async function action({ request }: Route.ActionArgs) {
   const student = { id: session.studentId };
 
   // ── 1. Fetch all lecture sources for this course ─────────────────────────
-  const lectures = await getSourcesByCourse(student.id, courseId, "Lecture");
+  const lectures = await getSourcesByCourse(student.id, courseId, "Lecture", request);
 
   if (lectures.length === 0) {
     return Response.json(
@@ -101,7 +101,7 @@ ${lectureList}
 
   // ── 4. Call OpenAI with file_search against the vector store ─────────────
   const client = getOpenAIClient();
-  const db = createServerClient();
+  const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   let rawText: string;
@@ -183,6 +183,7 @@ ${lectureList}
     title: examObj?.title ?? `${courseId} — מבחן אמריקאי`,
     examType: "mc",
     examContent: examData as object,
+    request,
   }).catch((err) => console.warn("[generate-mc-exam] save exam failed:", err));
 
   return Response.json({ ok: true, exam: examData });

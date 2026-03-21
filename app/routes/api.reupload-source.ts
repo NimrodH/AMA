@@ -24,7 +24,7 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
   const student = { id: session.studentId };
 
-  const db = createServerClient();
+  const db = createServerClient(request);
 
   // ── 1. Fetch the source ────────────────────────────────────────────────────
   const { data: source, error: fetchError } = await db

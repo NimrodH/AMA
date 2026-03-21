@@ -47,15 +47,15 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
 
   const accessToken = getAccessTokenFromRequest(request) ?? "";
 
   const [courses, reminders, articleQuestions, guests] = await Promise.all([
-    getCourses(student.id),
-    getReminders(student.id),
-    getArticleQuestions(student.id),
+    getCourses(student.id, request),
+    getReminders(student.id, request),
+    getArticleQuestions(student.id, request),
     session.accountType === "student" ? listGuests(accessToken) : Promise.resolve([] as GuestRow[]),
   ]);
 
@@ -78,7 +78,7 @@ export async function action({ request }: Route.ActionArgs) {
     case "update_name": {
       if (session.accountType !== "student") break;
       const name = formData.get("name") as string;
-      if (name?.trim()) await updateStudentName(studentId, name.trim());
+      if (name?.trim()) await updateStudentName(studentId, name.trim(), request);
       break;
     }
     case "add_course": {
@@ -86,7 +86,7 @@ export async function action({ request }: Route.ActionArgs) {
       const courseId = formData.get("course_id") as string;
       const courseName = formData.get("course_name") as string;
       if (courseId?.trim() && courseName?.trim()) {
-        await addCourse(studentId, courseId.trim(), courseName.trim());
+        await addCourse(studentId, courseId.trim(), courseName.trim(), request);
       }
       break;
     }
@@ -94,14 +94,14 @@ export async function action({ request }: Route.ActionArgs) {
       if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const isActive = formData.get("is_active") === "true";
-      if (id) await toggleCourse(id, isActive);
+      if (id) await toggleCourse(id, isActive, request);
       break;
     }
     case "delete_course": {
       if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const courseId = formData.get("course_id") as string;
-      if (id && studentId && courseId) await deleteCourse(id, studentId, courseId);
+      if (id && studentId && courseId) await deleteCourse(id, studentId, courseId, request);
       break;
     }
     case "add_reminder": {
@@ -109,7 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
       const reminderType = formData.get("reminder_type") as string;
       const reminderTime = formData.get("reminder_time") as string;
       if (reminderType?.trim() && reminderTime?.trim()) {
-        await addReminder(studentId, reminderType.trim(), reminderTime.trim());
+        await addReminder(studentId, reminderType.trim(), reminderTime.trim(), request);
       }
       break;
     }
@@ -117,26 +117,26 @@ export async function action({ request }: Route.ActionArgs) {
       if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
       const isActive = formData.get("is_active") === "true";
-      if (id) await toggleReminder(id, isActive);
+      if (id) await toggleReminder(id, isActive, request);
       break;
     }
     case "delete_reminder": {
       if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
-      if (id) await deleteReminder(id);
+      if (id) await deleteReminder(id, request);
       break;
     }
     case "add_article_question": {
       if (session.accountType !== "student") break;
       const question = formData.get("question") as string;
       const sortOrder = parseInt(formData.get("sort_order") as string, 10) || 0;
-      if (question?.trim()) await addArticleQuestion(studentId, question.trim(), sortOrder);
+      if (question?.trim()) await addArticleQuestion(studentId, question.trim(), sortOrder, request);
       break;
     }
     case "delete_article_question": {
       if (session.accountType !== "student") break;
       const id = formData.get("id") as string;
-      if (id) await deleteArticleQuestion(id);
+      if (id) await deleteArticleQuestion(id, request);
       break;
     }
     case "add_guest": {

@@ -23,8 +23,8 @@ export type StudentRow = {
  * Fetch a student by their student_id (profiles.student_id).
  * Used after session resolution.
  */
-export async function getStudentById(studentId: string): Promise<StudentRow | null> {
-  const db = createServerClient();
+export async function getStudentById(studentId: string, request?: Request): Promise<StudentRow | null> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("students")
     .select("id, name")
@@ -39,8 +39,8 @@ export async function getStudentById(studentId: string): Promise<StudentRow | nu
  * @deprecated Use getStudentById after session resolution instead.
  * Kept for backward compatibility during migration.
  */
-export async function getStudent(): Promise<StudentRow | null> {
-  const db = createServerClient();
+export async function getStudent(request?: Request): Promise<StudentRow | null> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("students")
     .select("id, name")
@@ -52,14 +52,14 @@ export async function getStudent(): Promise<StudentRow | null> {
 }
 
 /** Update student name. */
-export async function updateStudentName(id: string, name: string): Promise<void> {
-  const db = createServerClient();
+export async function updateStudentName(id: string, name: string, request?: Request): Promise<void> {
+  const db = createServerClient(request);
   await db.from("students").update({ name }).eq("id", id);
 }
 
 /** Fetch all courses for a student (settings page — includes inactive). */
-export async function getCourses(studentId: string): Promise<CourseRow[]> {
-  const db = createServerClient();
+export async function getCourses(studentId: string, request?: Request): Promise<CourseRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("courses")
     .select("id, course_id, course_name, is_active")
@@ -71,8 +71,8 @@ export async function getCourses(studentId: string): Promise<CourseRow[]> {
 }
 
 /** Fetch only active courses for a student (used in all selection dropdowns). */
-export async function getActiveCourses(studentId: string): Promise<CourseRow[]> {
-  const db = createServerClient();
+export async function getActiveCourses(studentId: string, request?: Request): Promise<CourseRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("courses")
     .select("id, course_id, course_name, is_active")
@@ -88,9 +88,10 @@ export async function getActiveCourses(studentId: string): Promise<CourseRow[]> 
 export async function addCourse(
   studentId: string,
   courseId: string,
-  courseName: string
+  courseName: string,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   await db.from("courses").insert({
     student_id: studentId,
     course_id: courseId,
@@ -99,8 +100,8 @@ export async function addCourse(
 }
 
 /** Toggle a course's active state. */
-export async function toggleCourse(id: string, isActive: boolean): Promise<void> {
-  const db = createServerClient();
+export async function toggleCourse(id: string, isActive: boolean, request?: Request): Promise<void> {
+  const db = createServerClient(request);
   await db.from("courses").update({ is_active: isActive }).eq("id", id);
 }
 
@@ -111,9 +112,10 @@ export async function toggleCourse(id: string, isActive: boolean): Promise<void>
 export async function deleteCourse(
   id: string,
   studentId: string,
-  courseId: string
+  courseId: string,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   // Delete dependent records first
   await Promise.all([
     db.from("cards").delete().eq("student_id", studentId).eq("course_id", courseId),
@@ -125,8 +127,8 @@ export async function deleteCourse(
 }
 
 /** Fetch all reminders for a student. */
-export async function getReminders(studentId: string): Promise<ReminderRow[]> {
-  const db = createServerClient();
+export async function getReminders(studentId: string, request?: Request): Promise<ReminderRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("reminders")
     .select("id, reminder_type, reminder_time, is_active")
@@ -141,9 +143,10 @@ export async function getReminders(studentId: string): Promise<ReminderRow[]> {
 export async function addReminder(
   studentId: string,
   reminderType: string,
-  reminderTime: string
+  reminderTime: string,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   await db.from("reminders").insert({
     student_id: studentId,
     reminder_type: reminderType,
@@ -153,14 +156,14 @@ export async function addReminder(
 }
 
 /** Toggle reminder active state. */
-export async function toggleReminder(id: string, isActive: boolean): Promise<void> {
-  const db = createServerClient();
+export async function toggleReminder(id: string, isActive: boolean, request?: Request): Promise<void> {
+  const db = createServerClient(request);
   await db.from("reminders").update({ is_active: isActive }).eq("id", id);
 }
 
 /** Delete a reminder by its primary key. */
-export async function deleteReminder(id: string): Promise<void> {
-  const db = createServerClient();
+export async function deleteReminder(id: string, request?: Request): Promise<void> {
+  const db = createServerClient(request);
   await db.from("reminders").delete().eq("id", id);
 }
 
@@ -173,8 +176,8 @@ export type ArticleQuestionRow = {
 };
 
 /** Fetch all article analysis questions for a student. */
-export async function getArticleQuestions(studentId: string): Promise<ArticleQuestionRow[]> {
-  const db = createServerClient();
+export async function getArticleQuestions(studentId: string, request?: Request): Promise<ArticleQuestionRow[]> {
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("article_analysis_questions")
     .select("id, question, sort_order")
@@ -189,9 +192,10 @@ export async function getArticleQuestions(studentId: string): Promise<ArticleQue
 export async function addArticleQuestion(
   studentId: string,
   question: string,
-  sortOrder: number
+  sortOrder: number,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   await db.from("article_analysis_questions").insert({
     student_id: studentId,
     question,
@@ -200,8 +204,8 @@ export async function addArticleQuestion(
 }
 
 /** Delete an article analysis question by its primary key. */
-export async function deleteArticleQuestion(id: string): Promise<void> {
-  const db = createServerClient();
+export async function deleteArticleQuestion(id: string, request?: Request): Promise<void> {
+  const db = createServerClient(request);
   await db.from("article_analysis_questions").delete().eq("id", id);
 }
 
@@ -213,9 +217,10 @@ export type ArticleAnswersMap = Record<string, string>;
 /** Fetch saved answers for a given source (article). Returns {} if none yet. */
 export async function getArticleAnswers(
   studentId: string,
-  sourceId: string
+  sourceId: string,
+  request?: Request
 ): Promise<ArticleAnswersMap> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   const { data, error } = await db
     .from("article_analysis_answers")
     .select("answers")
@@ -231,9 +236,10 @@ export async function getArticleAnswers(
 export async function saveArticleAnswers(
   studentId: string,
   sourceId: string,
-  answers: ArticleAnswersMap
+  answers: ArticleAnswersMap,
+  request?: Request
 ): Promise<void> {
-  const db = createServerClient();
+  const db = createServerClient(request);
   await db.from("article_analysis_answers").upsert(
     {
       student_id: studentId,

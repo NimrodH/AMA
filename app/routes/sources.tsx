@@ -33,10 +33,10 @@ export function meta({}: Route.MetaArgs) {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await requireSession(request);
-  const student = await getStudentById(session.studentId);
+  const student = await getStudentById(session.studentId, request);
   if (!student) return { sources: [], courses: [], studentId: "" };
 
-  const [sources, courses] = await Promise.all([getSources(student.id), getCoursesForStudent(student.id)]);
+  const [sources, courses] = await Promise.all([getSources(student.id, request), getCoursesForStudent(student.id, request)]);
 
   return { sources, courses, studentId: student.id };
 }
@@ -55,7 +55,7 @@ export async function action({ request }: Route.ActionArgs) {
     const sourceId = form.get("sourceId") as string;
     const studentId = form.get("studentId") as string;
     if (!sourceId || !studentId) return { ok: false, error: "חסרים פרמטרים" };
-    return deleteSource(sourceId, studentId);
+    return deleteSource(sourceId, studentId, request);
   }
 
   // ── Upload action (default) ───────────────────────────────────────────────
@@ -81,6 +81,7 @@ export async function action({ request }: Route.ActionArgs) {
       topic,
       lectureNumber,
       googleDocsUrl,
+      request,
     });
   }
 
@@ -99,6 +100,7 @@ export async function action({ request }: Route.ActionArgs) {
     topic,
     lectureNumber,
     file,
+    request,
   });
 
   return result;

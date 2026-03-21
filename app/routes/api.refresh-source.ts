@@ -24,6 +24,7 @@ export async function action({ request }: Route.ActionArgs) {
   const result = await refreshSourceFromGoogleDocs({
     sourceId,
     studentId: student.id,
+    request,
   });
 
   if (!result.ok) {
@@ -34,7 +35,7 @@ export async function action({ request }: Route.ActionArgs) {
   let fileStatus = result.fileStatus ?? "unknown";
   if (result.newVectorStoreFileId) {
     try {
-      const db = createServerClient();
+      const db = createServerClient(request);
       const client = getOpenAIClient();
       const vectorStoreId = await getOrCreateVectorStore(db);
       const vsFile = await client.vectorStores.files.retrieve(result.newVectorStoreFileId, {

@@ -111,7 +111,7 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
   const student = { id: session.studentId };
 
-  const source = await getSourceById(sourceId, student.id);
+  const source = await getSourceById(sourceId, student.id, request);
   if (!source) {
     return Response.json({ ok: false, error: "מקור לא נמצא" }, { status: 404 });
   }
@@ -135,6 +135,7 @@ export async function action({ request }: Route.ActionArgs) {
         title: (cached as { title?: string })?.title ?? source.topic,
         examType: "past",
         examContent: cached as object,
+        request,
       }).catch(() => {});
       return Response.json({ ok: true, exam: cached, sourceTopic: source.topic });
     } catch {
@@ -223,7 +224,7 @@ ${examText}`,
   }
 
   // ── 5. Cache the result in DB (fire-and-forget) ──────────────────────────
-  const db = createServerClient();
+  const db = createServerClient(request);
   db.from("sources")
     .update({ content: JSON.stringify(examData) })
     .eq("id", sourceId)
@@ -240,6 +241,7 @@ ${examText}`,
     title: examObj?.title ?? source.topic,
     examType: "past",
     examContent: examData as object,
+    request,
   }).catch((err) => console.warn("[generate-exam-from-source] save exam failed:", err));
 
   return Response.json({ ok: true, exam: examData, sourceTopic: source.topic });

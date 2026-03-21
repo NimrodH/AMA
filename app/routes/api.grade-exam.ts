@@ -61,7 +61,7 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
   const student = { id: session.studentId };
 
-  const db = createServerClient();
+  const db = createServerClient(request);
   const client = getOpenAIClient();
   const vectorStoreId = await getOrCreateVectorStore(db);
 
@@ -137,7 +137,8 @@ ${examText}
       student.id,
       courseId,
       totalGrade,
-      statsExamType
+      statsExamType,
+      request
     ).catch((err) => console.error("[grade-exam] failed to record stats:", err));
   }
 

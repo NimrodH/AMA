@@ -10,7 +10,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     return Response.json({ sources: [] });
   }
 
-  const rows = await getSourcesByCourse(studentId, courseId, "Article");
+  const rows = await getSourcesByCourse(studentId, courseId, "Article", request);
   const sources = rows.map((r) => ({ id: r.id, topic: r.topic }));
   return Response.json({ sources });
 }
