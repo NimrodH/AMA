@@ -3,10 +3,11 @@ import type { Route } from "./+types/summary";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Button } from "~/components/ui/button/button";
-import { requireSession } from "~/lib/auth.server";
+import { getSession, requireSession } from "~/lib/auth.server";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
 import { saveSummary } from "~/services/summaries.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
+import { getToken } from "~/lib/auth.client";
 import { Save, FileText } from "lucide-react";
 import styles from "./summary.module.css";
 
@@ -27,7 +28,13 @@ export function meta({}: Route.MetaArgs) {
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  // Use getSession (non-throwing) so SSR doesn't redirect when the cookie
+  // is absent — the clientLoader enforces auth client-side via localStorage.
+  const session = await getSession(request);
+  if (!session) {
+    return { accountType: "student" as const, courses: [] };
+  }
+
   const student = await getStudentById(session.studentId, request);
   const courses = student ? await getActiveCourses(student.id, request) : [];
 
@@ -79,8 +86,11 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
     let cancelled = false;
     async function fetchSummary() {
       try {
+        const token = getToken();
+        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
         const res = await fetch(
-          `/api/summaries?courseId=${encodeURIComponent(selectedCourseId)}`
+          `/api/summaries?courseId=${encodeURIComponent(selectedCourseId)}`,
+          { headers }
         );
         if (!res.ok || cancelled) return;
         const data = await res.json() as { content: string };
@@ -106,7 +116,9 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
       const formData = new FormData();
       formData.append("courseId", selectedCourseId);
       formData.append("content", editorContent);
-      const res = await fetch("/summary", { method: "POST", body: formData });
+      const token = getToken();
+      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
+      const res = await fetch("/summary", { method: "POST", body: formData, headers });
       if (res.ok) {
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2500);
