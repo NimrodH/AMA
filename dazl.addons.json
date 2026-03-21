@@ -1,4 +1,5 @@
 {
   "google-ai": true,
-  "react-pdf": true
+  "react-pdf": true,
+  "lexical": true
 }
