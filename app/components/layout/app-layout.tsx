@@ -1,7 +1,8 @@
 import * as React from "react";
-import { NavLink, useFetcher } from "react-router";
+import { NavLink } from "react-router";
 import { Home, FileText, BookOpen, GraduationCap, Settings, Layers, FileSearch, LogOut } from "lucide-react";
 import classNames from "classnames";
+import { clearToken } from "~/lib/auth";
 import {
   Sidebar,
   SidebarContent,
@@ -75,14 +76,15 @@ const navigationItems = [
 ];
 
 function LogoutButton() {
-  const fetcher = useFetcher();
+  function handleLogout() {
+    clearToken();
+    window.location.href = "/login";
+  }
   return (
-    <fetcher.Form method="post" action="/logout">
-      <button type="submit" className={styles.logoutBtn} title="יציאה">
-        <LogOut size={16} />
-        <span>יציאה</span>
-      </button>
-    </fetcher.Form>
+    <button type="button" onClick={handleLogout} className={styles.logoutBtn} title="יציאה">
+      <LogOut size={16} />
+      <span>יציאה</span>
+    </button>
   );
 }
 
