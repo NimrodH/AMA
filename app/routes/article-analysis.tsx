@@ -53,15 +53,11 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
   const { courses, questions, studentId, accountType } = loaderData as LoaderData;
   const isGuest = accountType === "guest";
 
-  const [selectedCourse, setSelectedCourse] = React.useState<string>(() => {
-    const stored = readSelectedCourse();
-    if (stored && courses.some((c) => c.course_id === stored)) return stored;
-    return courses[0]?.course_id ?? "";
-  });
+  const [selectedCourse, setSelectedCourse] = React.useState<string>("");
 
-  // Re-sync from localStorage after SSR hydration (clientLoader.hydrate = true
-  // means the server renders with an empty stored value, so useState initializer
-  // runs before the browser's localStorage is accessible).
+  // Resolve selectedCourse once courses are loaded (handles SSR hydration gap).
+  // clientLoader.hydrate = true means the useState initializer runs on the server
+  // without localStorage access, so we derive the value in an effect instead.
   React.useEffect(() => {
     if (courses.length === 0) return;
     setSelectedCourse((prev) => {
@@ -79,7 +75,9 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
   const [loadingAnswers, setLoadingAnswers] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
 
-  // Fetch articles (sources of type "Article") for selected course
+  // Fetch articles (sources of type "Article") for selected course.
+  // Depends on selectedCourse AND studentId — re-runs whenever either changes,
+  // which handles the SSR→client hydration transition correctly.
   React.useEffect(() => {
     if (!selectedCourse || !studentId) return;
     setLoadingArticles(true);
