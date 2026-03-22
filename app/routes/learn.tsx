@@ -16,6 +16,8 @@ import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-co
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
+import { RichTextViewer } from "~/components/rich-text-viewer/rich-text-viewer";
+import { toEditorState } from "~/lib/lexical-utils";
 import styles from "./learn.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -231,7 +233,11 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
             ) : (
               <>
                 <hr className={styles.divider} />
-                <div className={styles.cardContent}>{currentCard.content}</div>
+                <RichTextViewer
+                  viewerKey={currentCard.id}
+                  serializedState={toEditorState(currentCard.content)}
+                  className={styles.cardContent}
+                />
               </>
             )}
           </div>

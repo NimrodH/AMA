@@ -1,0 +1,84 @@
+.viewer {
+  font-family: var(--font-body);
+  color: var(--color-neutral-12);
+  line-height: 1.75;
+  direction: rtl;
+  text-align: right;
+}
+
+/* The ContentEditable in read-only mode — remove all interactive affordances */
+.content {
+  outline: none;
+  cursor: default;
+  user-select: text;
+  -webkit-user-select: text;
+  white-space: pre-wrap;
+  word-break: break-word;
+  caret-color: transparent;
+}
+
+/* Paragraph spacing */
+.content p {
+  margin: 0 0 var(--space-2) 0;
+}
+
+.content p:last-child {
+  margin-bottom: 0;
+}
+
+/* Bold, italic, underline — rendered by Lexical's default classes */
+.content strong {
+  font-weight: 700;
+}
+
+.content em {
+  font-style: italic;
+}
+
+/* Lists */
+.content ul,
+.content ol {
+  padding-inline-start: var(--space-5);
+  margin: var(--space-2) 0;
+}
+
+.content li {
+  margin-bottom: var(--space-1);
+}
+
+/* Headings */
+.content h1 {
+  font-size: var(--font-size-fluid-2);
+  font-weight: 700;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.content h2 {
+  font-size: var(--font-size-fluid-1);
+  font-weight: 600;
+  margin: var(--space-3) 0 var(--space-2);
+}
+
+.content h3 {
+  font-size: var(--font-size-1);
+  font-weight: 600;
+  margin: var(--space-2) 0 var(--space-1);
+}
+
+/* Code */
+.content code {
+  font-family: var(--font-code);
+  background: var(--color-neutral-3);
+  border-radius: var(--radius-1);
+  padding: 0.1em 0.35em;
+  font-size: 0.9em;
+}
+
+/* Blockquote */
+.content blockquote {
+  border-inline-start: 3px solid var(--color-accent-6);
+  padding-inline-start: var(--space-3);
+  margin-inline-start: 0;
+  color: var(--color-neutral-10);
+  font-style: italic;
+}
