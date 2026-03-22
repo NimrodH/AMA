@@ -10,7 +10,7 @@ import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { ListItemNode, ListNode } from "@lexical/list";
 import { CodeNode } from "@lexical/code";
-import { type EditorState } from "lexical";
+import { type EditorState, $getSelection, $isRangeSelection, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from "lexical";
 import {
   FORMAT_TEXT_COMMAND,
   UNDO_COMMAND,
@@ -33,8 +33,50 @@ import styles from "./rich-text-editor.module.css";
 
 // ─── Toolbar ────────────────────────────────────────────────────────────────
 
+interface FormatState {
+  isBold: boolean;
+  isItalic: boolean;
+  isUnderline: boolean;
+}
+
 function ToolbarPlugin() {
   const [editor] = useLexicalComposerContext();
+  const [formatState, setFormatState] = React.useState<FormatState>({
+    isBold: false,
+    isItalic: false,
+    isUnderline: false,
+  });
+
+  const updateFormatState = React.useCallback(() => {
+    const selection = $getSelection();
+    if ($isRangeSelection(selection)) {
+      setFormatState({
+        isBold: selection.hasFormat("bold"),
+        isItalic: selection.hasFormat("italic"),
+        isUnderline: selection.hasFormat("underline"),
+      });
+    }
+  }, []);
+
+  React.useEffect(() => {
+    return editor.registerCommand(
+      SELECTION_CHANGE_COMMAND,
+      () => {
+        updateFormatState();
+        return false;
+      },
+      COMMAND_PRIORITY_LOW
+    );
+  }, [editor, updateFormatState]);
+
+  // Also update on editor state changes (e.g. typing)
+  React.useEffect(() => {
+    return editor.registerUpdateListener(({ editorState }) => {
+      editorState.read(() => {
+        updateFormatState();
+      });
+    });
+  }, [editor, updateFormatState]);
 
   function formatBold() {
     editor.dispatchCommand(FORMAT_TEXT_COMMAND, "bold");
@@ -58,6 +100,10 @@ function ToolbarPlugin() {
     editor.dispatchCommand(REDO_COMMAND, undefined);
   }
 
+  function btnClass(active: boolean) {
+    return [styles.toolbarBtn, active ? styles.toolbarBtnActive : ""].filter(Boolean).join(" ");
+  }
+
   return (
     <div className={styles.toolbar} dir="ltr">
       <button type="button" className={styles.toolbarBtn} onClick={undo} title="Undo">
@@ -67,13 +113,13 @@ function ToolbarPlugin() {
         <Redo size={16} />
       </button>
       <div className={styles.toolbarDivider} />
-      <button type="button" className={styles.toolbarBtn} onClick={formatBold} title="Bold">
+      <button type="button" className={btnClass(formatState.isBold)} onClick={formatBold} title="Bold">
         <Bold size={16} />
       </button>
-      <button type="button" className={styles.toolbarBtn} onClick={formatItalic} title="Italic">
+      <button type="button" className={btnClass(formatState.isItalic)} onClick={formatItalic} title="Italic">
         <Italic size={16} />
       </button>
-      <button type="button" className={styles.toolbarBtn} onClick={formatUnderline} title="Underline">
+      <button type="button" className={btnClass(formatState.isUnderline)} onClick={formatUnderline} title="Underline">
         <Underline size={16} />
       </button>
       <div className={styles.toolbarDivider} />

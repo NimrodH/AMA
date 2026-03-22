@@ -45,6 +45,16 @@
   color: var(--color-accent-11);
 }
 
+.toolbarBtnActive {
+  background: var(--color-accent-3);
+  color: var(--color-accent-11);
+}
+
+.toolbarBtnActive:hover {
+  background: var(--color-accent-4);
+  color: var(--color-accent-11);
+}
+
 .toolbarDivider {
   width: 1px;
   height: 20px;
@@ -101,13 +111,18 @@
   text-decoration: underline;
 }
 
-/* Lexical inline format classes */
+/* Lexical inline format classes (class-based) */
 .editorContent :global(.editor-text-underline) {
   text-decoration: underline;
 }
 
 .editorContent :global(.editor-text-strikethrough) {
   text-decoration: line-through;
+}
+
+/* Lexical inline format — inline style fallback (newer Lexical versions) */
+.editorContent :global(span[style*="underline"]) {
+  text-decoration: underline;
 }
 
 .editorContent h1 {
