@@ -369,6 +369,10 @@
   box-sizing: border-box;
 }
 
+.richEditor {
+  min-height: 280px;
+}
+
 .headerCourseSelect {
   min-width: 200px;
   max-width: 280px;

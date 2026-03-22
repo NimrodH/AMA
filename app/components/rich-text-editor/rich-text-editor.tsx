@@ -121,22 +121,34 @@ export interface RichTextEditorProps {
   onChange?: (serialized: string) => void;
   placeholder?: string;
   className?: string;
+  /**
+   * Changing this key forces the LexicalComposer to remount, which resets
+   * the editor state and loads the new initialValue. Pass the edited record's
+   * ID (or any unique value per content) so switching cards works correctly.
+   */
+  composerKey?: string | number;
 }
 
-const editorConfig = {
-  namespace: "CourseSummaryEditor",
-  nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode],
-  onError(error: Error) {
-    console.error("Lexical editor error:", error);
-  },
-};
+function makeEditorConfig(key: string) {
+  return {
+    namespace: `CourseSummaryEditor-${key}`,
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode],
+    onError(error: Error) {
+      console.error("Lexical editor error:", error);
+    },
+  };
+}
 
 export function RichTextEditor({
   initialValue = "",
   onChange,
   placeholder = "כתוב את הסיכום שלך כאן...",
   className,
+  composerKey = "default",
 }: RichTextEditorProps) {
+  // Memoize config so it only rebuilds when the key changes (card switch)
+  const editorConfig = React.useMemo(() => makeEditorConfig(String(composerKey)), [composerKey]);
+
   function handleChange(editorState: EditorState) {
     if (!onChange) return;
     editorState.read(() => {
@@ -147,7 +159,7 @@ export function RichTextEditor({
 
   return (
     <div className={[styles.editorWrapper, className].filter(Boolean).join(" ")}>
-      <LexicalComposer initialConfig={editorConfig}>
+      <LexicalComposer key={composerKey} initialConfig={editorConfig}>
         <ToolbarPlugin />
         <div className={styles.editorContainer}>
           <RichTextPlugin

@@ -7,6 +7,7 @@ import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Textarea } from "~/components/ui/textarea/textarea";
+import { RichTextEditor } from "~/components/rich-text-editor/rich-text-editor";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import {
   AlertDialog,
@@ -24,6 +25,56 @@ import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/
 import type { CardRow } from "~/services/cards.service";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./cards.module.css";
+
+/**
+ * Converts a plain-text string into a serialized Lexical editor state.
+ * Each newline becomes a separate paragraph node so formatting is preserved.
+ * If the string is already a Lexical JSON blob (starts with `{"root"`),
+ * it is returned as-is.
+ */
+function toEditorState(text: string): string {
+  if (!text) return "";
+  if (text.trimStart().startsWith('{"root"')) return text;
+  const paragraphs = text.split("\n").map((line) => ({
+    children: line
+      ? [{ detail: 0, format: 0, mode: "normal", style: "", text: line, type: "text", version: 1 }]
+      : [],
+    direction: "rtl",
+    format: "",
+    indent: 0,
+    type: "paragraph",
+    version: 1,
+  }));
+  return JSON.stringify({
+    root: {
+      children: paragraphs,
+      direction: "rtl",
+      format: "",
+      indent: 0,
+      type: "root",
+      version: 1,
+    },
+  });
+}
+
+/**
+ * Extracts the plain-text representation from a Lexical editor state JSON.
+ * Falls back to the original string if it's already plain text.
+ */
+function fromEditorState(serialized: string): string {
+  if (!serialized) return "";
+  if (!serialized.trimStart().startsWith('{"root"')) return serialized;
+  try {
+    const state = JSON.parse(serialized) as {
+      root: { children: Array<{ children?: Array<{ text?: string }> }> };
+    };
+    return state.root.children
+      .map((para) => (para.children ?? []).map((n) => n.text ?? "").join(""))
+      .join("\n");
+  } catch {
+    return serialized;
+  }
+}
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "כרטיסי סיכום - מערכת ניהול לימודים" }];
@@ -129,7 +180,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       );
     }
     // Create mode: warn if any field has been touched
-    return cardTitle.trim() !== "" || cardTopic.trim() !== "" || cardContent.trim() !== "";
+    return cardTitle.trim() !== "" || cardTopic.trim() !== "" || fromEditorState(cardContent).trim() !== "";
   }, [editingCard, cardTitle, cardTopic, cardContent, lectureNumber, cardNumber]);
 
   /** Runs the pending action if form is clean, otherwise shows the dialog */
@@ -199,7 +250,8 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       setCardTopic(card.topic);
       setLectureNumber(card.lecture_number != null ? String(card.lecture_number) : "");
       setCardNumber(card.card_number != null ? String(card.card_number) : "");
-      setCardContent(card.content);
+      // Convert plain-text (legacy) or pass through Lexical JSON
+      setCardContent(toEditorState(card.content));
       setFeedback(null);
       setShowSuccess(false);
       window.scrollTo({ top: 0, behavior: "smooth" });
@@ -247,7 +299,8 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
 
   const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
 
-  const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && cardContent.trim();
+  const isFormValid =
+    selectedCourse && cardTitle.trim() && cardTopic.trim() && fromEditorState(cardContent).trim();
 
   const handleGetFeedback = async () => {
     if (!selectedCourse || !cardContent) return;
@@ -257,9 +310,11 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     try {
       // Encode title + content together so the AI understands the concept/question
       // vs definition/answer structure of the card.
+      // Extract plain text from Lexical JSON for the AI
+      const plainContent = fromEditorState(cardContent);
       const encodedContent = cardTitle.trim()
-        ? `${cardTitle.trim()}\n---\n${cardContent}`
-        : cardContent;
+        ? `${cardTitle.trim()}\n---\n${plainContent}`
+        : plainContent;
 
       const res = await fetch("/api/card-feedback", {
         method: "POST",
@@ -418,19 +473,18 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
             </div>
 
             <div>
-              <Label htmlFor="cardContent">תוכן הסיכום</Label>
-              <Textarea
-                id="cardContent"
-                name="content"
-                value={cardContent}
-                onChange={(e) => {
-                  setCardContent(e.target.value);
+              <Label>תוכן הסיכום</Label>
+              {/* Hidden input carries the serialized editor state to the form action */}
+              <input type="hidden" name="content" value={cardContent} />
+              <RichTextEditor
+                composerKey={editingCard?.id ?? "new"}
+                initialValue={cardContent}
+                onChange={(serialized) => {
+                  setCardContent(serialized);
                   setShowSuccess(false);
                 }}
                 placeholder="כתוב את הסיכום שלך כאן..."
-                rows={12}
-                style={{ fontFamily: "var(--font-body)", resize: "vertical" }}
-                className={styles.textarea}
+                className={styles.richEditor}
               />
             </div>
 
@@ -517,7 +571,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                       {card.topic}
                       {card.lecture_number ? ` · הרצאה ${card.lecture_number}` : ""}
                     </p>
-                    <p className={styles.savedCardContent}>{card.content}</p>
+                    <p className={styles.savedCardContent}>{fromEditorState(card.content)}</p>
                     <div className={styles.savedCardFooter}>
                       <span className={styles.savedCardDate}>
                         {new Date(card.created_at).toLocaleDateString("he-IL")}
