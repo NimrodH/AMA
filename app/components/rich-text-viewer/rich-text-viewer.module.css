@@ -35,6 +35,15 @@
   font-style: italic;
 }
 
+/* Lexical inline format classes */
+.content :global(.editor-text-underline) {
+  text-decoration: underline;
+}
+
+.content :global(.editor-text-strikethrough) {
+  text-decoration: line-through;
+}
+
 /* Lists */
 .content ul,
 .content ol {

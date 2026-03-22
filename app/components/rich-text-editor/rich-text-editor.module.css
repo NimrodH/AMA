@@ -101,6 +101,15 @@
   text-decoration: underline;
 }
 
+/* Lexical inline format classes */
+.editorContent :global(.editor-text-underline) {
+  text-decoration: underline;
+}
+
+.editorContent :global(.editor-text-strikethrough) {
+  text-decoration: line-through;
+}
+
 .editorContent h1 {
   font: var(--font-heading);
   margin: 0 0 var(--space-4);
