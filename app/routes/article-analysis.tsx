@@ -6,9 +6,28 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
 import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
 import { requireSession } from "~/lib/auth.server";
-import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./article-analysis.module.css";
+
+// Article-analysis has its own localStorage key so its course selection
+// stays independent from other pages (Sources, Cards, etc.) which share
+// the global "selectedCourseId" key. When those pages switch to course "22",
+// coming back here should NOT reset the article-analysis course to "22".
+const ARTICLE_COURSE_KEY = "articleAnalysisSelectedCourseId";
+
+function readArticleCourse(): string {
+  if (typeof window === "undefined") return "";
+  return localStorage.getItem(ARTICLE_COURSE_KEY) ?? "";
+}
+
+function writeArticleCourse(courseId: string): void {
+  if (typeof window === "undefined") return;
+  if (courseId) {
+    localStorage.setItem(ARTICLE_COURSE_KEY, courseId);
+  } else {
+    localStorage.removeItem(ARTICLE_COURSE_KEY);
+  }
+}
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "ניתוח מאמר - מערכת ניהול לימודים" }];
@@ -56,13 +75,13 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
   const [selectedCourse, setSelectedCourse] = React.useState<string>("");
 
   // Resolve selectedCourse once courses are loaded (handles SSR hydration gap).
-  // clientLoader.hydrate = true means the useState initializer runs on the server
-  // without localStorage access, so we derive the value in an effect instead.
+  // Uses a page-specific localStorage key so other pages (Sources, Cards…)
+  // selecting a different course don't bleed into this page's selection.
   React.useEffect(() => {
     if (courses.length === 0) return;
     setSelectedCourse((prev) => {
       if (prev && courses.some((c) => c.course_id === prev)) return prev;
-      const stored = readSelectedCourse();
+      const stored = readArticleCourse();
       if (stored && courses.some((c) => c.course_id === stored)) return stored;
       return courses[0].course_id;
     });
@@ -76,8 +95,6 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
   const [saving, setSaving] = React.useState(false);
 
   // Fetch articles (sources of type "Article") for selected course.
-  // Depends on selectedCourse AND studentId — re-runs whenever either changes,
-  // which handles the SSR→client hydration transition correctly.
   React.useEffect(() => {
     if (!selectedCourse || !studentId) return;
     setLoadingArticles(true);
@@ -106,7 +123,7 @@ export default function ArticleAnalysis({ loaderData }: Route.ComponentProps) {
 
   const handleCourseChange = (value: string) => {
     setSelectedCourse(value);
-    writeSelectedCourse(value);
+    writeArticleCourse(value);
   };
 
   const handleAnswerChange = (questionId: string, text: string) => {
