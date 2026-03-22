@@ -120,11 +120,6 @@
   text-decoration: line-through;
 }
 
-/* Lexical inline format — inline style fallback (newer Lexical versions) */
-.editorContent :global(span[style*="underline"]) {
-  text-decoration: underline;
-}
-
 .editorContent h1 {
   font: var(--font-heading);
   margin: 0 0 var(--space-4);

@@ -44,11 +44,6 @@
   text-decoration: line-through;
 }
 
-/* Lexical inline format — inline style fallback (newer Lexical versions) */
-.content :global(span[style*="underline"]) {
-  text-decoration: underline;
-}
-
 /* Lists */
 .content ul,
 .content ol {
