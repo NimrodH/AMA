@@ -40,6 +40,11 @@
   text-decoration: underline;
 }
 
+/* Lexical v0.42+ writes underline as inline style: "text-decoration-line: underline" */
+.content :global([style*=": underline"]) {
+  text-decoration: underline;
+}
+
 .content :global(.editor-text-strikethrough) {
   text-decoration: line-through;
 }
