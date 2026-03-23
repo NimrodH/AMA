@@ -115,6 +115,7 @@ ${lectureList}
           {
             type: "file_search",
             vector_store_ids: [vectorStoreId],
+            max_num_results: 20,
             filters: {
               type: "and" as const,
               filters: [

@@ -27,6 +27,7 @@ import { getSession } from "~/lib/auth.server";
 import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader } from "~/lib/client-auth-loader";
+import { authFetch } from "~/lib/auth-fetch";
 import styles from "./exams.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -171,7 +172,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setResults(null);
 
     try {
-      const res = await fetch("/api/generate-exam-from-source", {
+      const res = await authFetch("/api/generate-exam-from-source", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sourceId }),
@@ -202,7 +203,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setShowMcOptions(false);
 
     try {
-      const res = await fetch("/api/generate-exam-from-course", {
+      const res = await authFetch("/api/generate-exam-from-course", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: selectedCourse }),
@@ -233,7 +234,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setShowMcOptions(false);
 
     try {
-      const res = await fetch("/api/generate-mc-exam", {
+      const res = await authFetch("/api/generate-mc-exam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: selectedCourse, questionCount: mcQuestionCount }),
@@ -411,7 +412,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         let aiRecommendations: string[] = [];
 
         if (openQuestions.length > 0) {
-          const res = await fetch("/api/grade-exam", {
+          const res = await authFetch("/api/grade-exam", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
@@ -463,7 +464,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setGradeError(null);
 
     try {
-      const res = await fetch("/api/grade-exam", {
+      const res = await authFetch("/api/grade-exam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
