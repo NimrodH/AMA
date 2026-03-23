@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save, Trash2, Hash, BookOpen } from "lucide-react";
+import { Sparkles, Save, Trash2, Hash, BookOpen, ArrowLeft } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -118,6 +118,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   // Unsaved-changes guard
   const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
   const pendingActionRef = React.useRef<(() => void) | null>(null);
+  const saveAndNextRef = React.useRef(false);
 
   /** Returns true when the form has unsaved content worth warning about */
   const isFormDirty = React.useCallback(() => {
@@ -216,23 +217,35 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   // then run any pending dialog action (without clearing the form).
   React.useEffect(() => {
     if (actionData?.ok) {
-      // Keep the form as-is; just update the snapshot so isFormDirty() → false
-      setEditingCard((prev) =>
-        prev
-          ? {
-              ...prev,
-              title: cardTitle,
-              topic: cardTopic,
-              content: cardContent,
-              lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null,
-              card_number: cardNumber ? parseFloat(cardNumber) : null,
-            }
-          : prev,
-      );
-      setShowSuccess(true);
-      const pending = pendingActionRef.current;
-      pendingActionRef.current = null;
-      pending?.();
+      if (saveAndNextRef.current) {
+        // Save & Next flow: clear title + content, keep topic + lecture, increment card number
+        saveAndNextRef.current = false;
+        setCardTitle("");
+        setCardContent("");
+        setCardNumber((prev) => {
+          const n = parseFloat(prev);
+          return isNaN(n) ? "" : String(Math.floor(n) + 1);
+        });
+        setShowSuccess(true);
+      } else {
+        // Keep the form as-is; just update the snapshot so isFormDirty() → false
+        setEditingCard((prev) =>
+          prev
+            ? {
+                ...prev,
+                title: cardTitle,
+                topic: cardTopic,
+                content: cardContent,
+                lecture_number: lectureNumber ? parseInt(lectureNumber, 10) : null,
+                card_number: cardNumber ? parseFloat(cardNumber) : null,
+              }
+            : prev,
+        );
+        setShowSuccess(true);
+        const pending = pendingActionRef.current;
+        pendingActionRef.current = null;
+        pending?.();
+      }
     }
   }, [actionData]);
 
@@ -454,6 +467,18 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 <Save style={{ marginLeft: "var(--space-2)" }} />
                 {isSaving ? "שומר..." : editingCard ? "שמור שינויים" : "שמור כרטיס"}
               </Button>
+              {!editingCard && (
+                <Button
+                  type="submit"
+                  variant="outline"
+                  className={styles.saveAndNextBtn}
+                  disabled={!isFormValid || isSaving}
+                  onClick={() => { saveAndNextRef.current = true; }}
+                >
+                  <ArrowLeft style={{ marginLeft: "var(--space-2)" }} />
+                  שמור והבא
+                </Button>
+              )}
               <Button type="button" onClick={handleGetFeedback} disabled={!cardContent || isLoadingFeedback}>
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isLoadingFeedback ? "מקבל משוב..." : "קבל משוב מה-AI"}

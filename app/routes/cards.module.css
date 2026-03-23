@@ -383,6 +383,16 @@
   font-size: 0.85rem;
 }
 
+.saveAndNextBtn {
+  border-color: var(--color-accent-7);
+  color: var(--color-accent-11);
+}
+
+.saveAndNextBtn:hover:not(:disabled) {
+  background: var(--color-accent-3);
+  border-color: var(--color-accent-8);
+}
+
 .dialogSaveBtn {
   display: inline-flex;
   align-items: center;
