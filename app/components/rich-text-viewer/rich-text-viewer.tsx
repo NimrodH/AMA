@@ -55,6 +55,15 @@ function makeViewerConfig(key: string) {
   return {
     namespace: `CourseSummaryViewer-${key}`,
     editable: false,
+    theme: {
+      text: {
+        bold: styles.textBold,
+        italic: styles.textItalic,
+        underline: styles.textUnderline,
+        strikethrough: styles.textStrikethrough,
+        underlineStrikethrough: styles.textUnderlineStrikethrough,
+      },
+    },
     nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode],
     onError(error: Error) {
       console.error("Lexical viewer error:", error);

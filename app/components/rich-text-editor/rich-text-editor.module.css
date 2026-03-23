@@ -111,19 +111,38 @@
   text-decoration: underline;
 }
 
-/* Lexical inline format classes (class-based) */
+/* Lexical theme classes */
+.textBold {
+  font-weight: 700;
+}
+
+.textItalic {
+  font-style: italic;
+}
+
+.textUnderline {
+  text-decoration: underline;
+}
+
+.textStrikethrough {
+  text-decoration: line-through;
+}
+
+.textUnderlineStrikethrough {
+  text-decoration: underline line-through;
+}
+
+/* Fallback for Lexical inline format classes (older class-based) */
 .editorContent :global(.editor-text-underline) {
   text-decoration: underline;
 }
 
-/* Lexical v0.42+ writes underline as inline style: "text-decoration-line: underline" */
+/* Fallback: Lexical v0.42+ writes underline as inline style: "text-decoration-line: underline" */
 .editorContent :global([style*=": underline"]) {
   text-decoration: underline;
 }
 
-.editorContent :global(.editor-text-strikethrough) {
-  text-decoration: line-through;
-}
+
 
 .editorContent h1 {
   font: var(--font-heading);
