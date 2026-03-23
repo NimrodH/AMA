@@ -9,6 +9,7 @@ import { saveSummary } from "~/services/summaries.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import { getToken } from "~/lib/auth.client";
 import { Save, FileText } from "lucide-react";
+import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./summary.module.css";
 
 // ─── Lazy-load the editor (client-only) ──────────────────────────────────────
@@ -70,9 +71,11 @@ type LoaderData = Awaited<ReturnType<typeof loader>>;
 export default function Summary({ loaderData }: Route.ComponentProps) {
   const { accountType, courses } = loaderData as LoaderData;
 
-  const [selectedCourseId, setSelectedCourseId] = React.useState<string>(
-    courses[0]?.course_id ?? ""
-  );
+  const [selectedCourseId, setSelectedCourseId] = React.useState<string>(() => {
+    const stored = readSelectedCourse();
+    if (stored && courses.some((c) => c.course_id === stored)) return stored;
+    return courses[0]?.course_id ?? "";
+  });
   const [editorContent, setEditorContent] = React.useState<string>("");
   const [loadedCourseId, setLoadedCourseId] = React.useState<string>("");
   const [isSaving, setIsSaving] = React.useState(false);
@@ -148,7 +151,13 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
             {courses.length === 0 ? (
               <span className={styles.noCourses}>אין קורסים פעילים</span>
             ) : (
-              <Select value={selectedCourseId} onValueChange={setSelectedCourseId}>
+              <Select
+                value={selectedCourseId}
+                onValueChange={(value) => {
+                  setSelectedCourseId(value);
+                  writeSelectedCourse(value);
+                }}
+              >
                 <SelectTrigger className={styles.selectTrigger}>
                   <SelectValue placeholder="בחר קורס..." />
                 </SelectTrigger>
