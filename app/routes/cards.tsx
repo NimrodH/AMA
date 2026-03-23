@@ -250,8 +250,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
 
   const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
 
-  const isFormValid =
-    selectedCourse && cardTitle.trim() && cardTopic.trim() && fromEditorState(cardContent).trim();
+  const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && fromEditorState(cardContent).trim();
 
   const handleGetFeedback = async () => {
     if (!selectedCourse || !cardContent) return;
@@ -263,9 +262,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       // vs definition/answer structure of the card.
       // Extract plain text from Lexical JSON for the AI
       const plainContent = fromEditorState(cardContent);
-      const encodedContent = cardTitle.trim()
-        ? `${cardTitle.trim()}\n---\n${plainContent}`
-        : plainContent;
+      const encodedContent = cardTitle.trim() ? `${cardTitle.trim()}\n---\n${plainContent}` : plainContent;
 
       const res = await fetch("/api/card-feedback", {
         method: "POST",
@@ -352,7 +349,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
             {editingCard && <input type="hidden" name="cardId" value={editingCard.id} />}
 
             <div>
-              <Label htmlFor="cardTitle">כותרת</Label>
+              <Label htmlFor="cardTitle">שאלה</Label>
               <Input
                 id="cardTitle"
                 name="title"
@@ -481,7 +478,8 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                     <span>מקורות ששימשו: </span>
                     {feedbackSources.map((s, i) => (
                       <span key={i} className={styles.feedbackSourceTag}>
-                        {s.topic}{s.lectureNumber ? ` (הרצאה ${s.lectureNumber})` : ""}
+                        {s.topic}
+                        {s.lectureNumber ? ` (הרצאה ${s.lectureNumber})` : ""}
                       </span>
                     ))}
                   </div>
