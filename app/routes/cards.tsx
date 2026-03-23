@@ -19,7 +19,7 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
-import { requireSession } from "~/lib/auth.server";
+import { getSession, requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -32,7 +32,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) return { courses: [], cards: [] };
   const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [], cards: [] };
   const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);

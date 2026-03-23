@@ -34,7 +34,7 @@ import {
   type ArticleQuestionRow,
 } from "~/services/settings.service";
 import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
-import { requireSession } from "~/lib/auth.server";
+import { getSession, requireSession } from "~/lib/auth.server";
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./settings.module.css";
@@ -46,7 +46,8 @@ export function meta({}: Route.MetaArgs) {
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);
   if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
 

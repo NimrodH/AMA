@@ -6,7 +6,7 @@ import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { getSourceById } from "~/services/sources.service";
 import { getStudentById, getCourses } from "~/services/settings.service";
-import { requireSession } from "~/lib/auth.server";
+import { getSession } from "~/lib/auth.server";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./source-view.module.css";
 
@@ -37,7 +37,8 @@ export function meta({ data }: Route.MetaArgs) {
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) return redirect("/sources");
   const student = await getStudentById(session.studentId, request);
   if (!student) return redirect("/setup");
 

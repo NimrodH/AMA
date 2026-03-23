@@ -23,7 +23,7 @@ import { Textarea } from "~/components/ui/textarea/textarea";
 import { Input } from "~/components/ui/input/input";
 import { Badge } from "~/components/ui/badge/badge";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
-import { requireSession } from "~/lib/auth.server";
+import { getSession } from "~/lib/auth.server";
 import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader } from "~/lib/client-auth-loader";
@@ -67,7 +67,8 @@ interface GradingResult {
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: session.accountType as "student" | "guest" };
   const courses = await getActiveCourses(student.id, request);

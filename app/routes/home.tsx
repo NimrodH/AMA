@@ -5,7 +5,7 @@ import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudentById, getReminders, getActiveCourses } from "~/services/settings.service";
-import { requireSession } from "~/lib/auth.server";
+import { getSession } from "~/lib/auth.server";
 import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import {
   isReminderDueToday,
@@ -29,7 +29,8 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) return { studentId: null, studentName: null, guestName: null, accountType: "student" as const, activeReminders: [], courses: [], courseStats: [] };
   const isGuestSession = session.accountType === "guest";
   // For guests, studentId points to the owner student — fetch their name
   const student = await getStudentById(session.studentId, request);
