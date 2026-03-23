@@ -114,8 +114,15 @@ ${examText}
   });
 
   const rawText = response.output_text?.trim() ?? "";
-  const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/) ?? null;
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawText;
+  // Strip OpenAI file_search citation annotations like 【4:0†source】
+  const cleaned = rawText.replace(/\u3010[^\u3011]*\u3011/g, "");
+  const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/) ?? null;
+  let jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
+  // Also try extracting a bare JSON object if the cleaned text has extra text around it
+  if (!jsonMatch) {
+    const bareObject = cleaned.match(/\{[\s\S]*\}/);
+    if (bareObject) jsonStr = bareObject[0].trim();
+  }
 
   let gradingResult: unknown;
   try {

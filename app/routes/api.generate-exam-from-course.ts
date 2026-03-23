@@ -61,11 +61,13 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractJson(text: string): string {
-  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // Strip OpenAI file_search citation annotations like 【4:0†source】
+  const cleaned = text.replace(/【[^】]*】/g, "");
+  const codeBlock = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return codeBlock[1].trim();
-  const bareObject = text.match(/\{[\s\S]*\}/);
+  const bareObject = cleaned.match(/\{[\s\S]*\}/);
   if (bareObject) return bareObject[0].trim();
-  return text;
+  return cleaned;
 }
 
 // ─── Action ───────────────────────────────────────────────────────────────────
