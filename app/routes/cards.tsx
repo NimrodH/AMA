@@ -119,6 +119,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
   const [showUnsavedDialog, setShowUnsavedDialog] = React.useState(false);
   const pendingActionRef = React.useRef<(() => void) | null>(null);
   const saveAndNextRef = React.useRef(false);
+  const [editorKey, setEditorKey] = React.useState(0);
 
   /** Returns true when the form has unsaved content worth warning about */
   const isFormDirty = React.useCallback(() => {
@@ -222,6 +223,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         saveAndNextRef.current = false;
         setCardTitle("");
         setCardContent("");
+        setEditorKey((k) => k + 1);
         setCardNumber((prev) => {
           const n = parseFloat(prev);
           return isNaN(n) ? "" : String(Math.floor(n) + 1);
@@ -438,7 +440,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
               {/* Hidden input carries the serialized editor state to the form action */}
               <input type="hidden" name="content" value={cardContent} />
               <RichTextEditor
-                composerKey={editingCard?.id ?? "new"}
+                composerKey={editingCard?.id ?? `new-${editorKey}`}
                 initialValue={cardContent}
                 onChange={(serialized) => {
                   setCardContent(serialized);
