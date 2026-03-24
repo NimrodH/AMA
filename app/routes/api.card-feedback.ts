@@ -110,9 +110,17 @@ export async function action({ request }: Route.ActionArgs) {
     .filter((line) => line !== null)
     .join("\n");
 
+  // Build the user message with an explicit search hint at the top.
+  // The file_search tool embeds the *entire* user message to find relevant chunks.
+  // Placing the card title first ensures the vector query is anchored on the concept name
+  // (e.g. "חמשת המעגלים במודל האקולוגי") rather than diluted by the student's paraphrased body.
+  const searchHint = cardTitle
+    ? `חפש בחומר את הנושא: ${cardTitle}\n\n`
+    : "";
+
   const userMessage = cardTitle
-    ? `\u05de\u05d5\u05e9\u05d2 / \u05e9\u05d0\u05dc\u05d4 (\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05db\u05e8\u05d8\u05d9\u05e1):\n${cardTitle}\n\n\u05d4\u05d2\u05d3\u05e8\u05d4 / \u05ea\u05e9\u05d5\u05d1\u05d4 (\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05db\u05ea\u05d1 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8):\n${cardBody}`
-    : `\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05dc \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8:\n${cardContent}`;
+    ? `${searchHint}מושג / שאלה (כותרת הכרטיס):\n${cardTitle}\n\nהגדרה / תשובה (תוכן הכרטיס שכתב הסטודנט):\n${cardBody}`
+    : `${searchHint}תוכן הכרטיס של הסטודנט:\n${cardContent}`;
 
   // ── 4. Call OpenAI with file_search ──────────────────────────────────────
   // Filter by student_id (a custom metadata attribute set on every uploaded file).
@@ -120,6 +128,10 @@ export async function action({ request }: Route.ActionArgs) {
   // NOTE: We do NOT filter by file_id because "file_id" is NOT a stored metadata attribute —
   // using it caused the vector search to silently return zero results, making the AI
   // fall back to its internal knowledge and claim "no information found in the source".
+  //
+  // max_num_results=50 — OpenAI defaults to 20 chunks. For large documents that cover
+  // many topics (e.g. a full-course summary), the relevant section for a specific concept
+  // can be buried past rank 20. Raising to the maximum (50) dramatically improves recall.
   let feedback: string;
 
   try {
@@ -130,6 +142,7 @@ export async function action({ request }: Route.ActionArgs) {
           {
             type: "file_search",
             vector_store_ids: [vectorStoreId],
+            max_num_results: 50,
             filters: {
               type: "eq" as const,
               key: "student_id",
