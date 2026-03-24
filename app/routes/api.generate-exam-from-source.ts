@@ -1,10 +1,10 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
-import mammoth from "mammoth";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { requireSession } from "~/lib/auth.server";
 import { getSourceById } from "~/services/sources.service";
 import { createServerClient } from "~/lib/supabase";
 import { saveExam } from "~/services/exams.service";
+import { fetchFileBuffer, extractText } from "~/lib/file-extract.server";
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 ניתן לך קובץ מבחן עבר של קורס אקדמי. המשימה שלך היא לקרוא את המבחן בעיון ולהפוך אותו למבחן אינטראקטיבי.
@@ -66,41 +66,6 @@ function extractJson(text: string): string {
   const bareObject = cleaned.match(/\{[\s\S]*\}/);
   if (bareObject) return bareObject[0].trim();
   return cleaned;
-}
-
-/** Download a file from a public URL and return it as a Buffer. */
-async function fetchFileBuffer(url: string): Promise<Buffer> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`Failed to fetch file: ${res.status} ${res.statusText}`);
-  return Buffer.from(await res.arrayBuffer());
-}
-
-/**
- * Extract plain text from a file buffer.
- * Supports DOCX (via mammoth) and plain text files.
- * For PDF or other types, falls back to a UTF-8 decode attempt.
- */
-async function extractText(buffer: Buffer, url: string): Promise<string> {
-  const lower = url.toLowerCase();
-
-  if (lower.endsWith(".docx")) {
-    const rawResult = await mammoth.extractRawText({ buffer });
-    if (rawResult.value.trim()) return rawResult.value;
-    const htmlResult = await mammoth.convertToHtml({ buffer });
-    const plainText = htmlResult.value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-    return plainText;
-  }
-
-  if (lower.endsWith(".pdf")) {
-    // pdf-parse ships as a CJS module; when bundled it may land on .default
-    // or on the module object itself — handle both cases at runtime.
-    const pdfParseModule = await import("pdf-parse") as unknown as { default?: (buf: Buffer) => Promise<{ text: string }> } & ((buf: Buffer) => Promise<{ text: string }>);
-    const pdfParse = pdfParseModule.default ?? pdfParseModule;
-    const data = await pdfParse(buffer);
-    return data.text;
-  }
-
-  return buffer.toString("utf-8");
 }
 
 export async function action({ request }: Route.ActionArgs) {

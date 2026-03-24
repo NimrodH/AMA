@@ -1,9 +1,9 @@
 import type { Route } from "./+types/api.generate-exam-from-course";
-import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
-import { createServerClient } from "~/lib/supabase";
+import { getOpenAIClient } from "~/lib/openai.server";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
+import { extractTextFromUrl } from "~/lib/file-extract.server";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -52,48 +52,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
   ]
 }`;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/**
- * Extracts retrieved text content from OpenAI Responses API output items.
- */
-function extractRetrievedContent(output: unknown[]): string {
-  const parts: string[] = [];
-
-  for (const item of output) {
-    const o = item as Record<string, unknown>;
-
-    if (o.type === "message") {
-      const content = o.content as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(content)) {
-        for (const block of content) {
-          if (block.type === "output_text" || block.type === "text") {
-            parts.push(String(block.text ?? ""));
-          }
-        }
-      }
-    }
-
-    if (o.type === "file_search_call") {
-      const results = o.results as Array<Record<string, unknown>> | undefined;
-      if (Array.isArray(results)) {
-        for (const result of results) {
-          const content = result.content as Array<Record<string, unknown>> | undefined;
-          if (Array.isArray(content)) {
-            for (const chunk of content) {
-              if (chunk.text) parts.push(String(chunk.text));
-            }
-          } else if (result.text) {
-            parts.push(String(result.text));
-          }
-        }
-      }
-    }
-  }
-
-  return parts.join("\n\n");
-}
-
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
@@ -126,121 +84,86 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Collect vector store file IDs for all sources ────────────────────
-  const allSources = [...pastExams, ...lectures];
-  const vectorStoreFileIds = allSources
-    .map((s) => s.vector_store_file_id)
-    .filter(Boolean) as string[];
+  // ── 2. Download and extract text from all source files ──────────────────
+  const pastExamTexts: string[] = [];
+  for (const exam of pastExams) {
+    if (!exam.file_url) continue;
+    const text = await extractTextFromUrl(exam.file_url);
+    if (text) {
+      pastExamTexts.push(`=== מבחן עבר: ${exam.topic} ===\n${text}`);
+    }
+  }
 
-  // ── 3. Build source lists for prompt ────────────────────────────────────
-  const pastExamList = pastExams.map((s) => `• ${s.topic}`).join("\n");
-  const lectureList = lectures
-    .map((s) => {
-      const label = s.lecture_number
-        ? `הרצאה ${s.lecture_number} — ${s.topic}`
-        : `${s.topic} (כלל הקורס)`;
-      return `• ${label}`;
-    })
-    .join("\n");
+  const lectureTexts: string[] = [];
+  for (const lecture of lectures) {
+    if (!lecture.file_url) continue;
+    const label = lecture.lecture_number
+      ? `הרצאה ${lecture.lecture_number} — ${lecture.topic}`
+      : `${lecture.topic}`;
+    const text = await extractTextFromUrl(lecture.file_url);
+    if (text) {
+      lectureTexts.push(`=== ${label} ===\n${text}`);
+    }
+  }
 
+  if (pastExamTexts.length === 0) {
+    return Response.json(
+      { ok: false, error: "לא ניתן לחלץ טקסט ממבחני העבר. ודא שהקבצים תקינים ונסה שוב." },
+      { status: 422 }
+    );
+  }
+
+  if (lectureTexts.length === 0) {
+    return Response.json(
+      { ok: false, error: "לא ניתן לחלץ טקסט מקבצי ההרצאות. ודא שהקבצים תקינים ונסה שוב." },
+      { status: 422 }
+    );
+  }
+
+  const fullPastExamContent = pastExamTexts.join("\n\n");
+  const fullLectureContent = lectureTexts.join("\n\n");
+
+  console.log(
+    `[generate-exam-from-course] Extracted ${pastExamTexts.length} past exams (${fullPastExamContent.length} chars) + ${lectureTexts.length} lectures (${fullLectureContent.length} chars)`
+  );
+
+  // ── 3. Generate exam using chat.completions with json_object mode ───────
   const client = getOpenAIClient();
-  const db = createServerClient(request);
 
   let examData: unknown;
 
   try {
-    if (vectorStoreFileIds.length > 0) {
-      // ── Step A: Retrieve content via file_search ──────────────────────────
-      const vectorStoreId = await getOrCreateVectorStore(db);
+    const response = await client.chat.completions.create({
+      model: "gpt-4o",
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content: `קורס: ${courseId}
 
-      const retrievalResponse = await client.responses.create({
-        model: "gpt-4o",
-        tools: [
-          {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId],
-            max_num_results: 20,
-            filters: {
-              type: "and" as const,
-              filters: [
-                { type: "eq" as const, key: "student_id", value: student.id },
-                { type: "eq" as const, key: "course_id", value: courseId },
-              ],
-            },
-          },
-        ],
-        input: `אחזר את התוכן המלא של: מבחני עבר: ${pastExamList} והרצאות: ${lectureList}`,
-      });
+חלק א — מבחני עבר (למד מהם את המבנה בלבד — מספר שאלות, סוגי שאלות, חלוקת נקודות):
 
-      const retrievedContent = extractRetrievedContent(
-        (retrievalResponse.output as unknown[]) ?? []
+${fullPastExamContent}
+
+חלק ב — תוכן הרצאות הקורס (בנה שאלות חדשות מתוכן זה בלבד):
+
+${fullLectureContent}
+
+בנה מבחן אימון חדש לפי ההוראות. השתמש במבחני העבר רק ללמידת המבנה, ובנה שאלות חדשות לחלוטין מתוכן ההרצאות.`,
+        },
+      ],
+    });
+
+    const rawText = response.choices[0]?.message?.content?.trim() ?? "";
+    if (!rawText) {
+      return Response.json(
+        { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
+        { status: 500 }
       );
-
-      const contextText = retrievedContent.trim()
-        ? retrievedContent
-        : `מבחני עבר: ${pastExamList}\nהרצאות: ${lectureList}`;
-
-      // ── Step B: Generate exam JSON with guaranteed json_object output ─────
-      const generationResponse = await client.chat.completions.create({
-        model: "gpt-4o",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `קורס: ${courseId}
-
-תוכן מבחני עבר והרצאות שאוחזר:
-${contextText}
-
-בנה מבחן אימון חדש לפי ההוראות. השתמש במבחני העבר רק ללמידת המבנה, ובנה שאלות חדשות מתוכן ההרצאות.`,
-          },
-        ],
-      });
-
-      const rawText = generationResponse.choices[0]?.message?.content?.trim() ?? "";
-      if (!rawText) {
-        return Response.json(
-          { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-          { status: 500 }
-        );
-      }
-
-      examData = JSON.parse(rawText);
-    } else {
-      // ── Fallback: No indexed files — chat only ────────────────────────────
-      console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
-
-      const response = await client.chat.completions.create({
-        model: "gpt-4o",
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          {
-            role: "user",
-            content: `קורס: ${courseId}
-
-מבחני עבר זמינים (מבנה בלבד):
-${pastExamList}
-
-הרצאות הקורס:
-${lectureList}
-
-בנה מבחן אימון חדש לפי ההוראות.`,
-          },
-        ],
-      });
-
-      const rawText = response.choices[0]?.message?.content?.trim() ?? "";
-      if (!rawText) {
-        return Response.json(
-          { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-          { status: 500 }
-        );
-      }
-
-      examData = JSON.parse(rawText);
     }
+
+    examData = JSON.parse(rawText);
   } catch (err) {
     console.error("[generate-exam-from-course] OpenAI error:", err);
     return Response.json(
