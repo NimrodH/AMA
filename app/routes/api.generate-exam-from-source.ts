@@ -59,23 +59,12 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 /** Extract a JSON object from raw text (handles markdown code fences and citation annotations). */
 function extractJson(text: string): string {
-  // 1. Strip OpenAI file_search citation annotations like 【4:0†source】
-  let cleaned = text.replace(/【[^】]*】/g, "");
-
-  // 2. Try to extract from Markdown code block
-  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlockMatch) {
-    cleaned = codeBlockMatch[1].trim();
-  }
-
-  // 3. Find the first '{' and the matching closing '}' by counting braces
-  const firstOpen = cleaned.indexOf("{");
-  const firstClose = cleaned.lastIndexOf("}");
-  
-  if (firstOpen !== -1 && firstClose !== -1 && firstClose > firstOpen) {
-    return cleaned.substring(firstOpen, firstClose + 1);
-  }
-
+  // Strip OpenAI file_search citation annotations like 【4:0†source】
+  const cleaned = text.replace(/【[^】]*】/g, "");
+  const codeBlock = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) return codeBlock[1].trim();
+  const bareObject = cleaned.match(/\{[\s\S]*\}/);
+  if (bareObject) return bareObject[0].trim();
   return cleaned;
 }
 
@@ -205,7 +194,6 @@ export async function action({ request }: Route.ActionArgs) {
 ${examText}`,
         },
       ],
-      response_format: { type: "json_object" },
     });
 
     rawText = response.choices[0]?.message?.content?.trim() ?? "";
