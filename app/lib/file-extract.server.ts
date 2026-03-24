@@ -1,4 +1,5 @@
 import mammoth from "mammoth";
+import { PDFParse } from "pdf-parse";
 
 /** Download a file from a public URL and return it as a Buffer. */
 export async function fetchFileBuffer(url: string): Promise<Buffer> {
@@ -9,12 +10,13 @@ export async function fetchFileBuffer(url: string): Promise<Buffer> {
 
 /**
  * Extract plain text from a file buffer.
- * Supports DOCX (via mammoth), PDF (via pdf-parse), and plain text files.
+ * Supports DOCX (via mammoth), PDF (via pdf-parse v2), and plain text files.
  */
 export async function extractText(buffer: Buffer, url: string): Promise<string> {
-  const lower = url.toLowerCase();
+  // Strip query params and hash before checking extension
+  const pathname = url.split("?")[0].split("#")[0].toLowerCase();
 
-  if (lower.endsWith(".docx")) {
+  if (pathname.endsWith(".docx")) {
     const rawResult = await mammoth.extractRawText({ buffer });
     if (rawResult.value.trim()) return rawResult.value;
     const htmlResult = await mammoth.convertToHtml({ buffer });
@@ -25,15 +27,10 @@ export async function extractText(buffer: Buffer, url: string): Promise<string> 
     return plainText;
   }
 
-  if (lower.endsWith(".pdf")) {
-    const pdfParseModule = (await import("pdf-parse")) as unknown as
-      | { default?: (buf: Buffer) => Promise<{ text: string }> }
-      | ((buf: Buffer) => Promise<{ text: string }>);
-    const pdfParse =
-      (pdfParseModule as { default?: (buf: Buffer) => Promise<{ text: string }> }).default ??
-      (pdfParseModule as (buf: Buffer) => Promise<{ text: string }>);
-    const data = await pdfParse(buffer);
-    return data.text;
+  if (pathname.endsWith(".pdf")) {
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    return result.text;
   }
 
   return buffer.toString("utf-8");
@@ -45,11 +42,14 @@ export async function extractText(buffer: Buffer, url: string): Promise<string> 
  */
 export async function extractTextFromUrl(fileUrl: string): Promise<string | null> {
   try {
+    console.log("[file-extract] Downloading file:", fileUrl);
     const buffer = await fetchFileBuffer(fileUrl);
+    console.log(`[file-extract] Downloaded ${buffer.length} bytes from ${fileUrl}`);
     const text = await extractText(buffer, fileUrl);
+    console.log(`[file-extract] Extracted ${text.length} chars from ${fileUrl}`);
     return text.trim() || null;
   } catch (err) {
-    console.warn("[file-extract] Failed to extract text from", fileUrl, err);
+    console.error("[file-extract] Failed to extract text from", fileUrl, err);
     return null;
   }
 }
