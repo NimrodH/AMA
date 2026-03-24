@@ -12,6 +12,7 @@ import {
   BookOpen,
   Calendar,
   Trophy,
+  Trash2,
 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
@@ -147,15 +148,41 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [gradeError, setGradeError] = React.useState<string | null>(null);
   const [examCourseId, setExamCourseId] = React.useState<string>("");
   const [examType, setExamType] = React.useState<"past" | "ai" | "mc">("ai");
+  const [localExams, setLocalExams] = React.useState<ExamRow[]>(savedExams);
+  const [deletingId, setDeletingId] = React.useState<string | null>(null);
 
   const [showMcOptions, setShowMcOptions] = React.useState(false);
   const [mcQuestionCount, setMcQuestionCount] = React.useState(10);
 
+  // Keep localExams in sync when loader data refreshes
+  React.useEffect(() => {
+    setLocalExams(savedExams);
+  }, [savedExams]);
+
   // Saved exams filtered by selected course
   const courseExams = React.useMemo(
-    () => savedExams.filter((e) => e.course_id === selectedCourse),
-    [savedExams, selectedCourse]
+    () => localExams.filter((e) => e.course_id === selectedCourse),
+    [localExams, selectedCourse]
   );
+
+  const handleDeleteExam = async (examId: string) => {
+    setDeletingId(examId);
+    try {
+      const res = await authFetch("/api/delete-exam", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examId }),
+      });
+      const data = (await res.json()) as { ok: boolean };
+      if (data.ok) {
+        setLocalExams((prev) => prev.filter((e) => e.id !== examId));
+      }
+    } catch {
+      // silent — exam stays in list if delete fails
+    } finally {
+      setDeletingId(null);
+    }
+  };
 
   // Auto-generate exam from source when sourceId is in URL
   React.useEffect(() => {
@@ -711,14 +738,30 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           </div>
                         </div>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenSavedExam(row)}
-                        >
-                          <BookOpen style={{ width: 14, height: 14, marginLeft: "var(--space-1)" }} />
-                          פתח מבחן
-                        </Button>
+                        <div className={styles.savedExamActions}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenSavedExam(row)}
+                          >
+                            <BookOpen style={{ width: 14, height: 14, marginLeft: "var(--space-1)" }} />
+                            פתח מבחן
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            onClick={() => handleDeleteExam(row.id)}
+                            disabled={deletingId === row.id}
+                            className={styles.deleteButton}
+                            aria-label="מחק מבחן"
+                          >
+                            {deletingId === row.id ? (
+                              <Loader2 style={{ width: 14, height: 14, animation: "var(--animation-spin)" }} />
+                            ) : (
+                              <Trash2 style={{ width: 14, height: 14 }} />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
