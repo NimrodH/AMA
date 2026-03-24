@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.card-feedback";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
-import { requireSession } from "~/lib/auth.server";
+import { getSession } from "~/lib/auth.server";
 
 export async function action({ request }: Route.ActionArgs) {
   const { courseId, lectureNumber, cardContent, additionalInstruction } = (await request.json()) as {
@@ -15,7 +15,10 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
 
-  const session = await requireSession(request);
+  const session = await getSession(request);
+  if (!session) {
+    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
+  }
   const student = { id: session.studentId };
 
   // ── 1. Find matching lecture sources ──────────────────────────────────────
