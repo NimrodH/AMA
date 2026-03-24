@@ -41,6 +41,27 @@ interface QuestionForGrading {
   points: number;
 }
 
+function extractJson(text: string): string {
+  // 1. Strip OpenAI file_search citation annotations like 【4:0†source】
+  let cleaned = text.replace(/【[^】]*】/g, "");
+
+  // 2. Try to extract from Markdown code block
+  const codeBlockMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlockMatch) {
+    cleaned = codeBlockMatch[1].trim();
+  }
+
+  // 3. Find the first '{' and the matching closing '}' by counting braces
+  const firstOpen = cleaned.indexOf("{");
+  const firstClose = cleaned.lastIndexOf("}");
+  
+  if (firstOpen !== -1 && firstClose !== -1 && firstClose > firstOpen) {
+    return cleaned.substring(firstOpen, firstClose + 1);
+  }
+
+  return cleaned;
+}
+
 export async function action({ request }: Route.ActionArgs) {
   const { exam, answers, courseId, examType, questionsSubset } = (await request.json()) as {
     exam: { title: string; questions: QuestionForGrading[] };
@@ -114,16 +135,9 @@ ${examText}
   });
 
   const rawText = response.output_text?.trim() ?? "";
-  // Strip OpenAI file_search citation annotations like 【4:0†source】
-  const cleaned = rawText.replace(/\u3010[^\u3011]*\u3011/g, "");
-  const jsonMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)```/) ?? null;
-  let jsonStr = jsonMatch ? jsonMatch[1].trim() : cleaned;
-  // Also try extracting a bare JSON object if the cleaned text has extra text around it
-  if (!jsonMatch) {
-    const bareObject = cleaned.match(/\{[\s\S]*\}/);
-    if (bareObject) jsonStr = bareObject[0].trim();
-  }
-
+  
+  const jsonStr = extractJson(rawText);
+  
   let gradingResult: unknown;
   try {
     gradingResult = JSON.parse(jsonStr);
