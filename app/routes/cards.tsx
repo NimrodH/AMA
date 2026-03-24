@@ -476,13 +476,20 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   variant="outline"
                   className={styles.saveAndNextBtn}
                   disabled={!isFormValid || isSaving}
-                  onClick={() => { saveAndNextRef.current = true; }}
+                  onClick={() => {
+                    saveAndNextRef.current = true;
+                  }}
                 >
                   <ArrowLeft style={{ marginLeft: "var(--space-2)" }} />
                   שמור והבא
                 </Button>
               )}
-              <Button type="button" onClick={handleGetFeedback} disabled={!cardContent || isLoadingFeedback}>
+              <Button
+                type="button"
+                onClick={handleGetFeedback}
+                disabled={!cardContent || isLoadingFeedback}
+                className={styles.button}
+              >
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isLoadingFeedback ? "מקבל משוב..." : "קבל משוב מה-AI"}
               </Button>

@@ -416,3 +416,6 @@
   opacity: 0.5;
   cursor: not-allowed;
 }
+.button {
+  padding-bottom: 4px;
+}
