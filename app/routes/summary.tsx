@@ -29,20 +29,25 @@ export function meta({}: Route.MetaArgs) {
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // Use getSession (non-throwing) so SSR doesn't redirect when the cookie
-  // is absent — the clientLoader enforces auth client-side via localStorage.
-  const session = await getSession(request);
-  if (!session) {
+  try {
+    // Use getSession (non-throwing) so SSR doesn't redirect when the cookie
+    // is absent — the clientLoader enforces auth client-side via localStorage.
+    const session = await getSession(request);
+    if (!session) {
+      return { accountType: "student" as const, courses: [] };
+    }
+
+    const student = await getStudentById(session.studentId, request);
+    const courses = student ? await getActiveCourses(student.id, request) : [];
+
+    return {
+      accountType: session.accountType as "student" | "guest",
+      courses,
+    };
+  } catch (err) {
+    console.error("[summary] loader error:", err);
     return { accountType: "student" as const, courses: [] };
   }
-
-  const student = await getStudentById(session.studentId, request);
-  const courses = student ? await getActiveCourses(student.id, request) : [];
-
-  return {
-    accountType: session.accountType as "student" | "guest",
-    courses,
-  };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

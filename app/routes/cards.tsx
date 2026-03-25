@@ -32,12 +32,17 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return { courses: [], cards: [] };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], cards: [] };
-  const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
-  return { courses, cards };
+  try {
+    const session = await getSession(request);
+    if (!session) return { courses: [], cards: [] };
+    const student = await getStudentById(session.studentId, request);
+    if (!student) return { courses: [], cards: [] };
+    const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
+    return { courses, cards };
+  } catch (err) {
+    console.error("[cards] loader error:", err);
+    return { courses: [], cards: [] };
+  }
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

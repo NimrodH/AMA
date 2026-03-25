@@ -34,15 +34,20 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], questions: [], studentId: "", accountType: session.accountType };
+  try {
+    const session = await getSession(request);
+    if (!session) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
+    const student = await getStudentById(session.studentId, request);
+    if (!student) return { courses: [], questions: [], studentId: "", accountType: session.accountType };
 
-  const courses = await getActiveCourses(student.id, request);
-  const questions = await getArticleQuestions(student.id, request);
+    const courses = await getActiveCourses(student.id, request);
+    const questions = await getArticleQuestions(student.id, request);
 
-  return { courses, questions, studentId: student.id, accountType: session.accountType };
+    return { courses, questions, studentId: student.id, accountType: session.accountType };
+  } catch (err) {
+    console.error("[article-analysis] loader error:", err);
+    return { courses: [], questions: [], studentId: "", accountType: "student" as const };
+  }
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

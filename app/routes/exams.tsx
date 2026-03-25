@@ -68,17 +68,24 @@ interface GradingResult {
 
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
+const EMPTY_EXAMS_DATA = { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: "student" as const };
+
 export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: session.accountType as "student" | "guest" };
-  const courses = await getActiveCourses(student.id, request);
-  // Load exams for all courses (we'll filter client-side by selected course)
-  const savedExams = courses.length > 0
-    ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id, request)))).flat()
-    : [];
-  return { courses, savedExams, studentId: student.id, accountType: session.accountType as "student" | "guest" };
+  try {
+    const session = await getSession(request);
+    if (!session) return EMPTY_EXAMS_DATA;
+    const student = await getStudentById(session.studentId, request);
+    if (!student) return { ...EMPTY_EXAMS_DATA, accountType: session.accountType as "student" | "guest" };
+    const courses = await getActiveCourses(student.id, request);
+    // Load exams for all courses (we'll filter client-side by selected course)
+    const savedExams = courses.length > 0
+      ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id, request)))).flat()
+      : [];
+    return { courses, savedExams, studentId: student.id, accountType: session.accountType as "student" | "guest" };
+  } catch (err) {
+    console.error("[exams] loader error:", err);
+    return EMPTY_EXAMS_DATA;
+  }
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

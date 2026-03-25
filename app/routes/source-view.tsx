@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Link, redirect } from "react-router";
+import { Link } from "react-router";
 import { ChevronLeft, BookOpen, Hash, Download } from "lucide-react";
 import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -36,22 +36,29 @@ export function meta({ data }: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
+const EMPTY_SOURCE_VIEW = { source: { topic: "", file_url: null, lecture_number: null, course_id: "", id: "" }, courseName: null };
+
 export async function loader({ params, request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return redirect("/sources");
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return redirect("/setup");
+  try {
+    const session = await getSession(request);
+    if (!session) return EMPTY_SOURCE_VIEW;
+    const student = await getStudentById(session.studentId, request);
+    if (!student) return EMPTY_SOURCE_VIEW;
 
-  const [source, courses] = await Promise.all([
-    getSourceById(params.id, student.id, request),
-    getCourses(student.id, request),
-  ]);
-  if (!source) throw new Response("Not Found", { status: 404 });
+    const [source, courses] = await Promise.all([
+      getSourceById(params.id, student.id, request),
+      getCourses(student.id, request),
+    ]);
+    if (!source) return EMPTY_SOURCE_VIEW;
 
-  const courseName =
-    courses.find((c) => c.course_id === source.course_id)?.course_name ?? null;
+    const courseName =
+      courses.find((c) => c.course_id === source.course_id)?.course_name ?? null;
 
-  return { source, courseName };
+    return { source, courseName };
+  } catch (err) {
+    console.error("[source-view] loader error:", err);
+    return EMPTY_SOURCE_VIEW;
+  }
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
