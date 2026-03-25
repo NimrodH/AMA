@@ -25,20 +25,15 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  try {
-    const session = await getSession(request);
-    if (!session) return { courses: [], cards: [], accountType: "student" as const };
-    const student = await getStudentById(session.studentId, request);
-    if (!student) return { courses: [], cards: [], accountType: session.accountType };
-    const [courses, cards] = await Promise.all([
-      getActiveCourses(student.id, request),
-      getCards(student.id, request),
-    ]);
-    return { courses, cards, accountType: session.accountType };
-  } catch (err) {
-    console.error("[learn] loader error:", err);
-    return { courses: [], cards: [], accountType: "student" as const };
-  }
+  const session = await getSession(request);
+  if (!session) return { courses: [], cards: [], accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { courses: [], cards: [], accountType: session.accountType };
+  const [courses, cards] = await Promise.all([
+    getActiveCourses(student.id, request),
+    getCards(student.id, request),
+  ]);
+  return { courses, cards, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

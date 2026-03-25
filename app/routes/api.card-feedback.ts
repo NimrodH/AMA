@@ -1,8 +1,7 @@
 import type { Route } from "./+types/api.card-feedback";
-import { getOpenAIClient } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
-import { getSession } from "~/lib/auth.server";
-import { extractTextFromUrl } from "~/lib/file-extract.server";
+import { requireSession } from "~/lib/auth.server";
 
 export async function action({ request }: Route.ActionArgs) {
   const { courseId, lectureNumber, cardContent, additionalInstruction } = (await request.json()) as {
@@ -16,10 +15,7 @@ export async function action({ request }: Route.ActionArgs) {
     return Response.json({ ok: false, error: "Missing required fields" }, { status: 400 });
   }
 
-  const session = await getSession(request);
-  if (!session) {
-    return Response.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
+  const session = await requireSession(request);
   const student = { id: session.studentId };
 
   // ── 1. Find matching lecture sources ──────────────────────────────────────
@@ -30,14 +26,14 @@ export async function action({ request }: Route.ActionArgs) {
   const db = createServerClient(request);
   const lectureNum = lectureNumber ? parseInt(lectureNumber, 10) : null;
 
-  // Fetch ALL lecture sources for this course that have an uploaded file
+  // Fetch ALL lecture sources for this course with a vector store file
   const { data: allCourseSources } = await db
     .from("sources")
-    .select("id, topic, lecture_number, file_url")
+    .select("id, topic, lecture_number, vector_store_file_id")
     .eq("student_id", student.id)
     .eq("course_id", courseId)
     .eq("source_type", "Lecture")
-    .not("file_url", "is", null);
+    .not("vector_store_file_id", "is", null);
 
   const courseSources = allCourseSources ?? [];
 
@@ -50,7 +46,7 @@ export async function action({ request }: Route.ActionArgs) {
     return s.lecture_number === lectureNum;      // match exact lecture number
   });
 
-  // ── 2. Build context hints and extract actual document text ────────────────
+  // ── 2. Build context hints ────────────────────────────────────────────────
   const sourceList =
     matchingSources.length > 0
       ? matchingSources
@@ -58,29 +54,18 @@ export async function action({ request }: Route.ActionArgs) {
           .join("\n")
       : null;
 
-  // Download and extract the full text from each matching source file.
-  // This replaces the previous file_search vector approach, which often failed
-  // to retrieve the relevant section for Hebrew academic content.
-  const sourceTexts: string[] = [];
-  for (const s of matchingSources) {
-    if (!s.file_url) continue;
-    const text = await extractTextFromUrl(s.file_url);
-    if (text) {
-      const label = s.lecture_number
-        ? `${s.topic} (\u05d4\u05e8\u05e6\u05d0\u05d4 ${s.lecture_number})`
-        : `${s.topic} (\u05db\u05dc\u05dc \u05d4\u05e7\u05d5\u05e8\u05e1)`;
-      sourceTexts.push(`=== ${label} ===\n${text}`);
-    }
-  }
-  const fullSourceContent = sourceTexts.join("\n\n");
+  const vectorStoreFileIds = matchingSources
+    .map((s) => s.vector_store_file_id)
+    .filter(Boolean) as string[];
 
   // ── 3. Build prompts ──────────────────────────────────────────────────────
   const client = getOpenAIClient();
+  const vectorStoreId = await getOrCreateVectorStore(db);
 
   const cardLectureHint =
     lectureNum !== null
-      ? `הכרטיס שייך להרצאה מספר ${lectureNum}.`
-      : "הכרטיס אינו משויך להרצאה ספציפית — השתמש בכל חומרי הקורס הרלוונטיים.";
+      ? `\u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05d9\u05d9\u05da \u05dc\u05d4\u05e8\u05e6\u05d0\u05d4 \u05de\u05e1\u05e4\u05e8 ${lectureNum}.`
+      : "\u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05d0\u05d9\u05e0\u05d5 \u05de\u05e9\u05d5\u05d9\u05da \u05dc\u05d4\u05e8\u05e6\u05d0\u05d4 \u05e1\u05e4\u05e6\u05d9\u05e4\u05d9\u05ea \u2014 \u05d4\u05e9\u05ea\u05de\u05e9 \u05d1\u05db\u05dc \u05d7\u05d5\u05de\u05e8\u05d9 \u05d4\u05e7\u05d5\u05e8\u05e1 \u05d4\u05e8\u05dc\u05d5\u05d5\u05e0\u05d8\u05d9\u05d9\u05dd.";
 
   // Parse card title vs content (encoded as "title\n---\ncontent" from the client)
   const sep = "\n---\n";
@@ -89,63 +74,85 @@ export async function action({ request }: Route.ActionArgs) {
   const cardBody = sepIdx !== -1 ? cardContent.slice(sepIdx + sep.length).trim() : cardContent;
 
   const systemPrompt = [
-    "אתה מומחה אקדמי המספק משוב על כרטיסי למידה של סטודנטים.",
+    "\u05d0\u05ea\u05d4 \u05de\u05d5\u05de\u05d7\u05d4 \u05d0\u05e7\u05d3\u05de\u05d9 \u05d4\u05de\u05e1\u05e4\u05e7 \u05de\u05e9\u05d5\u05d1 \u05e2\u05dc \u05db\u05e8\u05d8\u05d9\u05e1\u05d9 \u05dc\u05de\u05d9\u05d3\u05d4 \u05e9\u05dc \u05e1\u05d8\u05d5\u05d3\u05e0\u05d8\u05d9\u05dd.",
     sourceList
-      ? `מקורות הלמידה הרלוונטיים לכרטיס זה:\n${sourceList}`
+      ? `\u05de\u05e7\u05d5\u05e8\u05d5\u05ea \u05d4\u05dc\u05de\u05d9\u05d3\u05d4 \u05d4\u05e8\u05dc\u05d5\u05d5\u05e0\u05d8\u05d9\u05d9\u05dd \u05dc\u05db\u05e8\u05d8\u05d9\u05e1 \u05d6\u05d4:\n${sourceList}`
       : "",
     cardLectureHint,
     "",
-    "מבנה הכרטיס:",
-    "- **כותרת הכרטיס** = המושג או השאלה שהסטודנט מנסה ללמוד",
-    "- **תוכן הכרטיס** = ההגדרה המלאה שהסטודנט כתב למושג, או התשובה המלאה לשאלה",
+    // ── CRITICAL SEARCH INSTRUCTION ──
+    // The source document is a course-wide summary (lecture_number = null). The vector search
+    // must find the relevant section even if it is on page 2 or under a slightly different heading.
+    "\u05d7\u05e9\u05d5\u05d1 \u05de\u05d0\u05d5\u05d3: \u05d1\u05e6\u05e2 \u05d7\u05d9\u05e4\u05d5\u05e9 \u05e8\u05d7\u05d1 \u05d1\u05db\u05dc \u05d4\u05de\u05e1\u05de\u05db\u05d9\u05dd \u05e9\u05e6\u05d5\u05e8\u05e4\u05d5 \u2014 \u05db\u05d5\u05dc\u05dc \u05e1\u05d9\u05db\u05d5\u05de\u05d9\u05dd \u05db\u05dc\u05dc\u05d9\u05d9\u05dd \u05d5\u05e7\u05d1\u05e6\u05d9\u05dd \u05e2\u05dd lecture_number=null. \u05d4\u05de\u05d5\u05e9\u05d2 \u05e2\u05e9\u05d5\u05d9 \u05dc\u05d4\u05d5\u05e4\u05d9\u05e2 \u05d1\u05e2\u05de\u05d5\u05d3 \u05d0\u05d7\u05e8, \u05e4\u05e8\u05e7 \u05d0\u05d7\u05e8, \u05d0\u05d5 \u05ea\u05d7\u05ea \u05e9\u05dd \u05e9\u05d5\u05e0\u05d4 \u05de\u05e2\u05d8. \u05d0\u05dc \u05ea\u05d0\u05de\u05e8 \"\u05d0\u05d9\u05df \u05de\u05d9\u05d3\u05e2\" \u05d0\u05dc\u05d0 \u05d0\u05dd \u05d1\u05d9\u05e6\u05e2\u05ea \u05d7\u05d9\u05e4\u05d5\u05e9 \u05de\u05e7\u05d9\u05e3 \u05d5\u05e2\u05d3\u05d9\u05d9\u05df \u05dc\u05d0 \u05de\u05e6\u05d0\u05ea.",
     "",
-    "משימתך:",
-    "חפש בחומרי ההרצאה המקוריים המצורפים את ההסבר המלא של אותו מושג / תשובה לאותה שאלה, והשווה אותו לתוכן שכתב הסטודנט.",
-    "חשוב מאוד: אם המושג מופיע בחומר — ציין זאת מפורשות עם ציטוט ישיר מהמקור.",
+    "\u05de\u05d1\u05e0\u05d4 \u05d4\u05db\u05e8\u05d8\u05d9\u05e1:",
+    "- **\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05db\u05e8\u05d8\u05d9\u05e1** = \u05d4\u05de\u05d5\u05e9\u05d2 \u05d0\u05d5 \u05d4\u05e9\u05d0\u05dc\u05d4 \u05e9\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05de\u05e0\u05e1\u05d4 \u05dc\u05dc\u05de\u05d5\u05d3",
+    "- **\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1** = \u05d4\u05d4\u05d2\u05d3\u05e8\u05d4 \u05d4\u05de\u05dc\u05d0\u05d4 \u05e9\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05db\u05ea\u05d1 \u05dc\u05de\u05d5\u05e9\u05d2, \u05d0\u05d5 \u05d4\u05ea\u05e9\u05d5\u05d1\u05d4 \u05d4\u05de\u05dc\u05d0\u05d4 \u05dc\u05e9\u05d0\u05dc\u05d4",
     "",
-    "ספק משוב מפורט הכולל:",
-    "1. ✅ נקודות חוזק — מה הסטודנט הבין והסביר נכון",
-    "2. ⚠️ פרטים חסרים — היבטים, תנאים, דוגמאות או הסברים שמופיעים בהרצאה אך חסרים מהכרטיס",
-    "3. ❌ אי-דיוקים — טעויות שגויות, ניסוחים מטעים או הכללות לא נכונות",
-    "4. 💡 ניסוח משופר — הצע כיצד לנסח מחדש את תוכן הכרטיס כך שישקף נאמנה את הגדרת/הסבר המקור",
+    "\u05de\u05e9\u05d9\u05de\u05ea\u05da:",
+    "\u05d7\u05e4\u05e9 \u05d1\u05d7\u05d5\u05de\u05e8\u05d9 \u05d4\u05d4\u05e8\u05e6\u05d0\u05d4 \u05d4\u05de\u05e7\u05d5\u05e8\u05d9\u05d9\u05dd \u05d4\u05de\u05e6\u05d5\u05e8\u05e4\u05d9\u05dd \u05d0\u05ea \u05d4\u05d4\u05e1\u05d1\u05e8 \u05d4\u05de\u05dc\u05d0 \u05e9\u05dc \u05d0\u05d5\u05ea\u05d5 \u05de\u05d5\u05e9\u05d2 / \u05ea\u05e9\u05d5\u05d1\u05d4 \u05dc\u05d0\u05d5\u05ea\u05d4 \u05e9\u05d0\u05dc\u05d4, \u05d5\u05d4\u05e9\u05d5\u05d5\u05d4 \u05d0\u05d5\u05ea\u05d5 \u05dc\u05ea\u05d5\u05db\u05df \u05e9\u05db\u05ea\u05d1 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8.",
+    "\u05d7\u05e9\u05d5\u05d1 \u05de\u05d0\u05d5\u05d3: \u05d0\u05dd \u05d4\u05de\u05d5\u05e9\u05d2 \u05de\u05d5\u05e4\u05d9\u05e2 \u05d1\u05d7\u05d5\u05de\u05e8 \u2014 \u05e6\u05d9\u05d9\u05df \u05d6\u05d0\u05ea \u05de\u05e4\u05d5\u05e8\u05e9\u05d5\u05ea \u05e2\u05dd \u05e6\u05d9\u05d8\u05d5\u05d8 \u05d9\u05e9\u05d9\u05e8 \u05de\u05d4\u05de\u05e7\u05d5\u05e8.",
     "",
-    "הצג את המשוב בפורמט מובנה וברור בעברית.",
+    "\u05e1\u05e4\u05e7 \u05de\u05e9\u05d5\u05d1 \u05de\u05e4\u05d5\u05e8\u05d8 \u05d4\u05db\u05d5\u05dc\u05dc:",
+    "1. \u2705 \u05e0\u05e7\u05d5\u05d3\u05d5\u05ea \u05d7\u05d5\u05d6\u05e7 \u2014 \u05de\u05d4 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8 \u05d4\u05d1\u05d9\u05df \u05d5\u05d4\u05e1\u05d1\u05d9\u05e8 \u05e0\u05db\u05d5\u05df",
+    "2. \u26a0\ufe0f \u05e4\u05e8\u05d8\u05d9\u05dd \u05d7\u05e1\u05e8\u05d9\u05dd \u2014 \u05d4\u05d9\u05d1\u05d8\u05d9\u05dd, \u05ea\u05e0\u05d0\u05d9\u05dd, \u05d3\u05d5\u05d2\u05de\u05d0\u05d5\u05ea \u05d0\u05d5 \u05d4\u05e1\u05d1\u05e8\u05d9\u05dd \u05e9\u05de\u05d5\u05e4\u05d9\u05e2\u05d9\u05dd \u05d1\u05d4\u05e8\u05e6\u05d0\u05d4 \u05d0\u05da \u05d7\u05e1\u05e8\u05d9\u05dd \u05de\u05d4\u05db\u05e8\u05d8\u05d9\u05e1",
+    "3. \u274c \u05d0\u05d9-\u05d3\u05d9\u05d5\u05e7\u05d9\u05dd \u2014 \u05d8\u05e2\u05e0\u05d5\u05ea \u05e9\u05d2\u05d5\u05d9\u05d5\u05ea, \u05e0\u05d9\u05e1\u05d5\u05d7\u05d9\u05dd \u05de\u05d8\u05e2\u05d9\u05dd \u05d0\u05d5 \u05d4\u05db\u05dc\u05dc\u05d5\u05ea \u05dc\u05d0 \u05e0\u05db\u05d5\u05e0\u05d5\u05ea",
+    "4. \ud83d\udca1 \u05e0\u05d9\u05e1\u05d5\u05d7 \u05de\u05e9\u05d5\u05e4\u05e8 \u2014 \u05d4\u05e6\u05e2 \u05db\u05d9\u05e6\u05d3 \u05dc\u05e0\u05e1\u05d7 \u05de\u05d7\u05d3\u05e9 \u05d0\u05ea \u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05db\u05da \u05e9\u05d9\u05e9\u05e7\u05e3 \u05e0\u05d0\u05de\u05e0\u05d4 \u05d0\u05ea \u05d4\u05d2\u05d3\u05e8\u05ea/\u05d4\u05e1\u05d1\u05e8 \u05d4\u05de\u05e7\u05d5\u05e8",
+    "",
+    "\u05d4\u05e6\u05d2 \u05d0\u05ea \u05d4\u05de\u05e9\u05d5\u05d1 \u05d1\u05e4\u05d5\u05e8\u05de\u05d8 \u05de\u05d5\u05d1\u05e0\u05d4 \u05d5\u05d1\u05e8\u05d5\u05e8 \u05d1\u05e2\u05d1\u05e8\u05d9\u05ea.",
     additionalInstruction
-      ? `\nהוראות נוספות מהסטודנט:\n${additionalInstruction}`
+      ? `\n\u05d4\u05d5\u05e8\u05d0\u05d5\u05ea \u05e0\u05d5\u05e1\u05e4\u05d5\u05ea \u05de\u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8:\n${additionalInstruction}`
       : null,
   ]
     .filter((line) => line !== null)
     .join("\n");
 
-  // Build the user message. When we have extracted source text, include it directly
-  // in the prompt so the model sees the FULL document — not just vector-search chunks.
-  const cardSection = cardTitle
-    ? `מושג / שאלה (כותרת הכרטיס):\n${cardTitle}\n\nהגדרה / תשובה (תוכן הכרטיס שכתב הסטודנט):\n${cardBody}`
-    : `תוכן הכרטיס של הסטודנט:\n${cardContent}`;
+  const userMessage = cardTitle
+    ? `\u05de\u05d5\u05e9\u05d2 / \u05e9\u05d0\u05dc\u05d4 (\u05db\u05d5\u05ea\u05e8\u05ea \u05d4\u05db\u05e8\u05d8\u05d9\u05e1):\n${cardTitle}\n\n\u05d4\u05d2\u05d3\u05e8\u05d4 / \u05ea\u05e9\u05d5\u05d1\u05d4 (\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05db\u05ea\u05d1 \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8):\n${cardBody}`
+    : `\u05ea\u05d5\u05db\u05df \u05d4\u05db\u05e8\u05d8\u05d9\u05e1 \u05e9\u05dc \u05d4\u05e1\u05d8\u05d5\u05d3\u05e0\u05d8:\n${cardContent}`;
 
-  const userMessage = fullSourceContent
-    ? `להלן חומרי הקורס המלאים:\n\n${fullSourceContent}\n\n---\n\nלהלן הכרטיס של הסטודנט לבדיקה:\n${cardSection}`
-    : cardSection;
-
-  // ── 4. Call OpenAI with direct text context (no file_search) ────────────
-  // Previous approach used file_search (vector store retrieval) which consistently
-  // failed to find specific sections in Hebrew academic documents. The model would
-  // say "לא מצאתי" even though the content existed in the document.
-  //
-  // New approach: download the actual source files, extract their text, and pass it
-  // directly in the prompt. This guarantees the model sees ALL document content.
+  // ── 4. Call OpenAI with file_search ──────────────────────────────────────
+  // Filter by student_id (a custom metadata attribute set on every uploaded file).
+  // This correctly scopes the search to this student's files only.
+  // NOTE: We do NOT filter by file_id because "file_id" is NOT a stored metadata attribute —
+  // using it caused the vector search to silently return zero results, making the AI
+  // fall back to its internal knowledge and claim "no information found in the source".
   let feedback: string;
 
   try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage },
-      ],
-      temperature: 0.4,
-    });
-    feedback = response.choices[0]?.message?.content || "לא התקבל משוב";
+    if (vectorStoreFileIds.length > 0) {
+      const response = await client.responses.create({
+        model: "gpt-4o",
+        tools: [
+          {
+            type: "file_search",
+            vector_store_ids: [vectorStoreId],
+            filters: {
+              type: "eq" as const,
+              key: "student_id",
+              value: student.id,
+            },
+          },
+        ],
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+      });
+
+      feedback = response.output_text || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
+    } else {
+      // No matching sources found — generic feedback without RAG
+      const response = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userMessage },
+        ],
+        temperature: 0.7,
+      });
+      feedback = response.choices[0]?.message?.content || "\u05dc\u05d0 \u05d4\u05ea\u05e7\u05d1\u05dc \u05de\u05e9\u05d5\u05d1";
+    }
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("[card-feedback] OpenAI error:", message);

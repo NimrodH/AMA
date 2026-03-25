@@ -31,22 +31,15 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-const EMPTY_SOURCES_DATA = { sources: [] as SourceRow[], courses: [] as { id: string; course_id: string; course_name: string }[], studentId: "", accountType: "student" as const };
-
 export async function loader({ request }: Route.LoaderArgs) {
-  try {
-    const session = await getSession(request);
-    if (!session) return EMPTY_SOURCES_DATA;
-    const student = await getStudentById(session.studentId, request);
-    if (!student) return { ...EMPTY_SOURCES_DATA, accountType: session.accountType as "student" | "guest" };
+  const session = await getSession(request);
+  if (!session) return { sources: [], courses: [], studentId: "", accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { sources: [], courses: [], studentId: "", accountType: session.accountType as "student" | "guest" };
 
-    const [sources, courses] = await Promise.all([getSources(student.id, request), getCoursesForStudent(student.id, request)]);
+  const [sources, courses] = await Promise.all([getSources(student.id, request), getCoursesForStudent(student.id, request)]);
 
-    return { sources, courses, studentId: student.id, accountType: session.accountType as "student" | "guest" };
-  } catch (err) {
-    console.error("[sources] loader error:", err);
-    return EMPTY_SOURCES_DATA;
-  }
+  return { sources, courses, studentId: student.id, accountType: session.accountType as "student" | "guest" };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

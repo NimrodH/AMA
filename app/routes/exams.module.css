@@ -495,23 +495,6 @@
   color: var(--color-neutral-10);
 }
 
-.savedExamActions {
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-  flex-shrink: 0;
-}
-
-.deleteButton {
-  color: var(--color-neutral-9);
-  transition: color 0.15s var(--ease-out), background-color 0.15s var(--ease-out);
-}
-
-.deleteButton:hover {
-  color: var(--color-error-11);
-  background-color: var(--color-error-2);
-}
-
 @media (max-width: 480px) {
   .savedExamCard {
     flex-direction: column;
@@ -519,9 +502,5 @@
   }
   .savedExams {
     padding: var(--space-4);
-  }
-  .savedExamActions {
-    width: 100%;
-    justify-content: flex-end;
   }
 }

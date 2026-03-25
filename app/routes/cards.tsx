@@ -32,17 +32,12 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
-  try {
-    const session = await getSession(request);
-    if (!session) return { courses: [], cards: [] };
-    const student = await getStudentById(session.studentId, request);
-    if (!student) return { courses: [], cards: [] };
-    const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
-    return { courses, cards };
-  } catch (err) {
-    console.error("[cards] loader error:", err);
-    return { courses: [], cards: [] };
-  }
+  const session = await getSession(request);
+  if (!session) return { courses: [], cards: [] };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { courses: [], cards: [] };
+  const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
+  return { courses, cards };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -481,20 +476,13 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                   variant="outline"
                   className={styles.saveAndNextBtn}
                   disabled={!isFormValid || isSaving}
-                  onClick={() => {
-                    saveAndNextRef.current = true;
-                  }}
+                  onClick={() => { saveAndNextRef.current = true; }}
                 >
                   <ArrowLeft style={{ marginLeft: "var(--space-2)" }} />
                   שמור והבא
                 </Button>
               )}
-              <Button
-                type="button"
-                onClick={handleGetFeedback}
-                disabled={!cardContent || isLoadingFeedback}
-                className={styles.button}
-              >
+              <Button type="button" onClick={handleGetFeedback} disabled={!cardContent || isLoadingFeedback}>
                 <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                 {isLoadingFeedback ? "מקבל משוב..." : "קבל משוב מה-AI"}
               </Button>

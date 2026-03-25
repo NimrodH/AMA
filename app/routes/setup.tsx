@@ -114,53 +114,41 @@ export async function loader({ request }: Route.LoaderArgs) {
       supabaseUrl,
     };
   }
+  const steps: SetupStep[] = [];
 
-  try {
-    const steps: SetupStep[] = [];
+  // Step 1: Verify connection
+  const connectionStep = await verifyConnection(supabase);
+  steps.push(connectionStep);
 
-    // Step 1: Verify connection
-    const connectionStep = await verifyConnection(supabase);
-    steps.push(connectionStep);
-
-    // Step 2: Seed Tali Huberman (only if connection works)
-    if (connectionStep.ok) {
-      const seedStep = await seedTaliHuberman(supabase);
-      steps.push(seedStep);
-    }
-
-    // Step 3: Get table row counts
-    const tables = connectionStep.ok ? await getTableCounts(supabase) : [];
-
-    if (tables.length > 0) {
-      const allTablesExist = tables.every((t) => t.rows >= 0);
-      steps.push({
-        name: "Verify all tables exist",
-        ok: allTablesExist,
-        detail: allTablesExist
-          ? `Found ${tables.length} tables`
-          : "Some tables are missing — see table details below",
-      });
-    }
-
-    const allOk = steps.every((s) => s.ok);
-
-    return {
-      success: allOk,
-      steps,
-      tables,
-      supabaseUrl,
-      error: null,
-    };
-  } catch (err) {
-    console.error("[setup] loader error:", err);
-    return {
-      success: false,
-      error: String(err),
-      steps: [] as SetupStep[],
-      tables: [] as TableInfo[],
-      supabaseUrl,
-    };
+  // Step 2: Seed Tali Huberman (only if connection works)
+  if (connectionStep.ok) {
+    const seedStep = await seedTaliHuberman(supabase);
+    steps.push(seedStep);
   }
+
+  // Step 3: Get table row counts
+  const tables = connectionStep.ok ? await getTableCounts(supabase) : [];
+
+  if (tables.length > 0) {
+    const allTablesExist = tables.every((t) => t.rows >= 0);
+    steps.push({
+      name: "Verify all tables exist",
+      ok: allTablesExist,
+      detail: allTablesExist
+        ? `Found ${tables.length} tables`
+        : "Some tables are missing — see table details below",
+    });
+  }
+
+  const allOk = steps.every((s) => s.ok);
+
+  return {
+    success: allOk,
+    steps,
+    tables,
+    supabaseUrl,
+    error: null,
+  };
 }
 
 export default function Setup({ loaderData }: Route.ComponentProps) {

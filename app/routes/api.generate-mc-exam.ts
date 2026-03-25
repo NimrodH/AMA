@@ -1,14 +1,14 @@
 import type { Route } from "./+types/api.generate-mc-exam";
-import { getOpenAIClient } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
-import { extractTextFromUrl } from "~/lib/file-extract.server";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
-קיבלת את התוכן המלא של הרצאות הקורס.
+קיבלת את התוכן המלא של כל הרצאות הקורס.
 המשימה שלך: לבנות מבחן אמריקאי (multiple choice) המכסה את כלל חומרי הקורס באופן מאוזן.
 
 חוקים:
@@ -20,9 +20,10 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - השאלות צריכות לבדוק הבנה, לא רק שינון עובדות
 - כל שאלה שווה נקודה אחת (points: 1)
 - כתוב בעברית בלבד
-- החזר JSON בלבד ללא שום טקסט נוסף, ללא Markdown, ללא הסברים
 
-פורמט JSON נדרש (החזר אך ורק את ה-JSON הזה):
+חשוב מאוד: השתמש בכלי file_search כדי לאחזר את התוכן המלא של הרצאות הקורס לפני שאתה כותב שאלות. בסס כל שאלה על חומר ספציפי שמצאת בהרצאות.
+
+החזר JSON בלבד, ללא טקסט נוסף, עם המבנה הבא:
 {
   "title": "שם הקורס — מבחן אמריקאי",
   "instructions": "בחר את התשובה הנכונה לכל שאלה.",
@@ -37,6 +38,16 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
     }
   ]
 }`;
+
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function extractJson(text: string): string {
+  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+  if (codeBlock) return codeBlock[1].trim();
+  const bareObject = text.match(/\{[\s\S]*\}/);
+  if (bareObject) return bareObject[0].trim();
+  return text;
+}
 
 // ─── Action ───────────────────────────────────────────────────────────────────
 
@@ -65,70 +76,78 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Download and extract text from each lecture file ──────────────────
-  const lectureTexts: string[] = [];
+  // ── 2. Collect vector store file IDs ─────────────────────────────────────
+  const vectorStoreFileIds = lectures
+    .map((s) => s.vector_store_file_id)
+    .filter(Boolean) as string[];
 
-  for (const lecture of lectures) {
-    if (!lecture.file_url) continue;
+  // ── 3. Build the user prompt listing available lectures ──────────────────
+  const lectureList = lectures
+    .map((s) => {
+      const label = s.lecture_number
+        ? `הרצאה ${s.lecture_number} — ${s.topic}`
+        : `${s.topic} (כלל הקורס)`;
+      return `• ${label}`;
+    })
+    .join("\n");
 
-    const label = lecture.lecture_number
-      ? `הרצאה ${lecture.lecture_number} — ${lecture.topic}`
-      : `${lecture.topic}`;
-
-    const text = await extractTextFromUrl(lecture.file_url);
-    if (text) {
-      lectureTexts.push(`=== ${label} ===\n${text}`);
-    } else {
-      console.warn(`[generate-mc-exam] Could not extract text from lecture: ${label}`);
-    }
-  }
-
-  if (lectureTexts.length === 0) {
-    return Response.json(
-      { ok: false, error: "לא ניתן לחלץ טקסט מקבצי ההרצאות. ודא שהקבצים תקינים ונסה שוב." },
-      { status: 422 }
-    );
-  }
-
-  const fullLectureContent = lectureTexts.join("\n\n");
-  console.log(
-    `[generate-mc-exam] Extracted ${lectureTexts.length} lectures, total ${fullLectureContent.length} chars`
-  );
-
-  // ── 3. Generate exam using chat.completions with json_object mode ───────
-  const client = getOpenAIClient();
-
-  let examData: unknown;
-
-  try {
-    const response = await client.chat.completions.create({
-      model: "gpt-4o",
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        {
-          role: "user",
-          content: `קורס: ${courseId}
+  const userPrompt = `קורס: ${courseId}
 מספר שאלות נדרש: ${count}
 
-להלן התוכן המלא של הרצאות הקורס:
+הרצאות הקורס הזמינות (בנה מהן את השאלות):
+${lectureList}
 
-${fullLectureContent}
+בצע חיפוש רחב בכל מסמכי ההרצאות באמצעות file_search כדי לאחזר את התוכן המלא, ולאחר מכן בנה מבחן אמריקאי עם ${count} שאלות המכסות את כלל החומר.`;
 
-בנה מבחן אמריקאי עם ${count} שאלות המכסות את כלל החומר שלעיל. כל השאלות חייבות להתבסס על תוכן ההרצאות בלבד.`,
-        },
-      ],
-    });
+  // ── 4. Call OpenAI with file_search against the vector store ─────────────
+  const client = getOpenAIClient();
+  const db = createServerClient(request);
+  const vectorStoreId = await getOrCreateVectorStore(db);
 
-    const rawText = response.choices[0]?.message?.content?.trim() ?? "";
-    if (!rawText) {
-      return Response.json(
-        { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-        { status: 500 }
-      );
+  let rawText: string;
+
+  try {
+    if (vectorStoreFileIds.length > 0) {
+      // Use file_search — identical pattern to generate-exam-from-course
+      const response = await client.responses.create({
+        model: "gpt-4o",
+        tools: [
+          {
+            type: "file_search",
+            vector_store_ids: [vectorStoreId],
+            max_num_results: 20,
+            filters: {
+              type: "and" as const,
+              filters: [
+                { type: "eq" as const, key: "student_id", value: student.id },
+                { type: "eq" as const, key: "course_id", value: courseId },
+              ],
+            },
+          },
+        ],
+        input: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: userPrompt },
+        ],
+      });
+
+      rawText = response.output_text?.trim() ?? "";
+    } else {
+      // No indexed files yet — fall back to topic-list only (edge case)
+      console.warn("[generate-mc-exam] No vector store file IDs found, falling back to topic list");
+      const response = await client.chat.completions.create({
+        model: "gpt-4o",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          {
+            role: "user",
+            content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות בלבד.`,
+          },
+        ],
+        response_format: { type: "json_object" },
+      });
+      rawText = response.choices[0]?.message?.content?.trim() ?? "";
     }
-
-    examData = JSON.parse(rawText);
   } catch (err) {
     console.error("[generate-mc-exam] OpenAI error:", err);
     return Response.json(
@@ -137,7 +156,27 @@ ${fullLectureContent}
     );
   }
 
-  // ── 4. Save exam to DB (fire-and-forget) ─────────────────────────────────
+  if (!rawText) {
+    return Response.json(
+      { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
+      { status: 500 }
+    );
+  }
+
+  // ── 5. Parse and return ───────────────────────────────────────────────────
+  const jsonStr = extractJson(rawText);
+  let examData: unknown;
+  try {
+    examData = JSON.parse(jsonStr);
+  } catch {
+    console.error("[generate-mc-exam] Failed to parse JSON:", rawText);
+    return Response.json(
+      { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
+      { status: 500 }
+    );
+  }
+
+  // 		6. Save exam to DB (fire-and-forget) 																																
   const examObj = examData as { title?: string };
   saveExam({
     studentId: student.id,

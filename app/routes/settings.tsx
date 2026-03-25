@@ -45,29 +45,22 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-const EMPTY_SETTINGS_DATA = { student: null, courses: [] as Awaited<ReturnType<typeof getCourses>>, reminders: [] as Awaited<ReturnType<typeof getReminders>>, articleQuestions: [] as ArticleQuestionRow[], guests: [] as GuestRow[], accountType: "student" as const };
-
 export async function loader({ request }: Route.LoaderArgs) {
-  try {
-    const session = await getSession(request);
-    if (!session) return EMPTY_SETTINGS_DATA;
-    const student = await getStudentById(session.studentId, request);
-    if (!student) return { ...EMPTY_SETTINGS_DATA, accountType: session.accountType };
+  const session = await getSession(request);
+  if (!session) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
 
-    const [courses, reminders, articleQuestions, guests] = await Promise.all([
-      getCourses(student.id, request),
-      getReminders(student.id, request),
-      getArticleQuestions(student.id, request),
-      session.accountType === "student"
-        ? listGuests(session.studentId, request).catch(() => [] as GuestRow[])
-        : Promise.resolve([] as GuestRow[]),
-    ]);
+  const [courses, reminders, articleQuestions, guests] = await Promise.all([
+    getCourses(student.id, request),
+    getReminders(student.id, request),
+    getArticleQuestions(student.id, request),
+    session.accountType === "student"
+      ? listGuests(session.studentId, request).catch(() => [] as GuestRow[])
+      : Promise.resolve([] as GuestRow[]),
+  ]);
 
-    return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
-  } catch (err) {
-    console.error("[settings] loader error:", err);
-    return EMPTY_SETTINGS_DATA;
-  }
+  return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
