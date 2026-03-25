@@ -4,9 +4,7 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { getStudentById, getReminders, getActiveCourses } from "~/services/settings.service";
-import { getSession } from "~/lib/auth.server";
-import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
+import { type CourseStats } from "~/services/stats.service";
 import {
   isReminderDueToday,
   formatReminderTime,
@@ -28,32 +26,21 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return { studentId: null, studentName: null, guestName: null, accountType: "student" as const, activeReminders: [], courses: [], courseStats: [] };
-  const isGuestSession = session.accountType === "guest";
-  // For guests, studentId points to the owner student — fetch their name
-  const student = await getStudentById(session.studentId, request);
-
-  const [allReminders, courses, courseStats] = await Promise.all([
-    student ? getReminders(student.id, request) : Promise.resolve([]),
-    student ? getActiveCourses(student.id, request) : Promise.resolve([]),
-    student ? getAllCourseStats(student.id, request) : Promise.resolve([]),
-  ]);
-
-  // Return all active reminders — client-side manages which are pending/visible
-  const activeReminders = allReminders.filter((r) => r.is_active);
-
+/**
+ * Server loader always returns an empty shell immediately — zero DB calls.
+ * All data fetching happens in clientLoader which runs on the client with
+ * the actual auth token from localStorage. This prevents SSR lambda timeouts
+ * on published deployments (Supabase auth chain = 4-7 sequential round-trips).
+ */
+export function loader() {
   return {
-    studentId: student?.id ?? null,
-    // Owner student's name (for guests: the student they belong to)
-    studentName: student?.name ?? null,
-    // Guest's own display name — only set for guest accounts
-    guestName: isGuestSession ? session.studentName : null,
-    accountType: session.accountType as "student" | "guest",
-    activeReminders,
-    courses,
-    courseStats,
+    studentId: null as string | null,
+    studentName: null as string | null,
+    guestName: null as string | null,
+    accountType: "student" as "student" | "guest",
+    activeReminders: [] as { id: string; reminder_type: string; reminder_time: string; is_active: boolean }[],
+    courses: [] as { id: string; course_id: string; course_name: string; is_active: boolean }[],
+    courseStats: [] as CourseStats[],
   };
 }
 

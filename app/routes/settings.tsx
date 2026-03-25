@@ -21,20 +21,18 @@ import {
   getStudentById,
   getCourses,
   getReminders,
-  updateStudentName,
-  addCourse,
-  toggleCourse,
-  deleteCourse,
-  addReminder,
-  toggleReminder,
-  deleteReminder,
   getArticleQuestions,
-  addArticleQuestion,
-  deleteArticleQuestion,
   type ArticleQuestionRow,
 } from "~/services/settings.service";
-import { listGuests, createGuest, deleteGuest, type GuestRow } from "~/services/guests.service";
-import { getSession, requireSession } from "~/lib/auth.server";
+import { handleSettingsAction } from "~/routes/settings.action.server";
+
+type GuestRow = {
+  id: string;
+  guest_id: string;
+  guest_name: string;
+  guest_email: string;
+  created_at: string;
+};
 import { DAY_OPTIONS, formatReminderTime } from "~/lib/reminder-utils";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./settings.module.css";
@@ -45,22 +43,15 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-export async function loader({ request }: Route.LoaderArgs) {
-  const session = await getSession(request);
-  if (!session) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
-
-  const [courses, reminders, articleQuestions, guests] = await Promise.all([
-    getCourses(student.id, request),
-    getReminders(student.id, request),
-    getArticleQuestions(student.id, request),
-    session.accountType === "student"
-      ? listGuests(session.studentId, request).catch(() => [] as GuestRow[])
-      : Promise.resolve([] as GuestRow[]),
-  ]);
-
-  return { student, courses, reminders, articleQuestions, guests, accountType: session.accountType };
+export function loader() {
+  return {
+    student: null as { id: string; name: string } | null,
+    courses: [] as Awaited<ReturnType<typeof getCourses>>,
+    reminders: [] as Awaited<ReturnType<typeof getReminders>>,
+    articleQuestions: [] as ArticleQuestionRow[],
+    guests: [] as GuestRow[],
+    accountType: "student" as "student" | "guest",
+  };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -71,105 +62,7 @@ export const clientAction = makeClientAction<typeof action>();
 // ─── Action ──────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
-  const session = await requireSession(request);
-  const formData = await request.formData();
-  const intent = formData.get("intent") as string;
-  const studentId = session.studentId;
-
-  switch (intent) {
-    case "update_name": {
-      if (session.accountType !== "student") break;
-      const name = formData.get("name") as string;
-      if (name?.trim()) await updateStudentName(studentId, name.trim(), request);
-      break;
-    }
-    case "add_course": {
-      if (session.accountType !== "student") break;
-      const courseId = formData.get("course_id") as string;
-      const courseName = formData.get("course_name") as string;
-      if (courseId?.trim() && courseName?.trim()) {
-        await addCourse(studentId, courseId.trim(), courseName.trim(), request);
-      }
-      break;
-    }
-    case "toggle_course": {
-      if (session.accountType !== "student") break;
-      const id = formData.get("id") as string;
-      const isActive = formData.get("is_active") === "true";
-      if (id) await toggleCourse(id, isActive, request);
-      break;
-    }
-    case "delete_course": {
-      if (session.accountType !== "student") break;
-      const id = formData.get("id") as string;
-      const courseId = formData.get("course_id") as string;
-      if (id && studentId && courseId) await deleteCourse(id, studentId, courseId, request);
-      break;
-    }
-    case "add_reminder": {
-      if (session.accountType !== "student") break;
-      const reminderType = formData.get("reminder_type") as string;
-      const reminderTime = formData.get("reminder_time") as string;
-      if (reminderType?.trim() && reminderTime?.trim()) {
-        await addReminder(studentId, reminderType.trim(), reminderTime.trim(), request);
-      }
-      break;
-    }
-    case "toggle_reminder": {
-      if (session.accountType !== "student") break;
-      const id = formData.get("id") as string;
-      const isActive = formData.get("is_active") === "true";
-      if (id) await toggleReminder(id, isActive, request);
-      break;
-    }
-    case "delete_reminder": {
-      if (session.accountType !== "student") break;
-      const id = formData.get("id") as string;
-      if (id) await deleteReminder(id, request);
-      break;
-    }
-    case "add_article_question": {
-      if (session.accountType !== "student") break;
-      const question = formData.get("question") as string;
-      const sortOrder = parseInt(formData.get("sort_order") as string, 10) || 0;
-      if (question?.trim()) await addArticleQuestion(studentId, question.trim(), sortOrder, request);
-      break;
-    }
-    case "delete_article_question": {
-      if (session.accountType !== "student") break;
-      const id = formData.get("id") as string;
-      if (id) await deleteArticleQuestion(id, request);
-      break;
-    }
-    case "add_guest": {
-      if (session.accountType !== "student") break;
-      const guestName = (formData.get("guest_name") as string)?.trim();
-      const guestEmail = (formData.get("guest_email") as string)?.trim();
-      const guestPassword = (formData.get("guest_password") as string)?.trim();
-      if (guestName && guestEmail && guestPassword) {
-        try {
-          await createGuest(guestName, guestEmail, guestPassword, studentId, request);
-        } catch (err) {
-          return { ok: false, error: (err as Error).message };
-        }
-      }
-      break;
-    }
-    case "delete_guest": {
-      if (session.accountType !== "student") break;
-      const guestId = formData.get("guest_id") as string;
-      if (guestId) {
-        try {
-          await deleteGuest(guestId, studentId, request);
-        } catch (err) {
-          return { ok: false, error: (err as Error).message };
-        }
-      }
-      break;
-    }
-  }
-
-  return { ok: true };
+  return handleSettingsAction(request);
 }
 
 // ─── Course Delete Dialog ────────────────────────────────────────────────────

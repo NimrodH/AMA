@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.generate-exam-from-source";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { requireSession } from "~/lib/auth.server";
-import { getSourceById } from "~/services/sources.service";
+import { getSourceById } from "~/services/sources.service.server";
 import { createServerClient } from "~/lib/supabase";
 import { saveExam } from "~/services/exams.service";
 import { fetchFileBuffer, extractText } from "~/lib/file-extract.server";

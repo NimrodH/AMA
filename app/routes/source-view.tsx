@@ -1,12 +1,12 @@
 import * as React from "react";
-import { Link, redirect } from "react-router";
+import { Link } from "react-router";
 import { ChevronLeft, BookOpen, Hash, Download } from "lucide-react";
 import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
-import { getSourceById } from "~/services/sources.service";
+import { getSourceById } from "~/services/sources.service.server";
 import { getStudentById, getCourses } from "~/services/settings.service";
-import { getSession } from "~/lib/auth.server";
+import { getSession, hasAuthToken } from "~/lib/auth.server";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./source-view.module.css";
 
@@ -37,10 +37,16 @@ export function meta({ data }: Route.MetaArgs) {
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export async function loader({ params, request }: Route.LoaderArgs) {
+  // Short-circuit on initial SSR when no auth token exists.
+  if (!hasAuthToken(request)) {
+    return { source: null as LoaderData["source"] | null, courseName: null as string | null };
+  }
+
   const session = await getSession(request);
-  if (!session) return redirect("/sources");
+  if (!session) return { source: null, courseName: null };
+
   const student = await getStudentById(session.studentId, request);
-  if (!student) return redirect("/setup");
+  if (!student) return { source: null, courseName: null };
 
   const [source, courses] = await Promise.all([
     getSourceById(params.id, student.id, request),
@@ -48,9 +54,7 @@ export async function loader({ params, request }: Route.LoaderArgs) {
   ]);
   if (!source) throw new Response("Not Found", { status: 404 });
 
-  const courseName =
-    courses.find((c) => c.course_id === source.course_id)?.course_name ?? null;
-
+  const courseName = courses.find((c) => c.course_id === source.course_id)?.course_name ?? null;
   return { source, courseName };
 }
 
@@ -60,7 +64,18 @@ clientLoader.hydrate = true;
 // ─── Page component ───────────────────────────────────────────────────────────
 
 export default function SourceView({ loaderData }: Route.ComponentProps) {
-  const { source, courseName } = loaderData as LoaderData;
+  const data = loaderData as LoaderData;
+  const source = data?.source;
+  const courseName = data?.courseName ?? null;
+
+  if (!source) {
+    return (
+      <AppLayout title="טוען...">
+        <div style={{ padding: "var(--space-6)", color: "var(--color-neutral-10)" }}>טוען...</div>
+      </AppLayout>
+    );
+  }
+
   const isPdf = source.file_url?.toLowerCase().endsWith(".pdf") ?? false;
 
   return (
