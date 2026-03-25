@@ -18,8 +18,8 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
-import { getStudentById, getActiveCourses } from "~/services/settings.service";
-import { getSession, requireSession, hasAuthToken } from "~/lib/auth.server";
+import { getActiveCourses } from "~/services/settings.service";
+import { requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -31,14 +31,11 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "כרטיסי סיכום - מערכת ניהול לימודים" }];
 }
 
-export async function loader({ request }: Route.LoaderArgs) {
-  if (!hasAuthToken(request)) return { courses: [], cards: [] };
-  const session = await getSession(request);
-  if (!session) return { courses: [], cards: [] };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], cards: [] };
-  const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
-  return { courses, cards };
+export function loader() {
+  return {
+    courses: [] as Awaited<ReturnType<typeof getActiveCourses>>,
+    cards: [] as CardRow[],
+  };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
