@@ -4,8 +4,8 @@ import type { Route } from "./+types/article-analysis";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
-import { getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
-import { requireSession } from "~/lib/auth.server";
+import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
+import { getSession, requireSession } from "~/lib/auth.server";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./article-analysis.module.css";
 
@@ -33,13 +33,16 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "ניתוח מאמר - מערכת ניהול לימודים" }];
 }
 
-export function loader() {
-  return {
-    courses: [] as Awaited<ReturnType<typeof getActiveCourses>>,
-    questions: [] as Awaited<ReturnType<typeof getArticleQuestions>>,
-    studentId: "",
-    accountType: "student" as "student" | "guest",
-  };
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+  if (!session) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { courses: [], questions: [], studentId: "", accountType: session.accountType };
+
+  const courses = await getActiveCourses(student.id, request);
+  const questions = await getArticleQuestions(student.id, request);
+
+  return { courses, questions, studentId: student.id, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

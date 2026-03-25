@@ -10,7 +10,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "~/components/ui/select/select";
-import { getActiveCourses } from "~/services/settings.service";
+import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { getSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -23,12 +24,16 @@ export function meta({}: Route.MetaArgs) {
   return [{ title: "למד בכרטיסים - מערכת ניהול לימודים" }];
 }
 
-export function loader() {
-  return {
-    courses: [] as Awaited<ReturnType<typeof getActiveCourses>>,
-    cards: [] as CardRow[],
-    accountType: "student" as "student" | "guest",
-  };
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+  if (!session) return { courses: [], cards: [], accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { courses: [], cards: [], accountType: session.accountType };
+  const [courses, cards] = await Promise.all([
+    getActiveCourses(student.id, request),
+    getCards(student.id, request),
+  ]);
+  return { courses, cards, accountType: session.accountType };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();

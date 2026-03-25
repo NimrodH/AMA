@@ -1,7 +1,7 @@
 import type { Route } from "./+types/api.generate-mc-exam";
 import { getOpenAIClient } from "~/lib/openai.server";
 import { requireSession } from "~/lib/auth.server";
-import { getSourcesByCourse } from "~/services/sources.service.server";
+import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
 import { extractTextFromUrl } from "~/lib/file-extract.server";
 

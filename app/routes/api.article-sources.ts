@@ -1,5 +1,5 @@
 import type { Route } from "./+types/api.article-sources";
-import { getSourcesByCourse } from "~/services/sources.service.server";
+import { getSourcesByCourse } from "~/services/sources.service";
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
