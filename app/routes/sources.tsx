@@ -12,7 +12,7 @@ import { Input } from "~/components/ui/input/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
 import { getStudentById } from "~/services/settings.service";
-import { getSession } from "~/lib/auth.server";
+import { getSession, hasAuthToken } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import {
@@ -32,6 +32,7 @@ export function meta({}: Route.MetaArgs) {
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (!hasAuthToken(request)) return { sources: [], courses: [], studentId: "", accountType: "student" as const };
   const session = await getSession(request);
   if (!session) return { sources: [], courses: [], studentId: "", accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);

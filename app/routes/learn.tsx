@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "~/components/ui/select/select";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
-import { getSession } from "~/lib/auth.server";
+import { getSession, hasAuthToken } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
@@ -25,6 +25,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (!hasAuthToken(request)) return { courses: [], cards: [], accountType: "student" as const };
   const session = await getSession(request);
   if (!session) return { courses: [], cards: [], accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);

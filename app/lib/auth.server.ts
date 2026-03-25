@@ -109,6 +109,19 @@ export async function requireSession(request: Request): Promise<SessionUser> {
 }
 
 /**
+ * Returns true if the request contains an auth token (cookie or header).
+ * Use this to short-circuit server loaders on the initial SSR pass (before
+ * the client has injected the token), avoiding unnecessary Supabase round-trips
+ * that cause lambda timeouts on published deployments.
+ */
+export function hasAuthToken(request: Request): boolean {
+  const authHeader = request.headers.get("Authorization") ?? "";
+  if (authHeader.startsWith("Bearer ")) return true;
+  const cookie = request.headers.get("Cookie") ?? "";
+  return cookie.includes("auth_token=");
+}
+
+/**
  * Service-role client for admin operations.
  * NOTE: We only have the anon key available (SUPABASE_API_KEY), so this client
  * bypasses RLS only for tables that allow anon access or via SQL functions.

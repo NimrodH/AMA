@@ -3,7 +3,7 @@ import type { Route } from "./+types/summary";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Button } from "~/components/ui/button/button";
-import { getSession, requireSession } from "~/lib/auth.server";
+import { getSession, requireSession, hasAuthToken } from "~/lib/auth.server";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
 import { saveSummary } from "~/services/summaries.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
@@ -29,8 +29,9 @@ export function meta({}: Route.MetaArgs) {
 // ─── Loader ───────────────────────────────────────────────────────────────────
 
 export async function loader({ request }: Route.LoaderArgs) {
-  // Use getSession (non-throwing) so SSR doesn't redirect when the cookie
-  // is absent — the clientLoader enforces auth client-side via localStorage.
+  // Short-circuit when no auth token is present (SSR initial load).
+  // The clientLoader re-runs with the actual token on the client.
+  if (!hasAuthToken(request)) return { accountType: "student" as const, courses: [] };
   const session = await getSession(request);
   if (!session) {
     return { accountType: "student" as const, courses: [] };

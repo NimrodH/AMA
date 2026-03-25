@@ -28,11 +28,48 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+/**
+ * The server loader returns an empty shell immediately — no DB calls.
+ * This prevents SSR lambda timeouts on published deployments caused by
+ * sequential Supabase auth + data fetching chains (up to 7 round-trips).
+ *
+ * The clientLoader (below) re-runs on the client with the actual auth token
+ * and populates all real data. This is the intended use of clientLoader.hydrate = true.
+ */
 export async function loader({ request }: Route.LoaderArgs) {
+  // Only try to get the session if there's an auth cookie available —
+  // avoids 4 Supabase round-trips on every SSR render for unauthenticated visits.
+  const cookie = request.headers.get("Cookie") ?? "";
+  const authHeader = request.headers.get("Authorization") ?? "";
+  const hasToken = cookie.includes("auth_token=") || authHeader.startsWith("Bearer ");
+
+  if (!hasToken) {
+    // No token present during SSR — return empty shell; clientLoader will hydrate
+    return {
+      studentId: null,
+      studentName: null,
+      guestName: null,
+      accountType: "student" as const,
+      activeReminders: [],
+      courses: [],
+      courseStats: [],
+    };
+  }
+
   const session = await getSession(request);
-  if (!session) return { studentId: null, studentName: null, guestName: null, accountType: "student" as const, activeReminders: [], courses: [], courseStats: [] };
+  if (!session) {
+    return {
+      studentId: null,
+      studentName: null,
+      guestName: null,
+      accountType: "student" as const,
+      activeReminders: [],
+      courses: [],
+      courseStats: [],
+    };
+  }
+
   const isGuestSession = session.accountType === "guest";
-  // For guests, studentId points to the owner student — fetch their name
   const student = await getStudentById(session.studentId, request);
 
   const [allReminders, courses, courseStats] = await Promise.all([
@@ -41,14 +78,11 @@ export async function loader({ request }: Route.LoaderArgs) {
     student ? getAllCourseStats(student.id, request) : Promise.resolve([]),
   ]);
 
-  // Return all active reminders — client-side manages which are pending/visible
   const activeReminders = allReminders.filter((r) => r.is_active);
 
   return {
     studentId: student?.id ?? null,
-    // Owner student's name (for guests: the student they belong to)
     studentName: student?.name ?? null,
-    // Guest's own display name — only set for guest accounts
     guestName: isGuestSession ? session.studentName : null,
     accountType: session.accountType as "student" | "guest",
     activeReminders,

@@ -5,7 +5,7 @@ import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
 import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
-import { getSession, requireSession } from "~/lib/auth.server";
+import { getSession, requireSession, hasAuthToken } from "~/lib/auth.server";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./article-analysis.module.css";
 
@@ -34,6 +34,7 @@ export function meta({}: Route.MetaArgs) {
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
+  if (!hasAuthToken(request)) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
   const session = await getSession(request);
   if (!session) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);
