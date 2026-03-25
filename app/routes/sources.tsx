@@ -11,13 +11,19 @@ import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Tabs, TabsList, TabsTrigger } from "~/components/ui/tabs/tabs";
-import type { Database } from "~/lib/supabase";
+import { getStudentById } from "~/services/settings.service";
+import { getSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
-import { handleSourceAction } from "~/routes/sources.action.server";
+import {
+  getSources,
+  getCoursesForStudent,
+  addSource,
+  addSourceFromUrl,
+  deleteSource,
+} from "~/services/sources.service";
+import type { SourceRow } from "~/services/sources.service";
 import styles from "./sources.module.css";
-
-type SourceRow = Database["public"]["Tables"]["sources"]["Row"];
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "מקורות לימוד - מערכת ניהול לימודים" }];
@@ -25,13 +31,15 @@ export function meta({}: Route.MetaArgs) {
 
 // ─── Loader ──────────────────────────────────────────────────────────────────
 
-export function loader() {
-  return {
-    sources: [] as SourceRow[],
-    courses: [] as { id: string; course_id: string; course_name: string }[],
-    studentId: "",
-    accountType: "student" as "student" | "guest",
-  };
+export async function loader({ request }: Route.LoaderArgs) {
+  const session = await getSession(request);
+  if (!session) return { sources: [], courses: [], studentId: "", accountType: "student" as const };
+  const student = await getStudentById(session.studentId, request);
+  if (!student) return { sources: [], courses: [], studentId: "", accountType: session.accountType as "student" | "guest" };
+
+  const [sources, courses] = await Promise.all([getSources(student.id, request), getCoursesForStudent(student.id, request)]);
+
+  return { sources, courses, studentId: student.id, accountType: session.accountType as "student" | "guest" };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -39,23 +47,77 @@ clientLoader.hydrate = true;
 
 export const clientAction = makeClientAction<typeof action>();
 
-// ─── Action (delegates to server-only module) ─────────────────────────────────
+// ─── Action ──────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
   const form = await request.formData();
-  return handleSourceAction(form, request);
+  const intent = form.get("intent") as string;
+
+  // ── Delete action ────────────────────────────────────────────────────────
+  if (intent === "delete") {
+    const sourceId = form.get("sourceId") as string;
+    const studentId = form.get("studentId") as string;
+    if (!sourceId || !studentId) return { ok: false, error: "חסרים פרמטרים" };
+    return deleteSource(sourceId, studentId, request);
+  }
+
+  // ── Upload action (default) ───────────────────────────────────────────────
+  const studentId = form.get("studentId") as string;
+  const courseId = form.get("courseId") as string;
+  const courseName = form.get("courseName") as string;
+  const sourceType = form.get("sourceType") as "Lecture" | "Past exam" | "Article";
+  const topic = form.get("topic") as string;
+  const lectureNumberRaw = form.get("lectureNumber") as string;
+  const lectureNumber = lectureNumberRaw ? parseInt(lectureNumberRaw, 10) : null;
+
+  // ── URL branch (Google Docs) ──────────────────────────────────────────────
+  const googleDocsUrl = form.get("googleDocsUrl") as string | null;
+  if (googleDocsUrl) {
+    if (!studentId || !courseId || !sourceType || !topic) {
+      return { ok: false, error: "יש למלא את כל השדות" };
+    }
+    return addSourceFromUrl({
+      studentId,
+      courseId,
+      courseName,
+      sourceType,
+      topic,
+      lectureNumber,
+      googleDocsUrl,
+      request,
+    });
+  }
+
+  // ── File branch ───────────────────────────────────────────────────────────
+  const file = form.get("file") as File | null;
+
+  if (!studentId || !courseId || !sourceType || !topic || !file || file.size === 0) {
+    return { ok: false, error: "יש למלא את כל השדות ולהעלות קובץ" };
+  }
+
+  const result = await addSource({
+    studentId,
+    courseId,
+    courseName,
+    sourceType,
+    topic,
+    lectureNumber,
+    file,
+    request,
+  });
+
+  return result;
 }
 
 // ─── Source type options ──────────────────────────────────────────────────────
 
-type SourceType = "Lecture" | "Past exam" | "Article";
-const SOURCE_TYPES: { value: SourceType; label: string }[] = [
+const SOURCE_TYPES: { value: SourceRow["source_type"]; label: string }[] = [
   { value: "Lecture", label: "הרצאה" },
   { value: "Article", label: "מאמר" },
   { value: "Past exam", label: "מבחן עבר" },
 ];
 
-type FilterType = "all" | SourceType;
+type FilterType = "all" | SourceRow["source_type"];
 
 // ─── Upload dialog ────────────────────────────────────────────────────────────
 
@@ -112,6 +174,7 @@ function UploadDialog({ studentId, courses, onClose }: UploadDialogProps) {
       if (cameraFile) formData.set("file", cameraFile);
       fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
     } else {
+      // URL tab: send googleDocsUrl, no file attachment needed
       fetcher.submit(formData, { method: "post", encType: "multipart/form-data" });
     }
   };

@@ -1,6 +1,6 @@
 import type { Route } from "./+types/api.refresh-source";
 import { requireSession } from "~/lib/auth.server";
-import { refreshSourceFromGoogleDocs } from "~/services/sources.service.server";
+import { refreshSourceFromGoogleDocs } from "~/services/sources.service";
 import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 
