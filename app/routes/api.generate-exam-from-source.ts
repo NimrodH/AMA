@@ -90,12 +90,11 @@ async function extractText(buffer: Buffer, url: string): Promise<string> {
   }
 
   if (lower.endsWith(".pdf")) {
-    // pdf-parse ships as a CJS module; when bundled it may land on .default
-    // or on the module object itself — handle both cases at runtime.
-    const pdfParseModule = await import("pdf-parse") as unknown as { default?: (buf: Buffer) => Promise<{ text: string }> } & ((buf: Buffer) => Promise<{ text: string }>);
-    const pdfParse = pdfParseModule.default ?? pdfParseModule;
-    const data = await pdfParse(buffer);
-    return data.text;
+    // pdf-parse v2 uses a class-based API: new PDFParse({ data: buffer })
+    const { PDFParse } = await import("pdf-parse") as { PDFParse: new (opts: { data: Buffer }) => { getText(): Promise<{ text: string }> } };
+    const parser = new PDFParse({ data: buffer });
+    const result = await parser.getText();
+    return result.text;
   }
 
   return buffer.toString("utf-8");
