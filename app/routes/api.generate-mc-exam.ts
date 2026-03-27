@@ -23,7 +23,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 חשוב מאוד: השתמש בכלי file_search כדי לאחזר את התוכן המלא של הרצאות הקורס לפני שאתה כותב שאלות. בסס כל שאלה על חומר ספציפי שמצאת בהרצאות.
 
-החזר JSON בלבד, ללא טקסט נוסף, עם המבנה הבא:
+החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.
 {
   "title": "שם הקורס — מבחן אמריקאי",
   "instructions": "בחר את התשובה הנכונה לכל שאלה.",
@@ -42,14 +42,12 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractJson(text: string): string {
-  // 1. Strip markdown code fences
-  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlock) return codeBlock[1].trim();
-  // 2. Find the outermost { ... } to strip any prose prefix/suffix
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1).trim();
-  return text;
+  if (start !== -1 && end !== -1 && end > start) {
+    return text.slice(start, end + 1).trim();
+  }
+  return text.trim();
 }
 
 /** Pull the final text content from a Responses API response object. */
@@ -129,7 +127,6 @@ ${lectureList}
       // Use file_search — identical pattern to generate-exam-from-course
       const response = await client.responses.create({
         model: "gpt-4o",
-        response_format: { type: "json_object" },
         tools: [
           {
             type: "file_search",
@@ -163,7 +160,6 @@ ${lectureList}
             content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות בלבד.`,
           },
         ],
-        response_format: { type: "json_object" },
       });
       rawText = response.choices[0]?.message?.content?.trim() ?? "";
     }

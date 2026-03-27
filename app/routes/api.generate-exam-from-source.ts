@@ -55,18 +55,16 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
   ]
 }
 
-החזר JSON בלבד, ללא טקסט נוסף.`;
+החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
 /** Extract a JSON object from raw text (handles markdown code fences and surrounding prose). */
 function extractJson(text: string): string {
-  // 1. Strip markdown code fences
-  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlock) return codeBlock[1].trim();
-  // 2. Find the outermost { ... } to strip any prose prefix/suffix
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1).trim();
-  return text;
+  if (start !== -1 && end !== -1 && end > start) {
+    return text.slice(start, end + 1).trim();
+  }
+  return text.trim();
 }
 
 /** Download a file from a public URL and return it as a Buffer. */
@@ -182,7 +180,6 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     const response = await client.chat.completions.create({
       model: "gpt-4o",
-      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {

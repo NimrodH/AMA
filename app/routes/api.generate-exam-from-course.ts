@@ -56,19 +56,17 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
   ]
 }
 
-החזר JSON בלבד, ללא טקסט נוסף.`;
+החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractJson(text: string): string {
-  // 1. Strip markdown code fences
-  const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-  if (codeBlock) return codeBlock[1].trim();
-  // 2. Find the outermost { ... } to strip any prose prefix/suffix
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1).trim();
-  return text;
+  if (start !== -1 && end !== -1 && end > start) {
+    return text.slice(start, end + 1).trim();
+  }
+  return text.trim();
 }
 
 /** Pull the final text content from a Responses API response object. */
@@ -163,7 +161,6 @@ ${lectureList}
       // Filter by student_id so only this student's files are searched
       const response = await client.responses.create({
         model: "gpt-4o",
-        response_format: { type: "json_object" },
         tools: [
           {
             type: "file_search",
@@ -191,7 +188,6 @@ ${lectureList}
       console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
-        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {

@@ -31,7 +31,7 @@ const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשו
 - שאלות פתוחות: ניקוד חלקי בהתאם לאיכות התשובה
 - אם לא ענה על שאלה — ציין זאת ותן 0 נקודות
 
-החזר JSON בלבד, ללא טקסט נוסף.`;
+החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
 interface QuestionForGrading {
   id: number;
@@ -92,7 +92,6 @@ ${examText}
 
   const response = await client.responses.create({
     model: "gpt-4o",
-    response_format: { type: "json_object" },
     tools: [
       {
         type: "file_search",
@@ -129,15 +128,12 @@ ${examText}
       if (rawText) break;
     }
   }
-  // Extract JSON — strip code fences and any prose prefix/suffix
-  const codeBlock = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  // Extract JSON — extract from outermost curly braces
   const start = rawText.indexOf("{");
   const end = rawText.lastIndexOf("}");
-  const jsonStr = codeBlock
-    ? codeBlock[1].trim()
-    : start !== -1 && end > start
-      ? rawText.slice(start, end + 1).trim()
-      : rawText;
+  const jsonStr = start !== -1 && end !== -1 && end > start
+    ? rawText.slice(start, end + 1).trim()
+    : rawText.trim();
 
   let gradingResult: unknown;
   try {
