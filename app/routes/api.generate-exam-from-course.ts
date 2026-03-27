@@ -163,6 +163,7 @@ ${lectureList}
       // Filter by student_id so only this student's files are searched
       const response = await client.responses.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         tools: [
           {
             type: "file_search",
@@ -190,6 +191,7 @@ ${lectureList}
       console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {

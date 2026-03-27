@@ -92,6 +92,7 @@ ${examText}
 
   const response = await client.responses.create({
     model: "gpt-4o",
+    response_format: { type: "json_object" },
     tools: [
       {
         type: "file_search",

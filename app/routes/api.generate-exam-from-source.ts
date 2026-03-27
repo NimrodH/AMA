@@ -182,6 +182,7 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     const response = await client.chat.completions.create({
       model: "gpt-4o",
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {

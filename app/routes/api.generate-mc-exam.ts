@@ -129,6 +129,7 @@ ${lectureList}
       // Use file_search — identical pattern to generate-exam-from-course
       const response = await client.responses.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         tools: [
           {
             type: "file_search",
