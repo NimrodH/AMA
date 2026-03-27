@@ -113,9 +113,30 @@ ${examText}
     ],
   });
 
-  const rawText = response.output_text?.trim() ?? "";
-  const jsonMatch = rawText.match(/```(?:json)?\s*([\s\S]*?)```/) ?? null;
-  const jsonStr = jsonMatch ? jsonMatch[1].trim() : rawText;
+  // Extract raw text: prefer output_text, fall back to walking the output array
+  let rawText = response.output_text?.trim() ?? "";
+  if (!rawText && Array.isArray(response.output)) {
+    for (const item of response.output as Array<{ type: string; content?: Array<{ type: string; text?: string }> }>) {
+      if (item.type === "message" && Array.isArray(item.content)) {
+        for (const part of item.content) {
+          if (part.type === "output_text" && part.text?.trim()) {
+            rawText = part.text.trim();
+            break;
+          }
+        }
+      }
+      if (rawText) break;
+    }
+  }
+  // Extract JSON — strip code fences and any prose prefix/suffix
+  const codeBlock = rawText.match(/```(?:json)?\s*([\s\S]*?)```/);
+  const start = rawText.indexOf("{");
+  const end = rawText.lastIndexOf("}");
+  const jsonStr = codeBlock
+    ? codeBlock[1].trim()
+    : start !== -1 && end > start
+      ? rawText.slice(start, end + 1).trim()
+      : rawText;
 
   let gradingResult: unknown;
   try {

@@ -57,12 +57,15 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 החזר JSON בלבד, ללא טקסט נוסף.`;
 
-/** Extract a JSON object from raw text (handles markdown code fences). */
+/** Extract a JSON object from raw text (handles markdown code fences and surrounding prose). */
 function extractJson(text: string): string {
+  // 1. Strip markdown code fences
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return codeBlock[1].trim();
-  const bareObject = text.match(/\{[\s\S]*\}/);
-  if (bareObject) return bareObject[0].trim();
+  // 2. Find the outermost { ... } to strip any prose prefix/suffix
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1).trim();
   return text;
 }
 

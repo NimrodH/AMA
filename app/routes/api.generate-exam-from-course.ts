@@ -61,11 +61,31 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function extractJson(text: string): string {
+  // 1. Strip markdown code fences
   const codeBlock = text.match(/```(?:json)?\s*([\s\S]*?)```/);
   if (codeBlock) return codeBlock[1].trim();
-  const bareObject = text.match(/\{[\s\S]*\}/);
-  if (bareObject) return bareObject[0].trim();
+  // 2. Find the outermost { ... } to strip any prose prefix/suffix
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start !== -1 && end !== -1 && end > start) return text.slice(start, end + 1).trim();
   return text;
+}
+
+/** Pull the final text content from a Responses API response object. */
+function extractOutputText(response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> }): string {
+  // Primary: output_text convenience accessor
+  if (response.output_text?.trim()) return response.output_text.trim();
+  // Fallback: walk the output array for message items
+  if (Array.isArray(response.output)) {
+    for (const item of response.output) {
+      if (item.type === "message" && Array.isArray(item.content)) {
+        for (const part of item.content) {
+          if (part.type === "output_text" && part.text?.trim()) return part.text.trim();
+        }
+      }
+    }
+  }
+  return "";
 }
 
 // ─── Action ───────────────────────────────────────────────────────────────────
@@ -163,7 +183,7 @@ ${lectureList}
         ],
       });
 
-      rawText = response.output_text?.trim() ?? "";
+      rawText = extractOutputText(response);
     } else {
       // No vector store files — fall back to chat completion without RAG
       // (should be rare; sources were uploaded but not indexed yet)
