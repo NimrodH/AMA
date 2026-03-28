@@ -17,7 +17,7 @@
  */
 
 import { redirect } from "react-router";
-import { getToken } from "~/lib/auth.client";
+import { getToken, restoreSession } from "~/lib/auth.client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any;
@@ -75,7 +75,12 @@ export function makeClientLoader<TLoader extends AnyFn>() {
   }: {
     serverLoader: () => Promise<ReturnData<TLoader>>;
   }): Promise<ReturnData<TLoader>> => {
-    const token = getToken();
+    let token = getToken();
+
+    // If no access token in localStorage, try to restore from refresh token
+    if (!token) {
+      token = await restoreSession();
+    }
 
     if (!token) {
       throw redirect("/login");
@@ -95,7 +100,12 @@ export function makeClientAction<TAction extends AnyFn>() {
   }: {
     serverAction: () => Promise<ReturnData<TAction>>;
   }): Promise<ReturnData<TAction>> => {
-    const token = getToken();
+    let token = getToken();
+
+    // If no access token, try to restore from refresh token
+    if (!token) {
+      token = await restoreSession();
+    }
 
     if (!token) {
       throw redirect("/login");

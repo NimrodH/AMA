@@ -17,6 +17,7 @@ import "./styles/theme.css";
 import "./styles/error-boundary.css";
 import { useColorScheme } from "@dazl/color-scheme/react";
 import favicon from "/favicon.svg";
+import { syncTokenToCookie, restoreSession, getToken } from "~/lib/auth.client";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -62,6 +63,22 @@ export function loader() {
 }
 
 export default function App() {
+  React.useEffect(() => {
+    // Sync localStorage token → cookie on app boot
+    syncTokenToCookie();
+
+    // Proactively refresh the session every 50 minutes (JWT typically expires at 60 min)
+    const REFRESH_INTERVAL_MS = 50 * 60 * 1000;
+    const intervalId = setInterval(() => {
+      // Only refresh if user currently has a token (is logged in)
+      if (getToken()) {
+        restoreSession();
+      }
+    }, REFRESH_INTERVAL_MS);
+
+    return () => clearInterval(intervalId);
+  }, []);
+
   return <Outlet />;
 }
 

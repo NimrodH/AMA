@@ -5,7 +5,7 @@ import type { Route } from "./+types/login";
 import { Button } from "~/components/ui/button/button";
 import { Input } from "~/components/ui/input/input";
 import { Label } from "~/components/ui/label/label";
-import { saveToken } from "~/lib/auth.client";
+import { saveToken, saveRefreshToken } from "~/lib/auth.client";
 import styles from "./login.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -47,8 +47,9 @@ export default function Login() {
         return;
       }
 
-      // Save token to localStorage + cookie so server loaders can authenticate
+      // Save tokens to localStorage + cookie so server loaders can authenticate
       saveToken(data.session.access_token);
+      saveRefreshToken(data.session.refresh_token);
 
       // Use client-side navigation so the clientLoader on "/" picks up the token
       // from localStorage. Avoids full-page reload which breaks in iframe previews.
