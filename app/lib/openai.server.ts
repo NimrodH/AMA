@@ -118,22 +118,32 @@ interface DeleteFromVectorStoreParams {
 }
 
 /**
- * Deletes a file from the OpenAI vector store and from OpenAI file storage.
+ * Deletes a file from the OpenAI vector store.
  * Silently succeeds if the file is not found.
+ *
+ * Note: `vectorStoreFileId` is the `vs_...` ID returned when attaching a file
+ * to a vector store. It is NOT the same as the underlying `file-...` ID, so we
+ * only call `vectorStores.files.delete` here and let OpenAI handle cleanup of
+ * the underlying file object.
  */
 export async function deleteFromVectorStore({
   db,
   vectorStoreFileId,
 }: DeleteFromVectorStoreParams): Promise<void> {
+  if (!vectorStoreFileId) return;
+
   const client = getOpenAIClient();
   const vectorStoreId = await getOrCreateVectorStore(db);
 
+  if (!vectorStoreId) {
+    console.warn("deleteFromVectorStore: could not resolve vector store ID, skipping deletion.");
+    return;
+  }
+
   try {
-    // Remove the file from the vector store
+    // Remove the file from the vector store (uses the vs_... file ID)
     // @ts-expect-error: TypeScript thinks the second argument should be FileDeleteParams, but runtime expects a string
     await client.vectorStores.files.delete(vectorStoreId, vectorStoreFileId);
-    // Also delete the underlying file object from OpenAI storage
-    await client.files.delete(vectorStoreFileId);
   } catch (err: unknown) {
     // Ignore 404 — file may have been manually deleted already
     if ((err as { status?: number })?.status !== 404) {
