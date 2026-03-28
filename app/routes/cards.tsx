@@ -3,6 +3,7 @@ import { Sparkles, Save, Trash2, Hash, BookOpen, ArrowLeft, FileText } from "luc
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
+import { authFetch } from "~/lib/auth-fetch";
 import { Button } from "~/components/ui/button/button";
 import { Label } from "~/components/ui/label/label";
 import { Input } from "~/components/ui/input/input";
@@ -185,7 +186,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     if (!selectedCourse) return;
     setIsAutoFilling(true);
     try {
-      const res = await fetch(`/api/next-card-number?courseId=${encodeURIComponent(selectedCourse)}`);
+      const res = await authFetch(`/api/next-card-number?courseId=${encodeURIComponent(selectedCourse)}`);
       if (res.ok) {
         const { nextNumber } = (await res.json()) as { nextNumber: number };
         setCardNumber(String(nextNumber));
@@ -274,11 +275,16 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
     setExportSuccess(false);
     setExportError(null);
     try {
-      const res = await fetch("/api/cards-to-lecture", {
+      const res = await authFetch("/api/cards-to-lecture", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: selectedCourse }),
       });
+      const contentType = res.headers.get("content-type") ?? "";
+      if (!contentType.includes("application/json")) {
+        setExportError("שגיאה בהתחברות — נסה לרענן את הדף");
+        return;
+      }
       const data = (await res.json()) as { ok: boolean; error?: string };
       if (data.ok) {
         setExportSuccess(true);
@@ -310,7 +316,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
       const plainContent = fromEditorState(cardContent);
       const encodedContent = cardTitle.trim() ? `${cardTitle.trim()}\n---\n${plainContent}` : plainContent;
 
-      const res = await fetch("/api/card-feedback", {
+      const res = await authFetch("/api/card-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
