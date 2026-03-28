@@ -2,8 +2,11 @@ import type { Route } from "./+types/api.cards-to-lecture";
 import { requireSession } from "~/lib/auth.server";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
 import { getCards } from "~/services/cards.service";
-import { addSourceFromText } from "~/services/sources.service";
+import { addSourceFromText, getSourcesByCourse, deleteSource } from "~/services/sources.service";
 import { fromEditorState } from "~/lib/lexical-utils";
+
+/** The topic prefix used for cards-summary sources. */
+const CARDS_SUMMARY_TOPIC_PREFIX = "סיכום כרטיסים - ";
 
 export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
@@ -25,6 +28,16 @@ export async function action({ request }: Route.ActionArgs) {
   const course = courses.find((c) => c.course_id === courseId);
   if (!course) {
     return Response.json({ ok: false, error: "קורס לא נמצא" }, { status: 404 });
+  }
+
+  // ── Delete previous cards-summary source for this course (override) ────
+  const existingSources = await getSourcesByCourse(student.id, courseId, undefined, request);
+  const previousSummary = existingSources.find(
+    (s) => s.topic === `${CARDS_SUMMARY_TOPIC_PREFIX}${course.course_name}`
+  );
+
+  if (previousSummary) {
+    await deleteSource(previousSummary.id, student.id, request);
   }
 
   // Get all cards for this course
