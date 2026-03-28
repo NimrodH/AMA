@@ -30,5 +30,6 @@ export default [
   route("api/transcribe-image", "routes/api.transcribe-image.ts"),
   route("api/article-sources", "routes/api.article-sources.ts"),
   route("api/article-answers", "routes/api.article-answers.ts"),
+  route("api/cards-to-lecture", "routes/api.cards-to-lecture.ts"),
   ...devRoutes,
 ] satisfies RouteConfig;

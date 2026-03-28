@@ -1,0 +1,92 @@
+import type { Route } from "./+types/api.cards-to-lecture";
+import { requireSession } from "~/lib/auth.server";
+import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { getCards } from "~/services/cards.service";
+import { addSourceFromText } from "~/services/sources.service";
+import { fromEditorState } from "~/lib/lexical-utils";
+
+export async function action({ request }: Route.ActionArgs) {
+  const session = await requireSession(request);
+  const body = await request.json() as { courseId: string };
+  const { courseId } = body;
+
+  if (!courseId) {
+    return Response.json({ ok: false, error: "חסר מזהה קורס" }, { status: 400 });
+  }
+
+  // Resolve student
+  const student = await getStudentById(session.studentId, request);
+  if (!student) {
+    return Response.json({ ok: false, error: "תלמיד לא נמצא" }, { status: 404 });
+  }
+
+  // Get course name for metadata
+  const courses = await getActiveCourses(student.id, request);
+  const course = courses.find((c) => c.course_id === courseId);
+  if (!course) {
+    return Response.json({ ok: false, error: "קורס לא נמצא" }, { status: 404 });
+  }
+
+  // Get all cards for this course
+  const allCards = await getCards(student.id, request);
+  const courseCards = allCards.filter((c) => c.course_id === courseId);
+
+  if (courseCards.length === 0) {
+    return Response.json({ ok: false, error: "אין כרטיסים לקורס זה" }, { status: 400 });
+  }
+
+  // Sort cards by card_number (nulls last), then by created_at
+  const sorted = [...courseCards].sort((a, b) => {
+    if (a.card_number != null && b.card_number != null) {
+      return a.card_number - b.card_number;
+    }
+    if (a.card_number != null) return -1;
+    if (b.card_number != null) return 1;
+    return new Date(a.created_at).getTime() - new Date(b.created_at).getTime();
+  });
+
+  // Build the combined text document
+  const sections = sorted.map((card, index) => {
+    const plainContent = fromEditorState(card.content);
+    const header = card.card_number
+      ? `כרטיס ${card.card_number}`
+      : `כרטיס ${index + 1}`;
+    const lecturePart = card.lecture_number ? ` | הרצאה ${card.lecture_number}` : "";
+    const topicPart = card.topic ? ` | ${card.topic}` : "";
+
+    return [
+      `=== ${header}${lecturePart}${topicPart} ===`,
+      "",
+      `שאלה: ${card.title}`,
+      "",
+      plainContent,
+      "",
+    ].join("\n");
+  });
+
+  const documentTitle = `סיכום כרטיסים - ${course.course_name}`;
+  const fullText = [
+    documentTitle,
+    `נוצר בתאריך: ${new Date().toLocaleDateString("he-IL")}`,
+    `מספר כרטיסים: ${sorted.length}`,
+    "",
+    "─".repeat(40),
+    "",
+    ...sections,
+  ].join("\n");
+
+  // Create the source as a Lecture type
+  const result = await addSourceFromText({
+    studentId: student.id,
+    courseId,
+    courseName: course.course_name,
+    sourceType: "Lecture",
+    topic: `סיכום כרטיסים - ${course.course_name}`,
+    lectureNumber: null,
+    textContent: fullText,
+    fileName: `cards-summary-${courseId}.txt`,
+    request,
+  });
+
+  return Response.json(result);
+}

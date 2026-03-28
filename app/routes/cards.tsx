@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Sparkles, Save, Trash2, Hash, BookOpen, ArrowLeft } from "lucide-react";
+import { Sparkles, Save, Trash2, Hash, BookOpen, ArrowLeft, FileText } from "lucide-react";
 import { useFetcher } from "react-router";
 import type { Route } from "./+types/cards";
 import { AppLayout } from "~/components/layout/app-layout";
@@ -264,6 +264,36 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
 
   const filteredCards = selectedCourse ? cards.filter((c) => c.course_id === selectedCourse) : cards;
 
+  const [isExporting, setIsExporting] = React.useState(false);
+  const [exportSuccess, setExportSuccess] = React.useState(false);
+  const [exportError, setExportError] = React.useState<string | null>(null);
+
+  const handleCardsToLecture = async () => {
+    if (!selectedCourse || filteredCards.length === 0) return;
+    setIsExporting(true);
+    setExportSuccess(false);
+    setExportError(null);
+    try {
+      const res = await fetch("/api/cards-to-lecture", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ courseId: selectedCourse }),
+      });
+      const data = (await res.json()) as { ok: boolean; error?: string };
+      if (data.ok) {
+        setExportSuccess(true);
+        setTimeout(() => setExportSuccess(false), 4000);
+      } else {
+        setExportError(data.error ?? "שגיאה ביצוא הכרטיסים");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      setExportError(`שגיאה: ${message}`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const selectedCourseName = courses.find((c) => c.course_id === selectedCourse)?.course_name ?? "";
 
   const isFormValid = selectedCourse && cardTitle.trim() && cardTopic.trim() && fromEditorState(cardContent).trim();
@@ -519,10 +549,30 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
         </div>
 
         <div>
-          <h2 className={styles.sectionTitle}>
-            הכרטיסים שלי
-            {selectedCourseName && <span className={styles.sectionCourse}>{selectedCourseName}</span>}
-          </h2>
+          <div className={styles.sectionHeader}>
+            <h2 className={styles.sectionTitle}>
+              הכרטיסים שלי
+              {selectedCourseName && <span className={styles.sectionCourse}>{selectedCourseName}</span>}
+            </h2>
+            {filteredCards.length > 0 && (
+              <Button
+                type="button"
+                variant="outline"
+                className={styles.exportBtn}
+                onClick={handleCardsToLecture}
+                disabled={isExporting}
+              >
+                <FileText style={{ marginLeft: "var(--space-2)" }} />
+                {isExporting ? "מייצא..." : "כרטיסים להרצאה"}
+              </Button>
+            )}
+          </div>
+          {exportSuccess && (
+            <div className={styles.successMessage}>הכרטיסים יוצאו בהצלחה כהרצאה למקורות!</div>
+          )}
+          {exportError && (
+            <div className={styles.errorMessage}>{exportError}</div>
+          )}
           {filteredCards.length === 0 ? (
             <p className={styles.emptyState}>
               {selectedCourse

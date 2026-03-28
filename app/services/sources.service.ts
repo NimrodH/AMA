@@ -339,6 +339,116 @@ export async function addSourceFromUrl({
 
 export type { CourseRow };
 
+interface AddSourceFromTextParams {
+  studentId: string;
+  courseId: string;
+  courseName: string;
+  sourceType: "Lecture" | "Card" | "Past exam" | "Article";
+  topic: string;
+  lectureNumber: number | null;
+  textContent: string;
+  fileName: string;
+}
+
+/**
+ * Creates a source from raw text content.
+ * Converts the text into a .txt buffer and runs the same
+ * Storage → OpenAI Vector Store → DB pipeline as addSource().
+ */
+export async function addSourceFromText({
+  studentId,
+  courseId,
+  courseName,
+  sourceType,
+  topic,
+  lectureNumber,
+  textContent,
+  fileName,
+  request,
+}: AddSourceFromTextParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
+  const db = createServerClient(request);
+
+  // Convert text to a buffer
+  const fileBuffer = Buffer.from(textContent, "utf-8");
+  const mimeType = "text/plain";
+
+  // Build a safe storage path
+  const timestamp = Date.now();
+  const safeName = fileName
+    .replace(/[^a-zA-Z0-9._-]/g, "_")
+    .replace(/_+/g, "_")
+    .replace(/^_|_$/g, "") || "cards-summary.txt";
+  const storagePath = `${studentId}/${courseId}/${timestamp}_${safeName}`;
+
+  // ── 1. Upload to Supabase Storage ───────────────────────────────────────
+  const { error: uploadError } = await db.storage
+    .from(BUCKET_NAME)
+    .upload(storagePath, fileBuffer, {
+      contentType: mimeType,
+      upsert: false,
+    });
+
+  if (uploadError) {
+    console.error("Storage upload error:", uploadError);
+    return { ok: false, error: `שגיאה בהעלאת הקובץ: ${uploadError.message}` };
+  }
+
+  // ── 2. Get the public URL ──────────────────────────────────────────────
+  const { data: publicUrlData } = db.storage
+    .from(BUCKET_NAME)
+    .getPublicUrl(storagePath);
+
+  const fileUrl = publicUrlData.publicUrl;
+
+  // ── 3. Upload to OpenAI vector store ───────────────────────────────────
+  const metadata: Record<string, string> = {
+    course_id: courseId,
+    course_name: courseName,
+    source_type: sourceType,
+    topic,
+    student_id: studentId,
+    file_name: safeName,
+  };
+
+  if (lectureNumber !== null) {
+    metadata.lecture_number = String(lectureNumber);
+  }
+
+  let vectorStoreFileId: string | undefined;
+  try {
+    vectorStoreFileId = await uploadToVectorStore({
+      db,
+      fileBuffer,
+      fileName: safeName,
+      metadata,
+    });
+  } catch (err) {
+    console.error("OpenAI vector store upload error:", err);
+  }
+
+  // ── 4. Insert source record into the database ─────────────────────────
+  const { error: insertError } = await db.from("sources").insert({
+    student_id: studentId,
+    course_id: courseId,
+    source_type: sourceType,
+    topic,
+    lecture_number: lectureNumber ?? undefined,
+    upload_date: new Date().toISOString().split("T")[0],
+    language: "he",
+    file_url: fileUrl,
+    vector_store_file_id: vectorStoreFileId,
+    content: textContent,
+    metadata,
+  });
+
+  if (insertError) {
+    console.error("DB insert error:", insertError);
+    return { ok: false, error: `שגיאה בשמירת המקור: ${insertError.message}` };
+  }
+
+  return { ok: true };
+}
+
 interface RefreshSourceFromGoogleDocsParams {
   sourceId: string;
   studentId: string;

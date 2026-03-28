@@ -38,13 +38,27 @@
   white-space: nowrap;
 }
 
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-4);
+}
+
 .sectionTitle {
   font: var(--font-heading);
   color: var(--color-neutral-12);
-  margin: 0 0 var(--space-4) 0;
+  margin: 0;
   display: flex;
   align-items: center;
   gap: var(--space-3);
+}
+
+.exportBtn {
+  font-size: 0.85rem;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .sectionCourse {
