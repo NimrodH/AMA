@@ -141,9 +141,9 @@ export async function deleteFromVectorStore({
   }
 
   try {
-    // Remove the file from the vector store (uses the vs_... file ID)
-    // @ts-expect-error: TypeScript thinks the second argument should be FileDeleteParams, but runtime expects a string
-    await client.vectorStores.files.delete(vectorStoreId, vectorStoreFileId);
+    // Remove the file from the vector store.
+    // SDK signature: delete(fileId, { vector_store_id })
+    await client.vectorStores.files.delete(vectorStoreFileId, { vector_store_id: vectorStoreId });
   } catch (err: unknown) {
     // Ignore 404 — file may have been manually deleted already
     if ((err as { status?: number })?.status !== 404) {
