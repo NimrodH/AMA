@@ -142,6 +142,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [answers, setAnswers] = React.useState<Record<number, string>>({});
   const [results, setResults] = React.useState<GradingResult | null>(null);
   const [isGenerating, setIsGenerating] = React.useState(false);
+  const [generatingType, setGeneratingType] = React.useState<"ai" | "mc" | "past" | null>(null);
   const [isGrading, setIsGrading] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [gradeError, setGradeError] = React.useState<string | null>(null);
@@ -166,6 +167,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
 
   const generateFromSource = async (sourceId: string) => {
     setIsGenerating(true);
+    setGeneratingType("past");
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -191,11 +193,13 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      setGeneratingType(null);
     }
   };
 
   const handleGenerateExam = async () => {
     setIsGenerating(true);
+    setGeneratingType("ai");
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -222,11 +226,13 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      setGeneratingType(null);
     }
   };
 
   const handleGenerateMcExam = async () => {
     setIsGenerating(true);
+    setGeneratingType("mc");
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -254,6 +260,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      setGeneratingType(null);
     }
   };
 
@@ -509,16 +516,16 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
             <h2 className={styles.loadingTitle}>
-              {examType === "mc"
+              {generatingType === "mc"
                 ? `בונה מבחן אמריקאי עם ${mcQuestionCount} שאלות...`
-                : sourceIdParam
+                : generatingType === "past"
                   ? "טוען מבחן מהקובץ..."
-                  : "מייצר מבחן אימון..."}
+                  : "מייצר מבחן סיכום..."}
             </h2>
             <p className={styles.loadingSubtitle}>
-              {examType === "mc"
+              {generatingType === "mc"
                 ? "קורא את כל חומרי הקורס ובונה שאלות אמריקאיות מכל ההרצאות"
-                : sourceIdParam
+                : generatingType === "past"
                   ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
                   : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
             </p>
