@@ -21,6 +21,7 @@
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
+  margin-left: var(--space-6);
 }
 
 .cardDisplay {
@@ -139,7 +140,9 @@
   font-size: 0.8rem;
   color: var(--color-neutral-10);
   cursor: pointer;
-  transition: background 0.15s var(--ease), color 0.15s var(--ease);
+  transition:
+    background 0.15s var(--ease),
+    color 0.15s var(--ease);
   user-select: none;
 }
 
@@ -171,4 +174,7 @@
     margin-right: 0;
     text-align: center;
   }
+}
+.div1 {
+  margin-top: var(--space-3);
 }

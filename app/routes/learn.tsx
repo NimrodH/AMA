@@ -3,13 +3,7 @@ import { Shuffle, Eye, Layers, ArrowRight } from "lucide-react";
 import type { Route } from "./+types/learn";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "~/components/ui/select/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { getStudentById, getActiveCourses } from "~/services/settings.service";
 import { getSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
@@ -29,10 +23,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   if (!session) return { courses: [], cards: [], accountType: "student" as const };
   const student = await getStudentById(session.studentId, request);
   if (!student) return { courses: [], cards: [], accountType: session.accountType };
-  const [courses, cards] = await Promise.all([
-    getActiveCourses(student.id, request),
-    getCards(student.id, request),
-  ]);
+  const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
   return { courses, cards, accountType: session.accountType };
 }
 
@@ -56,11 +47,8 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
   const [orderedIndex, setOrderedIndex] = React.useState(0);
 
   const filteredCards = React.useMemo(
-    () =>
-      selectedCourse === "__all__"
-        ? cards
-        : cards.filter((c) => c.course_id === selectedCourse),
-    [selectedCourse, cards]
+    () => (selectedCourse === "__all__" ? cards : cards.filter((c) => c.course_id === selectedCourse)),
+    [selectedCourse, cards],
   );
 
   const sortedCards = React.useMemo(() => {
@@ -82,7 +70,9 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: selectedCourse }),
-      }).catch(() => { /* fire-and-forget */ });
+      }).catch(() => {
+        /* fire-and-forget */
+      });
     }
 
     if (orderMode === "ordered") {
@@ -173,32 +163,8 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
             </div>
           )}
 
-          <Button
-            onClick={pickNextCard}
-            disabled={filteredCards.length === 0}
-            variant="outline"
-            className={styles.showTitleBtn}
-          >
-            {orderMode === "ordered" ? (
-              <><ArrowRight size={16} />הבא</>  
-            ) : (
-              <><Shuffle size={16} />הצג כותרת</>
-            )}
-          </Button>
-
-          <Button
-            onClick={revealContent}
-            disabled={!currentCard || showContent}
-            className={styles.showContentBtn}
-          >
-            <Eye size={16} />
-            הצג תוכן
-          </Button>
-
           <span className={styles.counter}>
-            {filteredCards.length > 0
-              ? `${filteredCards.length} כרטיסים זמינים`
-              : "אין כרטיסים"}
+            {filteredCards.length > 0 ? `${filteredCards.length} כרטיסים זמינים` : "אין כרטיסים"}
           </span>
         </div>
 
@@ -215,22 +181,16 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
           <div className={styles.cardDisplay}>
             <div className={styles.cardMeta}>
               {courseName && <span className={styles.metaChip}>{courseName}</span>}
-              {currentCard.topic && (
-                <span className={styles.metaChip}>{currentCard.topic}</span>
-              )}
+              {currentCard.topic && <span className={styles.metaChip}>{currentCard.topic}</span>}
               {currentCard.lecture_number != null && (
-                <span className={styles.metaChip}>
-                  הרצאה {currentCard.lecture_number}
-                </span>
+                <span className={styles.metaChip}>הרצאה {currentCard.lecture_number}</span>
               )}
             </div>
 
             <h2 className={styles.cardTitle}>{currentCard.title}</h2>
 
             {!showContent ? (
-              <p className={styles.revealHint}>
-                נסה לזכור את התוכן בעצמך, ואז לחץ &quot;הצג תוכן&quot; לבדיקה
-              </p>
+              <p className={styles.revealHint}>נסה לזכור את התוכן בעצמך, ואז לחץ &quot;הצג תוכן&quot; לבדיקה</p>
             ) : (
               <>
                 <hr className={styles.divider} />
@@ -243,6 +203,30 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
             )}
           </div>
         )}
+      </div>
+      <div className={styles.div1}>
+        <Button onClick={revealContent} disabled={!currentCard || showContent} className={styles.showContentBtn}>
+          <Eye size={16} />
+          הצג תוכן
+        </Button>
+        <Button
+          onClick={pickNextCard}
+          disabled={filteredCards.length === 0}
+          variant="outline"
+          className={styles.showTitleBtn}
+        >
+          {orderMode === "ordered" ? (
+            <>
+              <ArrowRight size={16} />
+              הבא
+            </>
+          ) : (
+            <>
+              <Shuffle size={16} />
+              הצג כותרת
+            </>
+          )}
+        </Button>
       </div>
     </AppLayout>
   );
