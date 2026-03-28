@@ -524,20 +524,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         <div className={styles.exams}>
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
-            <h2 className={styles.loadingTitle}>
-              {activeGeneratingType === "mc"
-                ? `בונה מבחן אמריקאי עם ${mcQuestionCount} שאלות...`
-                : activeGeneratingType === "past"
-                  ? "טוען מבחן מהקובץ..."
-                  : "מייצר מבחן סיכום..."}
-            </h2>
-            <p className={styles.loadingSubtitle}>
-              {activeGeneratingType === "mc"
-                ? "קורא את כל חומרי הקורס ובונה שאלות אמריקאיות מכל ההרצאות"
-                : activeGeneratingType === "past"
-                  ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
-                  : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
-            </p>
+            <h2 className={styles.loadingTitle}>בונה מבחן...</h2>
           </div>
         </div>
       </AppLayout>
