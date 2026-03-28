@@ -143,6 +143,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [results, setResults] = React.useState<GradingResult | null>(null);
   const [isGenerating, setIsGenerating] = React.useState(false);
   const [generatingType, setGeneratingType] = React.useState<"ai" | "mc" | "past" | null>(null);
+  const generatingTypeRef = React.useRef<"ai" | "mc" | "past" | null>(null);
   const [isGrading, setIsGrading] = React.useState(false);
   const [generateError, setGenerateError] = React.useState<string | null>(null);
   const [gradeError, setGradeError] = React.useState<string | null>(null);
@@ -166,8 +167,9 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   }, [sourceIdParam]);
 
   const generateFromSource = async (sourceId: string) => {
-    setIsGenerating(true);
+    generatingTypeRef.current = "past";
     setGeneratingType("past");
+    setIsGenerating(true);
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -193,13 +195,15 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      generatingTypeRef.current = null;
       setGeneratingType(null);
     }
   };
 
   const handleGenerateExam = async () => {
-    setIsGenerating(true);
+    generatingTypeRef.current = "ai";
     setGeneratingType("ai");
+    setIsGenerating(true);
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -226,13 +230,15 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      generatingTypeRef.current = null;
       setGeneratingType(null);
     }
   };
 
   const handleGenerateMcExam = async () => {
-    setIsGenerating(true);
+    generatingTypeRef.current = "mc";
     setGeneratingType("mc");
+    setIsGenerating(true);
     setGenerateError(null);
     setExam(null);
     setAnswers({});
@@ -260,6 +266,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       setGenerateError("שגיאת רשת — נסה שוב");
     } finally {
       setIsGenerating(false);
+      generatingTypeRef.current = null;
       setGeneratingType(null);
     }
   };
@@ -508,7 +515,9 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setGradeError(null);
   };
 
-  // Loading state
+  // Loading state — read from ref to avoid stale state during async transitions
+  const activeGeneratingType = generatingTypeRef.current ?? generatingType;
+
   if (isGenerating) {
     return (
       <AppLayout title="מבחנים" accountType={accountType}>
@@ -516,16 +525,16 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
             <h2 className={styles.loadingTitle}>
-              {generatingType === "mc"
+              {activeGeneratingType === "mc"
                 ? `בונה מבחן אמריקאי עם ${mcQuestionCount} שאלות...`
-                : generatingType === "past"
+                : activeGeneratingType === "past"
                   ? "טוען מבחן מהקובץ..."
                   : "מייצר מבחן סיכום..."}
             </h2>
             <p className={styles.loadingSubtitle}>
-              {generatingType === "mc"
+              {activeGeneratingType === "mc"
                 ? "קורא את כל חומרי הקורס ובונה שאלות אמריקאיות מכל ההרצאות"
-                : generatingType === "past"
+                : activeGeneratingType === "past"
                   ? "OpenAI קורא את מבחן העבר ומכין את השאלות"
                   : "קורא מבחני עבר + הרצאות ובונה מבחן חדש בעל אותו מבנה"}
             </p>
