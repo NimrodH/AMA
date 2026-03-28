@@ -56,6 +56,30 @@ export async function saveExam({
 }
 
 /**
+ * Delete a saved exam by ID (must belong to the given student).
+ */
+export async function deleteExam(
+  examId: string,
+  studentId: string,
+  request?: Request
+): Promise<boolean> {
+  const db = createServerClient(request);
+
+  const { error } = await db
+    .from("exams")
+    .delete()
+    .eq("id", examId)
+    .eq("student_id", studentId);
+
+  if (error) {
+    console.error("[exams.service] Failed to delete exam:", error.message);
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Fetch all saved exams for a given course, newest first.
  */
 export async function getExamsByCourse(

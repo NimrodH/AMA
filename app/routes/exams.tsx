@@ -12,6 +12,7 @@ import {
   BookOpen,
   Calendar,
   Trophy,
+  Trash2,
 } from "lucide-react";
 import { useSearchParams } from "react-router";
 import type { Route } from "./+types/exams";
@@ -152,11 +153,13 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
 
   const [showMcOptions, setShowMcOptions] = React.useState(false);
   const [mcQuestionCount, setMcQuestionCount] = React.useState(10);
+  const [deletingExamId, setDeletingExamId] = React.useState<string | null>(null);
+  const [deletedExamIds, setDeletedExamIds] = React.useState<Set<string>>(new Set());
 
-  // Saved exams filtered by selected course
+  // Saved exams filtered by selected course, excluding optimistically deleted ones
   const courseExams = React.useMemo(
-    () => savedExams.filter((e) => e.course_id === selectedCourse),
-    [savedExams, selectedCourse]
+    () => savedExams.filter((e) => e.course_id === selectedCourse && !deletedExamIds.has(e.id)),
+    [savedExams, selectedCourse, deletedExamIds]
   );
 
   // Auto-generate exam from source when sourceId is in URL
@@ -507,6 +510,38 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
 
+  const handleDeleteExam = async (examId: string) => {
+    setDeletingExamId(examId);
+    // Optimistic removal
+    setDeletedExamIds((prev) => new Set(prev).add(examId));
+
+    try {
+      const res = await authFetch("/api/delete-exam", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ examId }),
+      });
+      const data = (await res.json()) as { ok: boolean };
+      if (!data.ok) {
+        // Rollback on failure
+        setDeletedExamIds((prev) => {
+          const next = new Set(prev);
+          next.delete(examId);
+          return next;
+        });
+      }
+    } catch {
+      // Rollback on network error
+      setDeletedExamIds((prev) => {
+        const next = new Set(prev);
+        next.delete(examId);
+        return next;
+      });
+    } finally {
+      setDeletingExamId(null);
+    }
+  };
+
   const handleReset = () => {
     setExam(null);
     setAnswers({});
@@ -714,14 +749,30 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           </div>
                         </div>
 
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleOpenSavedExam(row)}
-                        >
-                          <BookOpen style={{ width: 14, height: 14, marginLeft: "var(--space-1)" }} />
-                          פתח מבחן
-                        </Button>
+                        <div className={styles.savedExamActions}>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleOpenSavedExam(row)}
+                          >
+                            <BookOpen style={{ width: 14, height: 14, marginLeft: "var(--space-1)" }} />
+                            פתח מבחן
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className={styles.deleteExamButton}
+                            onClick={() => handleDeleteExam(row.id)}
+                            disabled={deletingExamId === row.id}
+                            aria-label="מחק מבחן"
+                          >
+                            {deletingExamId === row.id ? (
+                              <Loader2 style={{ width: 14, height: 14, animation: "var(--animation-spin)" }} />
+                            ) : (
+                              <Trash2 style={{ width: 14, height: 14 }} />
+                            )}
+                          </Button>
+                        </div>
                       </div>
                     );
                   })}
