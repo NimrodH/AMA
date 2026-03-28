@@ -368,9 +368,9 @@ export async function addSourceFromText({
 }: AddSourceFromTextParams & { request?: Request }): Promise<{ ok: boolean; error?: string }> {
   const db = createServerClient(request);
 
-  // Convert text to a buffer
+  // Convert text to a buffer — include charset so browsers decode Hebrew correctly
   const fileBuffer = Buffer.from(textContent, "utf-8");
-  const mimeType = "text/plain";
+  const mimeType = "text/plain; charset=utf-8";
 
   // Build a safe storage path
   const timestamp = Date.now();

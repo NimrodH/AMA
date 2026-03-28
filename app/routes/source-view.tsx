@@ -1,6 +1,6 @@
 import * as React from "react";
 import { Link, redirect } from "react-router";
-import { ChevronLeft, BookOpen, Hash, Download } from "lucide-react";
+import { ChevronLeft, BookOpen, Hash, Download, FileText } from "lucide-react";
 import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -59,9 +59,35 @@ clientLoader.hydrate = true;
 
 // ─── Page component ───────────────────────────────────────────────────────────
 
+/**
+ * Triggers a UTF-8 download of the given text content.
+ * Prepends a BOM (\uFEFF) so that Windows apps (Notepad, Excel) detect the
+ * encoding correctly and display Hebrew characters properly.
+ */
+function downloadTextFile(content: string, filename: string) {
+  const bom = "\uFEFF";
+  const blob = new Blob([bom + content], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
 export default function SourceView({ loaderData }: Route.ComponentProps) {
   const { source, courseName } = loaderData as LoaderData;
   const isPdf = source.file_url?.toLowerCase().endsWith(".pdf") ?? false;
+  const isTxt = source.file_url?.toLowerCase().endsWith(".txt") ?? false;
+  const textContent = (source as Record<string, unknown>).content as string | undefined;
+
+  const handleDownloadText = () => {
+    if (!textContent) return;
+    const safeTopic = source.topic.replace(/[^\w\u0590-\u05FF\s-]/g, "").trim() || "source";
+    downloadTextFile(textContent, `${safeTopic}.txt`);
+  };
 
   return (
     <AppLayout title={source.topic}>
@@ -80,6 +106,13 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
                 <Download style={{ width: 16, height: 16, marginLeft: 4 }} />
                 הורד קובץ
               </a>
+            </Button>
+          )}
+
+          {isTxt && textContent && (
+            <Button variant="outline" size="sm" onClick={handleDownloadText}>
+              <Download style={{ width: 16, height: 16, marginLeft: 4 }} />
+              הורד קובץ
             </Button>
           )}
 
@@ -121,6 +154,14 @@ export default function SourceView({ loaderData }: Route.ComponentProps) {
               <PdfViewer fileUrl={source.file_url} topic={source.topic} />
             </React.Suspense>
           </ClientOnly>
+        ) : isTxt && textContent ? (
+          <div className={styles.textViewer}>
+            <div className={styles.textViewerHeader}>
+              <FileText style={{ width: 16, height: 16 }} />
+              <span>{source.topic}</span>
+            </div>
+            <pre className={styles.textContent}>{textContent}</pre>
+          </div>
         ) : (
           <div className={styles.errorState}>
             <p className={styles.errorText}>

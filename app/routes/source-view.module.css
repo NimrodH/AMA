@@ -76,3 +76,40 @@
   font: var(--font-body);
   color: var(--color-neutral-11);
 }
+
+/* ── Text file viewer ────────────────────────────────────────────────────────── */
+
+.textViewer {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-3);
+  background: var(--color-neutral-2);
+  overflow: hidden;
+}
+
+.textViewerHeader {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  font: var(--font-subheading);
+  color: var(--color-neutral-12);
+  background: var(--color-neutral-3);
+  border-bottom: 1px solid var(--color-neutral-6);
+}
+
+.textContent {
+  flex: 1;
+  padding: var(--space-4) var(--space-5);
+  margin: 0;
+  font: var(--font-body);
+  color: var(--color-neutral-12);
+  white-space: pre-wrap;
+  word-wrap: break-word;
+  overflow-y: auto;
+  line-height: 1.8;
+  direction: rtl;
+  text-align: right;
+}
