@@ -18,9 +18,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const db = createServerClient(request);
     const client = getOpenAIClient();
     const vectorStoreId = await getOrCreateVectorStore(db);
-    const vsFile = await client.vectorStores.files.retrieve(fileId, {
-      vector_store_id: vectorStoreId,
-    });
+    const vsFile = await client.vectorStores.files.retrieve(vectorStoreId, fileId);
     return Response.json({ status: vsFile.status });
   } catch (err) {
     console.error("file-status error:", err);

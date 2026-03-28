@@ -38,9 +38,7 @@ export async function action({ request }: Route.ActionArgs) {
       const db = createServerClient(request);
       const client = getOpenAIClient();
       const vectorStoreId = await getOrCreateVectorStore(db);
-      const vsFile = await client.vectorStores.files.retrieve(result.newVectorStoreFileId, {
-        vector_store_id: vectorStoreId,
-      });
+      const vsFile = await client.vectorStores.files.retrieve(vectorStoreId, result.newVectorStoreFileId);
       fileStatus = vsFile.status;
     } catch (err) {
       console.warn("Could not verify file status after refresh:", err);

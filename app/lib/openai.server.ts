@@ -116,7 +116,7 @@ export async function deleteFromVectorStore({
 
   try {
     // Remove the file from the vector store
-    await client.vectorStores.files.delete(vectorStoreFileId, { vector_store_id: vectorStoreId });
+    await client.vectorStores.files.delete(vectorStoreId, vectorStoreFileId);
     // Also delete the underlying file object from OpenAI storage
     await client.files.delete(vectorStoreFileId);
   } catch (err: unknown) {

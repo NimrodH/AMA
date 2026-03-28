@@ -133,7 +133,7 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     const client = getOpenAIClient();
     const vectorStoreId = await getOrCreateVectorStore(db);
-    const vsFile = await client.vectorStores.files.retrieve(newVectorStoreFileId, { vector_store_id: vectorStoreId });
+    const vsFile = await client.vectorStores.files.retrieve(vectorStoreId, newVectorStoreFileId);
     fileStatus = vsFile.status;
   } catch (err) {
     console.warn("Could not verify file status:", err);
