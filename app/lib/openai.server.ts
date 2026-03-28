@@ -1,6 +1,8 @@
 import OpenAI from "openai";
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+import { createServerClient } from "~/lib/supabase";
+
 let _client: OpenAI | null = null;
 
 const VECTOR_STORE_CONFIG_KEY = "openai_vector_store_id";
@@ -35,14 +37,22 @@ export function getOpenAIClient(): OpenAI {
 export async function getOrCreateVectorStore(db: SupabaseClient): Promise<string> {
   // 1. Env var takes highest precedence (pre-configured deployments / CI)
   const envId = process.env.OPENAI_VECTOR_STORE_ID;
-  if (envId) return envId;
+  if (envId && envId !== "undefined") return envId;
 
   // 2. Check persistent DB config
-  const { data: configRow } = await db
+  // We MUST use a service role client to bypass RLS, because app_config
+  // has a "service role only" policy. The `db` passed in might be a user client.
+  const adminDb = createServerClient();
+
+  const { data: configRow, error: fetchError } = await adminDb
     .from("app_config")
     .select("value")
     .eq("key", VECTOR_STORE_CONFIG_KEY)
     .maybeSingle();
+
+  if (fetchError) {
+    console.error("Error fetching vector store from app_config:", fetchError);
+  }
 
   if (configRow?.value) return configRow.value;
 
@@ -53,11 +63,15 @@ export async function getOrCreateVectorStore(db: SupabaseClient): Promise<string
     expires_after: { anchor: "last_active_at", days: 365 },
   });
 
-  await db.from("app_config").upsert({
+  const { error: upsertError } = await adminDb.from("app_config").upsert({
     key: VECTOR_STORE_CONFIG_KEY,
     value: store.id,
     updated_at: new Date().toISOString(),
   });
+  
+  if (upsertError) {
+    console.error("Error persisting new vector store ID to app_config:", upsertError);
+  }
 
   return store.id;
 }
@@ -116,6 +130,7 @@ export async function deleteFromVectorStore({
 
   try {
     // Remove the file from the vector store
+    // @ts-expect-error: TypeScript thinks the second argument should be FileDeleteParams, but runtime expects a string
     await client.vectorStores.files.delete(vectorStoreId, vectorStoreFileId);
     // Also delete the underlying file object from OpenAI storage
     await client.files.delete(vectorStoreFileId);

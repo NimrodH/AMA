@@ -18,6 +18,7 @@ export async function loader({ request }: Route.LoaderArgs) {
     const db = createServerClient(request);
     const client = getOpenAIClient();
     const vectorStoreId = await getOrCreateVectorStore(db);
+    // @ts-expect-error: TypeScript thinks the second argument should be FileRetrieveParams, but runtime expects a string
     const vsFile = await client.vectorStores.files.retrieve(vectorStoreId, fileId);
     return Response.json({ status: vsFile.status });
   } catch (err) {
