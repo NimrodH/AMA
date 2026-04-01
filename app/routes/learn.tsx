@@ -13,6 +13,7 @@ import { makeClientLoader } from "~/lib/client-auth-loader";
 import { RichTextViewer } from "~/components/rich-text-viewer/rich-text-viewer";
 import { toEditorState } from "~/lib/lexical-utils";
 import styles from "./learn.module.css";
+import classNames from "classnames";
 
 export function meta({}: Route.MetaArgs) {
   return [{ title: "למד בכרטיסים - מערכת ניהול לימודים" }];
@@ -204,7 +205,7 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
           </div>
         )}
       </div>
-      <div className={styles.div1}>
+      <div className={classNames(styles.myFooter, styles.div2)}>
         <Button onClick={revealContent} disabled={!currentCard || showContent} className={styles.showContentBtn}>
           <Eye size={16} />
           הצג תוכן
