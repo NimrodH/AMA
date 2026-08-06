@@ -20,6 +20,7 @@
     "@lexical/rich-text": "^0.42.0",
     "@lexical/selection": "^0.42.0",
     "@lexical/utils": "^0.42.0",
+    "@netlify/vite-plugin-react-router": "^3.1.1",
     "@react-router/node": "^7.13.1",
     "@react-router/serve": "^7.13.1",
     "@supabase/supabase-js": "^2.98.0",
