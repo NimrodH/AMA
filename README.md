@@ -6,31 +6,34 @@
 
 ### 🎓 ניהול מקורות לימוד
 
-- העלאת הרצאות (PDF, PPT, DOCX)
-- יצירת כרטיסי סיכום
-- שמירת מבחני עבר
+- העלאת הרצאות (PDF, PPT/PPTX, DOCX), קישורי Google Docs או טקסט חופשי
+- סוגי מקורות: הרצאה, כרטיס סיכום, מבחן עבר, מאמר
+- רענון מקורות מ-Google Docs והעלאה מחדש של קבצים
 - מטא-דאטה מפורטת לכל מקור
 
 ### 🤖 תכונות AI
 
 - **משוב על כרטיסי סיכום**: השוואה אוטומטית בין הכרטיס לחומר ההרצאה
-- **יצירת מבחנים**: מבחנים מותאמים אישית על בסיס החומר הנלמד
+- **יצירת מבחנים**: מבחנים פתוחים ואמריקאיים על בסיס מקור בודד או כלל הקורס
 - **בדיקה אוטומטית**: ציון ומשוב מפורט על תשובות
+- **תמלול תמונות**: צילום מהמצלמה והמרה לטקסט
+- **ניתוח מאמרים**: מענה על שאלות קבועות לכל מאמר
 
 ### 📚 ממשק משתמש
 
 - תמיכה מלאה בעברית RTL
-- עיצוב מודרני ונקי
-- ניווט אינטואיטיבי
-- תזכורות חכמות
+- עורך טקסט עשיר לכרטיסי סיכום ולסיכום קורס
+- איחוד כרטיסי הסיכום של קורס למקור לימוד אחד
+- מצב לימוד, סטטיסטיקות ותזכורות
+- חשבונות אורח לשיתוף החומר עם אחרים
 
 ## התקנה והגדרה
 
 ### דרישות מקדימות
 
 - Node.js 18+
-- חשבון Supabase
-- חשבון OpenAI API
+- פרויקט Supabase (מסד נתונים, Auth ו-Storage)
+- מפתח OpenAI API עם יתרת קרדיט
 
 ### שלב 1: התקנת תלויות
 
@@ -40,97 +43,47 @@ npm install
 
 ### שלב 2: הגדרת Supabase
 
-1. צור פרויקט חדש ב-[Supabase](https://supabase.com)
-2. צור את הטבלאות הבאות:
+הטבלאות שהאפליקציה משתמשת בהן:
 
-**טבלת students:**
+| טבלה | תפקיד |
+| --- | --- |
+| `students` | פרטי הסטודנט |
+| `profiles` | קישור בין משתמש Auth לסטודנט, וסוג חשבון (`student` / `guest`) |
+| `courses` | הקורסים של כל סטודנט |
+| `sources` | מקורות הלימוד, כולל `vector_store_file_id` ו-`google_docs_url` |
+| `cards` | כרטיסי סיכום |
+| `exams` | מבחנים, תשובות, משוב וציון |
+| `course_summaries` | סיכומי קורס |
+| `course_stats` | סטטיסטיקות לימוד לכל קורס |
+| `reminders` | תזכורות |
+| `article_analysis_questions` / `article_analysis_answers` | שאלות ותשובות לניתוח מאמרים |
+| `app_config` | הגדרות מערכת (למשל מזהה ה-Vector Store של OpenAI) |
 
-```sql
-CREATE TABLE students (
-  id TEXT PRIMARY KEY,
-  name TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
+פונקציות RPC נדרשות: `create_guest_user`, `delete_guest_user`, `list_guest_users`, `increment_course_stat`.
 
-**טבלת courses:**
+כל הטבלאות מוגנות ב-RLS לפי המשתמש המחובר. המבנה המדויק של הטבלאות נמצא בפרויקט ה-Supabase; הטיפוסים בקוד נמצאים ב-`app/lib/supabase.ts`.
 
-```sql
-CREATE TABLE courses (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id TEXT REFERENCES students(id),
-  course_id TEXT NOT NULL,
-  course_name TEXT NOT NULL,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
+בנוסף, צור Storage bucket בשם `sources` להעלאת קבצים.
 
-**טבלת sources:**
-
-```sql
-CREATE TABLE sources (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id TEXT NOT NULL,
-  course_id TEXT NOT NULL,
-  source_type TEXT CHECK (source_type IN ('Lecture', 'Card', 'Past exam')),
-  lecture_number INTEGER,
-  topic TEXT NOT NULL,
-  language TEXT DEFAULT 'he',
-  upload_date DATE NOT NULL,
-  file_url TEXT,
-  content TEXT,
-  metadata JSONB DEFAULT '{}',
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-**טבלת exams:**
-
-```sql
-CREATE TABLE exams (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id TEXT NOT NULL,
-  course_id TEXT NOT NULL,
-  exam_content TEXT NOT NULL,
-  student_answers TEXT,
-  ai_feedback TEXT,
-  grade INTEGER,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-**טבלת reminders:**
-
-```sql
-CREATE TABLE reminders (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  student_id TEXT NOT NULL,
-  reminder_type TEXT NOT NULL,
-  reminder_time TEXT NOT NULL,
-  is_active BOOLEAN DEFAULT true,
-  created_at TIMESTAMP DEFAULT NOW()
-);
-```
-
-3. הפעל Storage bucket בשם `sources` להעלאת קבצים
-
-### שלב 3: הגדרת OpenAI
-
-1. צור חשבון ב-[OpenAI Platform](https://platform.openai.com)
-2. צור API Key חדש
-3. הוסף יתרת קרדיט לחשבון
-
-### שלב 4: משתני סביבה
+### שלב 3: משתני סביבה
 
 צור קובץ `.env` בשורש הפרויקט:
 
 ```env
+# צד שרת
+SUPABASE_PROJECT_URL=your-supabase-url
+SUPABASE_API_KEY=your-supabase-anon-key
+OPENAI_API_KEY=your-openai-api-key
+
+# צד לקוח
 VITE_SUPABASE_URL=your-supabase-url
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key
-VITE_OPENAI_API_KEY=your-openai-api-key
+
+# אופציונלי: מזהה Vector Store קיים (אחרת נוצר אחד ונשמר בטבלת app_config)
+OPENAI_VECTOR_STORE_ID=
 ```
 
-### שלב 5: הרצת האפליקציה
+### שלב 4: הרצת האפליקציה
 
 ```bash
 npm run dev
@@ -138,55 +91,52 @@ npm run dev
 
 האפליקציה תהיה זמינה בכתובת: `http://localhost:5173`
 
-## עריכת פרומפטים של ה-AI
+### פקודות נוספות
 
-כל הפרומפטים נמצאים בקובץ `app/lib/openai.ts` באובייקט `PROMPTS`:
-
-```typescript
-export const PROMPTS = {
-  CARD_FEEDBACK: `...`, // משוב על כרטיסי סיכום
-  EXAM_GENERATION: `...`, // יצירת מבחנים
-  EXAM_GRADING: `...`, // בדיקת מבחנים
-};
+```bash
+npm run build      # בנייה לפרודקשן
+npm run start      # הרצת הבנייה
+npm run typecheck  # בדיקת טיפוסים
 ```
 
-ניתן לערוך את הפרומפטים כדי להתאים את התגובות של ה-AI לצרכים שלך.
+## פריסה
+
+האפליקציה נפרסת ב-Netlify באמצעות `@netlify/vite-plugin-react-router` (מוגדר ב-`vite.config.ts`). יש להגדיר את משתני הסביבה גם בהגדרות האתר ב-Netlify.
+
+## עריכת פרומפטים של ה-AI
+
+הפרומפטים כתובים בעברית ישירות בתוך נתיבי ה-API בתיקייה `app/routes/`, למשל:
+
+- `api.card-feedback.ts` - משוב על כרטיסי סיכום
+- `api.generate-exam-from-source.ts`, `api.generate-exam-from-course.ts`, `api.generate-mc-exam.ts` - יצירת מבחנים
+- `api.grade-exam.ts` - בדיקת מבחנים
+- `api.transcribe-image.ts` - תמלול תמונות
+
+הקריאות ל-OpenAI משתמשות ב-Responses API עם `file_search` מול Vector Store משותף, שאליו מועלים קבצי המקורות (`app/lib/openai.server.ts`).
 
 ## מבנה הפרויקט
 
 ```
 app/
-├── components/          # קומפוננטות React
-│   ├── layout/         # קומפוננטות פריסה
-│   ├── source-card/    # כרטיס מקור לימוד
-│   └── ui/            # ספריית קומפוננטות UI
-├── routes/            # דפי האפליקציה
-│   ├── home.tsx       # דף הבית
-│   ├── sources.tsx    # ניהול מקורות
-│   ├── cards.tsx      # כרטיסי סיכום
-│   ├── exams.tsx      # מבחנים
-│   └── settings.tsx   # הגדרות
-├── lib/               # ספריות עזר
-│   ├── supabase.ts    # Supabase client
-│   └── openai.ts      # OpenAI integration
-├── data/              # נתוני דמו
-└── styles/            # קבצי עיצוב
+├── components/        # קומפוננטות React
+│   ├── layout/        # קומפוננטות פריסה
+│   └── ui/            # ספריית קומפוננטות UI (מבוססת Radix)
+├── routes/            # דפי האפליקציה ונתיבי API (api.*.ts)
+├── routes.ts          # רישום כל הנתיבים
+├── services/          # גישה למסד הנתונים
+├── lib/               # Supabase, אימות, OpenAI, Google Docs
+├── hooks/             # React hooks
+└── styles/            # קבצי עיצוב ו-design tokens
 ```
 
 ## טכנולוגיות
 
 - **React 19** - ספריית UI
-- **React Router v7** - ניתוב
+- **React Router v7** - ניתוב ו-SSR
 - **TypeScript** - Type safety
-- **Supabase** - Database & Storage
+- **Supabase** - מסד נתונים, אימות ואחסון קבצים
 - **OpenAI API** - בינה מלאכותית
+- **Lexical** - עורך טקסט עשיר
 - **CSS Modules** - עיצוב
 - **Radix UI** - קומפוננטות נגישות
-
-## תמיכה
-
-לשאלות ובעיות, פנה למפתח או פתח issue בגיטהאב.
-
----
-
-**נבנה עם ❤️ באמצעות [Dazl](https://dazl.dev)**
+- **Netlify** - אחסון ופריסה
