@@ -34,8 +34,8 @@ it the backups can't be opened.** Don't keep it in this repo or in a synced fold
 
 1. **R2 → Create bucket**, e.g. `ama-backups`. Leave it private (no public access, no custom domain).
 2. In the bucket, go to **Settings → Object lifecycle rules** and add:
-   - prefix `daily/`: delete objects after **14 days**
-   - prefix `weekly/`: delete objects after **90 days**
+   - prefix `daily/`: delete objects after **7 days**
+   - prefix `weekly/`: delete objects after **30 days**
 3. **R2 → Manage API tokens → Create API token**: permission **Object Read & Write**, limited to that bucket only.
    Copy the **Access Key ID** and **Secret Access Key**.
 4. Note your **Account ID** (shown on the R2 overview page).
