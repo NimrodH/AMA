@@ -103,6 +103,11 @@ npm run typecheck  # בדיקת טיפוסים
 
 האפליקציה נפרסת ב-Netlify באמצעות `@netlify/vite-plugin-react-router` (מוגדר ב-`vite.config.ts`). יש להגדיר את משתני הסביבה גם בהגדרות האתר ב-Netlify.
 
+| ענף | כתובת |
+| --- | --- |
+| `main` (האתר הראשי) | https://acmaa.netlify.app/ |
+| `develop` (גרסת פיתוח) | https://develop--acmaa.netlify.app/ |
+
 ## עריכת פרומפטים של ה-AI
 
 הפרומפטים כתובים בעברית ישירות בתוך נתיבי ה-API בתיקייה `app/routes/`, למשל:
