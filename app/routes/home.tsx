@@ -35,11 +35,15 @@ export async function loader({ request }: Route.LoaderArgs) {
   // The session already holds the student id and name — no need to query them again
   const student = { id: session.studentId, name: session.studentName };
 
-  const [allReminders, courses, courseStats] = await Promise.all([
+  const [allReminders, courses, allCourseStats] = await Promise.all([
     getReminders(student.id, request),
     getActiveCourses(student.id, request),
     getAllCourseStats(student.id, request),
   ]);
+
+  // Show activity only for courses that are enabled in settings
+  const activeCourseIds = new Set(courses.map((c) => c.course_id));
+  const courseStats = allCourseStats.filter((s) => activeCourseIds.has(s.course_id));
 
   // Return all active reminders — client-side manages which are pending/visible
   const activeReminders = allReminders.filter((r) => r.is_active);
