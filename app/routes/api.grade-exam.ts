@@ -1,13 +1,14 @@
 import type { Route } from "./+types/api.grade-exam";
-import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { recordExamResult } from "~/services/stats.service";
+import { parseModelJson } from "~/lib/model-json.server";
 
 const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשובות סטודנטים.
-קיבלת מבחן עם שאלות, תשובות של סטודנט, וגישה לחומרי ההרצאות של הקורס.
+קיבלת מבחן עם שאלות, תשובות של סטודנט, וגישה לחומרי הלימוד של הקורס (הרצאות ומאמרים).
 
-בדוק כל תשובה **אך ורק** על סמך חומרי ההרצאות של הקורס המצורפים. אל תסתמך על ידע כללי שמחוץ לחומרי הלימוד.
+השתמש בכלי file_search כדי לאחזר את חומרי הלימוד הרלוונטיים, ובדוק כל תשובה **אך ורק** על סמך חומרי הלימוד של הקורס (הרצאות ומאמרים). אל תסתמך על ידע כללי שמחוץ לחומרי הלימוד.
 בדוק כל תשובה בקפידה ותן ציון מדויק ומשוב בונה.
 
 החזר תוצאות בפורמט JSON בדיוק:
@@ -30,6 +31,7 @@ const SYSTEM_PROMPT = `אתה בוחן אקדמי מנוסה המעריך תשו
 - שאלות אמריקאיות ונכון/לא נכון: ניקוד מלא אם נכון, אפס אם לא נכון
 - שאלות פתוחות: ניקוד חלקי בהתאם לאיכות התשובה
 - אם לא ענה על שאלה — ציין זאת ותן 0 נקודות
+- אם לשאלה מצורפת "תשובה לדוגמה" — השתמש בה כקנה מידה לבדיקה, ואמת אותה מול חומרי הלימוד
 
 החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
@@ -38,6 +40,8 @@ interface QuestionForGrading {
   type: string;
   question: string;
   options?: string[];
+  /** Sample answer for open questions of AI-generated exams */
+  model_answer?: string;
   points: number;
 }
 
@@ -75,8 +79,9 @@ export async function action({ request }: Route.ActionArgs) {
     .map((q) => {
       const answer = answers[q.id] ?? "(לא ענה)";
       const optionsText = q.options ? `\nאפשרויות: ${q.options.join(" | ")}` : "";
+      const modelAnswerText = q.model_answer ? `\nתשובה לדוגמה: ${q.model_answer}` : "";
       return `שאלה ${q.id} (${q.points} נקודות, סוג: ${q.type}):
-${q.question}${optionsText}
+${q.question}${optionsText}${modelAnswerText}
 תשובת הסטודנט: ${answer}`;
     })
     .join("\n\n");
@@ -92,18 +97,13 @@ ${examText}
 
   const response = await client.responses.create({
     model: "gpt-4o",
+    text: { format: { type: "json_object" } },
     tools: [
       {
         type: "file_search",
         vector_store_ids: [vectorStoreId],
-        filters: {
-          type: "and",
-          filters: [
-            { type: "eq" as const, key: "student_id", value: student.id },
-            { type: "eq" as const, key: "course_id", value: courseId },
-            { type: "eq" as const, key: "source_type", value: "הרצאה" },
-          ],
-        },
+        // Lectures and articles of this course (source_type is stored in English)
+        filters: courseContentFilter(student.id, courseId),
         max_num_results: 50,
       },
     ],
@@ -128,17 +128,9 @@ ${examText}
       if (rawText) break;
     }
   }
-  // Extract JSON — extract from outermost curly braces
-  const start = rawText.indexOf("{");
-  const end = rawText.lastIndexOf("}");
-  const jsonStr = start !== -1 && end !== -1 && end > start
-    ? rawText.slice(start, end + 1).trim()
-    : rawText.trim();
-
-  let gradingResult: unknown;
-  try {
-    gradingResult = JSON.parse(jsonStr);
-  } catch {
+  // Parse the JSON (also repairs unescaped quotes in Hebrew abbreviations)
+  const gradingResult = parseModelJson(rawText);
+  if (gradingResult === undefined) {
     return Response.json(
       { ok: false, error: "לא ניתן לפרסר את תוצאות הבדיקה. נסה שוב." },
       { status: 500 }

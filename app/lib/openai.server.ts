@@ -8,6 +8,29 @@ let _client: OpenAI | null = null;
 const VECTOR_STORE_CONFIG_KEY = "openai_vector_store_id";
 
 /**
+ * Source types whose files hold course content (as stored in `sources.source_type`
+ * and in the vector store file attributes). Past exams and summary cards are
+ * left out on purpose: exams must not copy past questions, and cards are the
+ * student's own notes and may contain mistakes.
+ */
+export const COURSE_CONTENT_SOURCE_TYPES = ["Lecture", "Article"] as const;
+
+/**
+ * file_search filter for a course's content files (lectures and articles) of
+ * one student.
+ */
+export function courseContentFilter(studentId: string, courseId: string) {
+  return {
+    type: "and" as const,
+    filters: [
+      { type: "eq" as const, key: "student_id", value: studentId },
+      { type: "eq" as const, key: "course_id", value: courseId },
+      { type: "in" as const, key: "source_type", value: [...COURSE_CONTENT_SOURCE_TYPES] },
+    ],
+  };
+}
+
+/**
  * Returns a singleton OpenAI client for server-side usage.
  * Uses the OPENAI_API_KEY environment variable.
  */

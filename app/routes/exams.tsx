@@ -43,6 +43,8 @@ interface Question {
   question: string;
   options?: string[];
   correct_answer?: string;
+  /** Sample answer for open questions (AI exams), used by the AI grader */
+  model_answer?: string;
   points: number;
 }
 
@@ -402,15 +404,20 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    if (examType === "past") {
+    // Past exams and AI exams carry an answer key: closed questions that have
+    // a correct_answer are graded here, and only the rest (open questions, or
+    // closed ones without a key, e.g. older saved AI exams) go to the AI.
+    if (examType === "past" || examType === "ai") {
       setIsGrading(true);
       setGradeError(null);
 
       try {
-        const closedQuestions = exam.questions.filter(
-          (q) => q.type === "multiple_choice" || q.type === "true_false"
-        );
-        const openQuestions = exam.questions.filter((q) => q.type === "open");
+        const hasAnswerKey = (q: Question) =>
+          (q.type === "multiple_choice" || q.type === "true_false") &&
+          q.correct_answer != null &&
+          q.correct_answer !== "";
+        const closedQuestions = exam.questions.filter(hasAnswerKey);
+        const openQuestions = exam.questions.filter((q) => !hasAnswerKey(q));
 
         const closedGrades = closedQuestions.map((q) => {
           const selected = answers[q.id] ?? "";

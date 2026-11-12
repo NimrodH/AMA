@@ -1,9 +1,11 @@
 import type { Route } from "./+types/api.generate-exam-from-course";
-import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
 import { saveExam } from "~/services/exams.service";
+import { sanitizeAnswerKey } from "~/lib/exam-answer-key.server";
+import { parseModelJson } from "~/lib/model-json.server";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -32,18 +34,23 @@ interface ExamStructure {
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת:
 1. מבנה מדויק של מבחן עבר (מספר שאלות מכל סוג וניקוד לכל שאלה) — אלה נתונים קשיחים שחייבים להישמר בדיוק
-2. תוכן הרצאות הקורס — בנה מהן שאלות חדשות לחלוטין
+2. חומרי הלימוד של הקורס (הרצאות ומאמרים) — בנה מהם שאלות חדשות לחלוטין
 
-המשימה שלך: לבנות מבחן חדש שמשמר את אותו מבנה בדיוק, אך השאלות עצמן שונות לחלוטין ומבוססות אך ורק על תוכן ההרצאות.
+המשימה שלך: לבנות מבחן חדש שמשמר את אותו מבנה בדיוק, אך השאלות עצמן שונות לחלוטין ומבוססות אך ורק על חומרי הלימוד.
 
 חוקים:
 - מספר השאלות מכל סוג הוא קבוע ומחייב — אסור לשנות אותו
 - הניקוד לכל שאלה הוא קבוע ומחייב — אסור לשנות אותו
 - השאלות עצמן חייבות להיות שונות לחלוטין מהמבחן המקורי
-- כל השאלות מבוססות אך ורק על תוכן ההרצאות שסופקו
+- כל השאלות מבוססות אך ורק על חומרי הלימוד (הרצאות ומאמרים) שסופקו
 - כתוב בעברית
 
-השתמש בכלי file_search כדי לאחזר את תוכן הרצאות הקורס ולבנות מהן שאלות חדשות.
+מפתח תשובות (חובה):
+- לכל שאלת multiple_choice ו-true_false כלול "correct_answer" — העתק מדויק, תו בתו, של אחת האפשרויות ב-options
+- רק אפשרות אחת נכונה בכל שאלה
+- לכל שאלה פתוחה (open) כלול "model_answer" — תשובה לדוגמה קצרה ומלאה המבוססת על חומרי הלימוד, שתשמש לבדיקה
+
+השתמש בכלי file_search כדי לאחזר את תוכן ההרצאות והמאמרים של הקורס ולבנות מהם שאלות חדשות.
 
 החזר את המבחן בפורמט JSON כאשר השאלות מוצגות באופן הבא:
 {
@@ -55,6 +62,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
       "type": "multiple_choice",
       "question": "נוסח השאלה",
       "options": ["אופציה א", "אופציה ב", "אופציה ג", "אופציה ד"],
+      "correct_answer": "אופציה ג",
       "points": 10
     },
     {
@@ -62,12 +70,14 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
       "type": "true_false",
       "question": "נוסח השאלה",
       "options": ["נכון", "לא נכון"],
+      "correct_answer": "לא נכון",
       "points": 5
     },
     {
       "id": 3,
       "type": "open",
       "question": "נוסח השאלה",
+      "model_answer": "תשובה לדוגמה",
       "points": 15
     }
   ]
@@ -76,15 +86,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    return text.slice(start, end + 1).trim();
-  }
-  return text.trim();
-}
 
 /** Pull the final text content from a Responses API response object. */
 function extractOutputText(response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> }): string {
@@ -191,9 +192,10 @@ export async function action({ request }: Route.ActionArgs) {
   const student = { id: session.studentId };
 
   // ── 1. Verify sources exist ──────────────────────────────────────────────
-  const [pastExams, lectures] = await Promise.all([
+  const [pastExams, lectures, articles] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Past exam", request),
     getSourcesByCourse(student.id, courseId, "Lecture", request),
+    getSourcesByCourse(student.id, courseId, "Article", request),
   ]);
 
   if (pastExams.length === 0) {
@@ -203,9 +205,9 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  if (lectures.length === 0) {
+  if (lectures.length === 0 && articles.length === 0) {
     return Response.json(
-      { ok: false, error: "לא נמצאו הרצאות לקורס זה. העלה הרצאות כדי שה-AI יוכל לבנות שאלות מהתוכן." },
+      { ok: false, error: "לא נמצאו הרצאות או מאמרים לקורס זה. העלה חומרי לימוד כדי שה-AI יוכל לבנות שאלות מהתוכן." },
       { status: 422 }
     );
   }
@@ -221,17 +223,17 @@ export async function action({ request }: Route.ActionArgs) {
 
   const structureBlock = buildStructureBlock(parsedStructures);
 
-  // ── 3. Collect vector store file IDs (lectures only for content) ─────────
-  // We include past exam vector store files too so the model can optionally
-  // consult them, but we already know the structure from the DB cache.
-  const allSources = [...pastExams, ...lectures];
-  const vectorStoreFileIds = allSources
+  // ── 3. Collect vector store file IDs of the content sources ──────────────
+  // Only lectures and articles: the search is limited to them (see the
+  // file_search filter), so the model can't copy past exam questions.
+  const contentSources = [...lectures, ...articles];
+  const vectorStoreFileIds = contentSources
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
 
   // ── 4. Build the user prompt with the explicit structure constraint ───────
   const pastExamList = pastExams
-    .map((s) => `• ${s.topic}${s.content ? " (מבנה מנותח ✓)" : " (ללא ניתוח — השתמש ב-file_search)"}`)
+    .map((s) => `• ${s.topic}${s.content ? " (מבנה מנותח ✓)" : " (מבנה לא נותח)"}`)
     .join("\n");
 
   const lectureList = lectures
@@ -243,18 +245,23 @@ export async function action({ request }: Route.ActionArgs) {
     })
     .join("\n");
 
+  const articleList = articles.map((s) => `• מאמר — ${s.topic}`).join("\n");
+  const contentList = [lectureList, articleList].filter(Boolean).join("\n");
+
+  // Past exam files are not searchable here (so their questions can't be
+  // copied). Without a parsed structure, ask for a balanced exam instead.
   const userPrompt = `קורס: ${courseId}
 
 ${
   structureBlock
     ? `${structureBlock}\n\nמבחני העבר (אל תעתיק שאלות — השתמש במבנה לעיל בלבד):\n${pastExamList}`
-    : `מבחני עבר זמינים (למד מהם את מבנה המבחן בלבד — אל תעתיק שאלות):\n${pastExamList}\n\nחשוב: השתמש ב-file_search כדי לקרוא את תוכן מבחני העבר ולהסיק את המבנה המדויק (מספר שאלות מכל סוג, ניקוד).`
+    : `מבחני עבר זמינים:\n${pastExamList}\n\nמבנה מבחני העבר לא נותח עדיין. בנה מבחן מאוזן בן 10 עד 15 שאלות שמשלב שאלות אמריקאיות (multiple_choice), נכון/לא נכון (true_false) ושאלות פתוחות (open), בסך הכול 100 נקודות.`
 }
 
-הרצאות הקורס הזמינות (בנה מהן את השאלות החדשות):
-${lectureList}
+חומרי הלימוד הזמינים (בנה מהם את השאלות החדשות):
+${contentList}
 
-בצע חיפוש רחב בכל מסמכי ההרצאות באמצעות file_search כדי לאחזר את התוכן המלא, ולאחר מכן בנה מבחן אימון חדש לפי המבנה המחייב שהוגדר לעיל.`;
+בצע חיפוש רחב בכל ההרצאות והמאמרים באמצעות file_search כדי לאחזר את התוכן, ולאחר מכן בנה מבחן אימון חדש לפי המבנה שהוגדר לעיל. כסה נושאים מכל חומרי הלימוד.`;
 
   // ── 5. Call OpenAI with file_search ──────────────────────────────────────
   const client = getOpenAIClient();
@@ -267,18 +274,14 @@ ${lectureList}
     if (vectorStoreFileIds.length > 0) {
       const response = await client.responses.create({
         model: "gpt-4o",
+        text: { format: { type: "json_object" } },
         tools: [
           {
             type: "file_search",
             vector_store_ids: [vectorStoreId],
             max_num_results: 20,
-            filters: {
-              type: "and" as const,
-              filters: [
-                { type: "eq" as const, key: "student_id", value: student.id },
-                { type: "eq" as const, key: "course_id", value: courseId },
-              ],
-            },
+            // Lectures and articles only — never past exams or summary cards
+            filters: courseContentFilter(student.id, courseId),
           },
         ],
         input: [
@@ -293,11 +296,12 @@ ${lectureList}
       console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
+        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           {
             role: "user",
-            content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות בלבד.`,
+            content: `${userPrompt}\n\nשים לב: לא נמצאו קבצים מאינדקס. נסה לבנות מבחן בסיסי לפי שמות ההרצאות והמאמרים בלבד.`,
           },
         ],
       });
@@ -319,17 +323,18 @@ ${lectureList}
   }
 
   // ── 6. Parse and return ───────────────────────────────────────────────────
-  const jsonStr = extractJson(rawText);
-  let examData: unknown;
-  try {
-    examData = JSON.parse(jsonStr);
-  } catch {
+  const examData = parseModelJson(rawText);
+  if (examData === undefined) {
     console.error("[generate-exam-from-course] Failed to parse JSON:", rawText);
     return Response.json(
       { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
       { status: 500 }
     );
   }
+
+  // Drop answer keys that don't match one of the options, so those questions
+  // are graded by the AI instead of being marked wrong
+  sanitizeAnswerKey(examData);
 
   // ── 7. Save exam to DB (fire-and-forget) ────────────────────────────────
   const examObj = examData as { title?: string };

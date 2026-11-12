@@ -5,6 +5,7 @@ import { requireSession } from "~/lib/auth.server";
 import { getSourceById } from "~/services/sources.service";
 import { createServerClient } from "~/lib/supabase";
 import { saveExam } from "~/services/exams.service";
+import { parseModelJson } from "~/lib/model-json.server";
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 ניתן לך קובץ מבחן עבר של קורס אקדמי. המשימה שלך היא לקרוא את המבחן בעיון ולהפוך אותו למבחן אינטראקטיבי.
@@ -56,16 +57,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 }
 
 החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
-
-/** Extract a JSON object from raw text (handles markdown code fences and surrounding prose). */
-function extractJson(text: string): string {
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
-  if (start !== -1 && end !== -1 && end > start) {
-    return text.slice(start, end + 1).trim();
-  }
-  return text.trim();
-}
 
 /** Download a file from a public URL and return it as a Buffer. */
 async function fetchFileBuffer(url: string): Promise<Buffer> {
@@ -180,6 +171,7 @@ export async function action({ request }: Route.ActionArgs) {
   try {
     const response = await client.chat.completions.create({
       model: "gpt-4o",
+      response_format: { type: "json_object" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         {
@@ -211,11 +203,8 @@ ${examText}`,
   }
 
   // ── 4. Parse the JSON ─────────────────────────────────────────────────────
-  const jsonStr = extractJson(rawText);
-  let examData: unknown;
-  try {
-    examData = JSON.parse(jsonStr);
-  } catch {
+  const examData = parseModelJson(rawText);
+  if (examData === undefined) {
     console.error("[generate-exam] Failed to parse JSON. Raw response:", rawText);
     return Response.json(
       { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
