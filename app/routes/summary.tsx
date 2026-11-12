@@ -33,7 +33,7 @@ export async function loader({ request }: Route.LoaderArgs) {
   // is absent — the clientLoader enforces auth client-side via localStorage.
   const session = await getSession(request);
   if (!session) {
-    return { accountType: "student" as const, courses: [] };
+    return { courses: [] };
   }
 
   // The session already holds the student id and name — no need to query them again
@@ -41,7 +41,6 @@ export async function loader({ request }: Route.LoaderArgs) {
   const courses = student ? await getActiveCourses(student.id, request) : [];
 
   return {
-    accountType: session.accountType as "student" | "guest",
     courses,
   };
 }
@@ -70,7 +69,7 @@ export async function action({ request }: Route.ActionArgs) {
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Summary({ loaderData }: Route.ComponentProps) {
-  const { accountType, courses } = loaderData as LoaderData;
+  const { courses } = loaderData as LoaderData;
 
   const [selectedCourseId, setSelectedCourseId] = React.useState<string>(() => {
     const stored = readSelectedCourse();
@@ -133,7 +132,7 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
     courses.find((c) => c.course_id === selectedCourseId)?.course_name ?? "";
 
   return (
-    <AppLayout title="סיכומים" accountType={accountType}>
+    <AppLayout title="סיכומים">
       <div className={styles.page}>
         {/* ── Toolbar row ── */}
         <div className={styles.topBar}>

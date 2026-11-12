@@ -358,7 +358,7 @@ export default function Sources({ loaderData }: Route.ComponentProps) {
   }, [sources, selectedType, selectedCourseId]);
 
   return (
-    <AppLayout title="מקורות לימוד" accountType={accountType}>
+    <AppLayout title="מקורות לימוד">
       <div className={styles.sources}>
         <div className={styles.header}>
           <div className={styles.filters}>

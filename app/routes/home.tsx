@@ -209,7 +209,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <AppLayout title="דף הבית" accountType={accountType}>
+    <AppLayout title="דף הבית">
       <div className={styles.home}>
         <div className={styles.welcome}>
           <div className={styles.welcomeTop}>

@@ -1,20 +1,23 @@
-import { type RouteConfig, index, prefix, route } from "@react-router/dev/routes";
+import { type RouteConfig, index, layout, prefix, route } from "@react-router/dev/routes";
 
 const devRoutes = import.meta.env.DEV ? prefix("dev", [route("components", "dev/components.tsx")]) : [];
 
 export default [
   route("login", "routes/login.tsx"),
   route("logout", "routes/logout.ts"),
-  index("routes/home.tsx"),
-  route("sources", "routes/sources.tsx"),
-  route("sources/:id/view", "routes/source-view.tsx"),
-  route("cards", "routes/cards.tsx"),
-  route("learn", "routes/learn.tsx"),
-  route("article-analysis", "routes/article-analysis.tsx"),
-  route("summary", "routes/summary.tsx"),
+  // Signed-in pages share one layout (sidebar rendered once)
+  layout("routes/app-shell.tsx", [
+    index("routes/home.tsx"),
+    route("sources", "routes/sources.tsx"),
+    route("sources/:id/view", "routes/source-view.tsx"),
+    route("cards", "routes/cards.tsx"),
+    route("learn", "routes/learn.tsx"),
+    route("article-analysis", "routes/article-analysis.tsx"),
+    route("summary", "routes/summary.tsx"),
+    route("exams", "routes/exams.tsx"),
+    route("settings", "routes/settings.tsx"),
+  ]),
   route("api/summaries", "routes/api.summaries.ts"),
-  route("exams", "routes/exams.tsx"),
-  route("settings", "routes/settings.tsx"),
   route("setup", "routes/setup.tsx"),
   route("api/next-card-number", "routes/api.next-card-number.ts"),
   route("api/card-feedback", "routes/api.card-feedback.ts"),

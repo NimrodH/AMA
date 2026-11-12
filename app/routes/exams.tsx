@@ -557,7 +557,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
 
   if (isGenerating) {
     return (
-      <AppLayout title="מבחנים" accountType={accountType}>
+      <AppLayout title="מבחנים">
         <div className={styles.exams}>
           <div className={styles.loadingState}>
             <Loader2 className={styles.loadingSpinner} />
@@ -569,7 +569,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   }
 
   return (
-    <AppLayout title="מבחנים" accountType={accountType}>
+    <AppLayout title="מבחנים">
       <div className={styles.exams}>
         {!exam ? (
           <>

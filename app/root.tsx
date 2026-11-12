@@ -67,10 +67,6 @@ export function Layout({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function loader() {
-  return {};
-}
-
 export default function App() {
   React.useEffect(() => {
     // Sync localStorage token → cookie on app boot
