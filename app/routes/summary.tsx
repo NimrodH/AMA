@@ -7,7 +7,7 @@ import { getSession, requireSession } from "~/lib/auth.server";
 import { getActiveCourses } from "~/services/settings.service";
 import { saveSummary } from "~/services/summaries.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
-import { getToken } from "~/lib/auth.client";
+import { authFetch } from "~/lib/auth-fetch";
 import { Save, FileText } from "lucide-react";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import styles from "./summary.module.css";
@@ -90,12 +90,7 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
     let cancelled = false;
     async function fetchSummary() {
       try {
-        const token = getToken();
-        const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-        const res = await fetch(
-          `/api/summaries?courseId=${encodeURIComponent(selectedCourseId)}`,
-          { headers }
-        );
+        const res = await authFetch(`/api/summaries?courseId=${encodeURIComponent(selectedCourseId)}`);
         if (!res.ok || cancelled) return;
         const data = await res.json() as { content: string };
         if (!cancelled) {
@@ -120,9 +115,7 @@ export default function Summary({ loaderData }: Route.ComponentProps) {
       const formData = new FormData();
       formData.append("courseId", selectedCourseId);
       formData.append("content", editorContent);
-      const token = getToken();
-      const headers: HeadersInit = token ? { Authorization: `Bearer ${token}` } : {};
-      const res = await fetch("/summary", { method: "POST", body: formData, headers });
+      const res = await authFetch("/summary", { method: "POST", body: formData });
       if (res.ok) {
         setSaveStatus("saved");
         setTimeout(() => setSaveStatus("idle"), 2500);

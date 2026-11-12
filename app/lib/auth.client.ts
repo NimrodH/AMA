@@ -122,3 +122,46 @@ async function doRefresh(refreshToken: string): Promise<string | null> {
     return null;
   }
 }
+
+/** Refresh the access token when it has less than this many seconds left. */
+const EXPIRY_MARGIN_SECONDS = 120;
+
+/** Read the `exp` claim (seconds since epoch) from a JWT, or null if unreadable. */
+function getTokenExpiry(token: string): number | null {
+  try {
+    const payload = token.split(".")[1];
+    if (!payload) return null;
+    const base64 = payload.replace(/-/g, "+").replace(/_/g, "/");
+    const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+    const { exp } = JSON.parse(atob(padded)) as { exp?: number };
+    return typeof exp === "number" ? exp : null;
+  } catch {
+    return null;
+  }
+}
+
+/** True when the token is expired or will expire within the safety margin. */
+export function isTokenExpiring(token: string, marginSeconds = EXPIRY_MARGIN_SECONDS): boolean {
+  const exp = getTokenExpiry(token);
+  if (exp === null) return false; // unknown format: let the server decide
+  return exp - marginSeconds <= Date.now() / 1000;
+}
+
+/**
+ * Return an access token that is still valid, refreshing it first when it is
+ * expired or about to expire. Returns null when the user is not signed in
+ * (no token and no usable refresh token).
+ *
+ * If the refresh fails for a transient reason (e.g. network), the old token
+ * is returned and the server decides; an invalid refresh token clears the
+ * stored tokens, so null is returned and callers send the user to /login.
+ */
+export async function getValidToken(): Promise<string | null> {
+  const token = getToken();
+  if (token && !isTokenExpiring(token)) return token;
+
+  const refreshed = await restoreSession();
+  if (refreshed) return refreshed;
+
+  return getToken();
+}

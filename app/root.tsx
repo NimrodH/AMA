@@ -1,5 +1,13 @@
 import * as React from "react";
-import { isRouteErrorResponse, Links, Meta, Outlet, Scripts, ScrollRestoration } from "react-router";
+import {
+  isRouteErrorResponse,
+  Links,
+  Meta,
+  Outlet,
+  Scripts,
+  ScrollRestoration,
+  useRevalidator,
+} from "react-router";
 
 import type { Route } from "./+types/root";
 import { Toaster } from "./components/ui/toaster/toaster";
@@ -17,7 +25,8 @@ import "./styles/theme.css";
 import "./styles/error-boundary.css";
 import { useColorScheme } from "@dazl/color-scheme/react";
 import favicon from "/favicon.svg";
-import { syncTokenToCookie, restoreSession, getToken } from "~/lib/auth.client";
+import { syncTokenToCookie, getValidToken, getToken } from "~/lib/auth.client";
+import { consumeStaleInitialData } from "~/lib/client-auth-loader";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -67,17 +76,38 @@ export default function App() {
     // Sync localStorage token → cookie on app boot
     syncTokenToCookie();
 
-    // Proactively refresh the session every 50 minutes (JWT typically expires at 60 min)
-    const REFRESH_INTERVAL_MS = 50 * 60 * 1000;
-    const intervalId = setInterval(() => {
+    // Keep the session fresh: refresh the token whenever it is about to
+    // expire. Timers are paused while the computer sleeps, so also check
+    // when the tab becomes visible again.
+    const refreshIfNeeded = () => {
       // Only refresh if user currently has a token (is logged in)
       if (getToken()) {
-        restoreSession();
+        void getValidToken();
       }
-    }, REFRESH_INTERVAL_MS);
+    };
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") refreshIfNeeded();
+    };
 
-    return () => clearInterval(intervalId);
+    const CHECK_INTERVAL_MS = 5 * 60 * 1000;
+    const intervalId = setInterval(refreshIfNeeded, CHECK_INTERVAL_MS);
+    document.addEventListener("visibilitychange", onVisibilityChange);
+
+    return () => {
+      clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
   }, []);
+
+  // If the first page was server-rendered with an expired token, its data is
+  // the empty signed-out fallback. Once the client has refreshed the token,
+  // reload the data. Runs after every render but acts at most once.
+  const revalidator = useRevalidator();
+  React.useEffect(() => {
+    if (revalidator.state === "idle" && consumeStaleInitialData()) {
+      void revalidator.revalidate();
+    }
+  });
 
   return <Outlet />;
 }

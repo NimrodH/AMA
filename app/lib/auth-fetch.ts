@@ -6,11 +6,13 @@
  * from either the Authorization header OR the auth_token cookie. The
  * cookie can expire while localStorage still holds a valid token, so
  * we explicitly set the header to guarantee authentication works.
+ *
+ * The token is refreshed first when it is expired or about to expire.
  */
-import { getToken } from "~/lib/auth.client";
+import { getValidToken } from "~/lib/auth.client";
 
-export function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const token = getToken();
+export async function authFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+  const token = await getValidToken();
 
   if (!token) {
     return fetch(input, init);

@@ -17,7 +17,7 @@
  */
 
 import { redirect } from "react-router";
-import { getToken, restoreSession } from "~/lib/auth.client";
+import { getToken, getValidToken, isTokenExpiring } from "~/lib/auth.client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any;
@@ -69,21 +69,48 @@ async function withAuthFetch<T>(token: string, fn: () => Promise<T>): Promise<T>
   }
 }
 
+/**
+ * True until the first client loader (the one that runs during hydration)
+ * has started.
+ */
+let isInitialLoad = true;
+
+/**
+ * Set when the server rendered the first page with an expired (or missing)
+ * token, so its loader data is the empty signed-out fallback. During
+ * hydration `serverLoader()` returns that server-rendered data instead of
+ * fetching, so the root route revalidates once the router is ready.
+ */
+let staleInitialData = false;
+
+/** Returns true (once) when the first page's data must be reloaded. */
+export function consumeStaleInitialData(): boolean {
+  const stale = staleInitialData;
+  staleInitialData = false;
+  return stale;
+}
+
 export function makeClientLoader<TLoader extends AnyFn>() {
   const clientLoader = async ({
     serverLoader,
   }: {
     serverLoader: () => Promise<ReturnData<TLoader>>;
   }): Promise<ReturnData<TLoader>> => {
-    let token = getToken();
+    const firstLoad = isInitialLoad;
+    isInitialLoad = false;
 
-    // If no access token in localStorage, try to restore from refresh token
-    if (!token) {
-      token = await restoreSession();
-    }
+    const storedToken = getToken();
+    // Refreshes the token first when it is expired or about to expire
+    const token = await getValidToken();
 
     if (!token) {
       throw redirect("/login");
+    }
+
+    // The server render used the stored (cookie) token. If that token had
+    // already expired, the server returned empty signed-out data.
+    if (firstLoad && token !== storedToken && (!storedToken || isTokenExpiring(storedToken, 0))) {
+      staleInitialData = true;
     }
 
     return withAuthFetch(token, serverLoader);
@@ -100,12 +127,8 @@ export function makeClientAction<TAction extends AnyFn>() {
   }: {
     serverAction: () => Promise<ReturnData<TAction>>;
   }): Promise<ReturnData<TAction>> => {
-    let token = getToken();
-
-    // If no access token, try to restore from refresh token
-    if (!token) {
-      token = await restoreSession();
-    }
+    // Refreshes the token first when it is expired or about to expire
+    const token = await getValidToken();
 
     if (!token) {
       throw redirect("/login");
