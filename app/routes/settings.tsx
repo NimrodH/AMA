@@ -18,7 +18,6 @@ import {
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
 import {
-  getStudentById,
   getCourses,
   getReminders,
   updateStudentName,
@@ -48,8 +47,8 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   if (!session) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { student: null, courses: [], reminders: [], articleQuestions: [], guests: [], accountType: session.accountType };
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
 
   const [courses, reminders, articleQuestions, guests] = await Promise.all([
     getCourses(student.id, request),

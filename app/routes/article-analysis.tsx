@@ -4,7 +4,7 @@ import type { Route } from "./+types/article-analysis";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
 import { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "~/components/ui/accordion/accordion";
-import { getStudentById, getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
+import { getActiveCourses, getArticleQuestions, saveArticleAnswers } from "~/services/settings.service";
 import { getSession, requireSession } from "~/lib/auth.server";
 import { makeClientLoader, makeClientAction } from "~/lib/client-auth-loader";
 import styles from "./article-analysis.module.css";
@@ -36,11 +36,13 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   if (!session) return { courses: [], questions: [], studentId: "", accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], questions: [], studentId: "", accountType: session.accountType };
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
 
-  const courses = await getActiveCourses(student.id, request);
-  const questions = await getArticleQuestions(student.id, request);
+  const [courses, questions] = await Promise.all([
+    getActiveCourses(student.id, request),
+    getArticleQuestions(student.id, request),
+  ]);
 
   return { courses, questions, studentId: student.id, accountType: session.accountType };
 }

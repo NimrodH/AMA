@@ -23,9 +23,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~
 import { Textarea } from "~/components/ui/textarea/textarea";
 import { Input } from "~/components/ui/input/input";
 import { Badge } from "~/components/ui/badge/badge";
-import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { getActiveCourses } from "~/services/settings.service";
 import { getSession } from "~/lib/auth.server";
-import { getExamsByCourse, type ExamRow } from "~/services/exams.service";
+import { getExamsForCourses, type ExamListRow } from "~/services/exams.service";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import { authFetch } from "~/lib/auth-fetch";
@@ -70,14 +70,16 @@ interface GradingResult {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
-  if (!session) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: "student" as const };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamRow[], studentId: "", accountType: session.accountType as "student" | "guest" };
+  if (!session) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamListRow[], studentId: "", accountType: "student" as const };
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
   const courses = await getActiveCourses(student.id, request);
-  // Load exams for all courses (we'll filter client-side by selected course)
-  const savedExams = courses.length > 0
-    ? (await Promise.all(courses.map((c) => getExamsByCourse(student.id, c.course_id, request)))).flat()
-    : [];
+  // Load exams for all courses in one query (we'll filter client-side by selected course)
+  const savedExams = await getExamsForCourses(
+    student.id,
+    courses.map((c) => c.course_id),
+    request
+  );
   return { courses, savedExams, studentId: student.id, accountType: session.accountType as "student" | "guest" };
 }
 
@@ -275,7 +277,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   };
 
   /** Load a saved exam from the DB row and open it for answering. */
-  const handleOpenSavedExam = (row: ExamRow) => {
+  const handleOpenSavedExam = (row: ExamListRow) => {
     try {
       const parsed = JSON.parse(row.exam_content) as ExamData;
       const withFlag: ExamData = row.exam_type === "mc" ? { ...parsed, isMcExam: true } : parsed;

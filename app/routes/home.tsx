@@ -4,7 +4,7 @@ import type { Route } from "./+types/home";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "~/components/ui/select/select";
-import { getStudentById, getReminders, getActiveCourses } from "~/services/settings.service";
+import { getReminders, getActiveCourses } from "~/services/settings.service";
 import { getSession } from "~/lib/auth.server";
 import { getAllCourseStats, type CourseStats } from "~/services/stats.service";
 import {
@@ -32,22 +32,22 @@ export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   if (!session) return { studentId: null, studentName: null, guestName: null, accountType: "student" as const, activeReminders: [], courses: [], courseStats: [] };
   const isGuestSession = session.accountType === "guest";
-  // For guests, studentId points to the owner student — fetch their name
-  const student = await getStudentById(session.studentId, request);
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
 
   const [allReminders, courses, courseStats] = await Promise.all([
-    student ? getReminders(student.id, request) : Promise.resolve([]),
-    student ? getActiveCourses(student.id, request) : Promise.resolve([]),
-    student ? getAllCourseStats(student.id, request) : Promise.resolve([]),
+    getReminders(student.id, request),
+    getActiveCourses(student.id, request),
+    getAllCourseStats(student.id, request),
   ]);
 
   // Return all active reminders — client-side manages which are pending/visible
   const activeReminders = allReminders.filter((r) => r.is_active);
 
   return {
-    studentId: student?.id ?? null,
+    studentId: student.id,
     // Owner student's name (for guests: the student they belong to)
-    studentName: student?.name ?? null,
+    studentName: student.name || null,
     // Guest's own display name — only set for guest accounts
     guestName: isGuestSession ? session.studentName : null,
     accountType: session.accountType as "student" | "guest",

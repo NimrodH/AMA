@@ -103,3 +103,33 @@ export async function getExamsByCourse(
 
   return (data ?? []) as ExamRow[];
 }
+
+/** Exam row as shown in the saved-exams list (without answers and AI feedback). */
+export type ExamListRow = Omit<ExamRow, "student_answers" | "ai_feedback">;
+
+/**
+ * Fetch saved exams for several courses in one query, newest first.
+ * Skips `student_answers` and `ai_feedback`, which the list doesn't use.
+ */
+export async function getExamsForCourses(
+  studentId: string,
+  courseIds: string[],
+  request?: Request
+): Promise<ExamListRow[]> {
+  if (courseIds.length === 0) return [];
+  const db = createServerClient(request);
+
+  const { data, error } = await db
+    .from("exams")
+    .select("id, student_id, course_id, title, exam_type, exam_content, grade, created_at")
+    .eq("student_id", studentId)
+    .in("course_id", courseIds)
+    .order("created_at", { ascending: false });
+
+  if (error) {
+    console.error("[exams.service] Failed to fetch exams:", error.message);
+    return [];
+  }
+
+  return (data ?? []) as ExamListRow[];
+}

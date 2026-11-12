@@ -5,7 +5,7 @@ import type { Route } from "./+types/source-view";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
 import { getSourceById } from "~/services/sources.service";
-import { getStudentById, getCourses } from "~/services/settings.service";
+import { getCourses } from "~/services/settings.service";
 import { getSession } from "~/lib/auth.server";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import styles from "./source-view.module.css";
@@ -39,8 +39,8 @@ export function meta({ data }: Route.MetaArgs) {
 export async function loader({ params, request }: Route.LoaderArgs) {
   const session = await getSession(request);
   if (!session) return redirect("/sources");
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return redirect("/setup");
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
 
   const [source, courses] = await Promise.all([
     getSourceById(params.id, student.id, request),

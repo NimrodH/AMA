@@ -60,41 +60,137 @@ export type SessionUser = {
 };
 
 /**
- * Resolves the current session from the request.
- * Returns null if unauthenticated.
+ * Short-lived in-memory cache of resolved sessions, keyed by access token.
+ * A warm server instance handles many requests from the same user (every
+ * navigation runs a loader), so this skips the auth + profile lookups for
+ * repeat requests. Entries never outlive the token's own `exp`.
  */
-export async function getSession(request: Request): Promise<SessionUser | null> {
-  // Use the user's own auth client so auth.uid() resolves correctly for RLS
-  const userClient = createAuthClient(request);
-  const {
-    data: { user },
-    error,
-  } = await userClient.auth.getUser();
+const SESSION_CACHE_TTL_MS = 60_000;
+const SESSION_CACHE_MAX_ENTRIES = 500;
+const sessionCache = new Map<string, { session: SessionUser; expiresAt: number }>();
 
-  if (error || !user) return null;
+function readCachedSession(token: string): SessionUser | null {
+  const entry = sessionCache.get(token);
+  if (!entry) return null;
+  if (entry.expiresAt <= Date.now()) {
+    sessionCache.delete(token);
+    return null;
+  }
+  return entry.session;
+}
 
-  // Fetch profile using the user's authenticated client — RLS policy allows
-  // `id = auth.uid()` which resolves to this user's id via their JWT.
-  const { data: profile } = await userClient
+function writeCachedSession(token: string, session: SessionUser, tokenExpSeconds: number | undefined): void {
+  const now = Date.now();
+  const tokenExpiresAt = tokenExpSeconds ? tokenExpSeconds * 1000 : now;
+  const expiresAt = Math.min(now + SESSION_CACHE_TTL_MS, tokenExpiresAt);
+  if (expiresAt <= now) return;
+
+  if (sessionCache.size >= SESSION_CACHE_MAX_ENTRIES) {
+    for (const [key, entry] of sessionCache) {
+      if (entry.expiresAt <= now) sessionCache.delete(key);
+    }
+    // Still full: drop the oldest entry (Map keeps insertion order)
+    if (sessionCache.size >= SESSION_CACHE_MAX_ENTRIES) {
+      const oldestKey = sessionCache.keys().next().value;
+      if (oldestKey !== undefined) sessionCache.delete(oldestKey);
+    }
+  }
+  sessionCache.set(token, { session, expiresAt });
+}
+
+/**
+ * Whether `profiles` can embed `students(name)` in one query (needs a
+ * foreign key profiles.student_id → students.id). If PostgREST reports no
+ * such relationship we fall back to two queries for the rest of the process.
+ */
+let profileStudentEmbedSupported = true;
+
+type ProfileInfo = { studentId: string; accountType: "student" | "guest"; studentName: string };
+
+async function loadProfile(client: SupabaseClient, authId: string): Promise<ProfileInfo | null> {
+  if (profileStudentEmbedSupported) {
+    const { data, error } = await client
+      .from("profiles")
+      .select("student_id, account_type, students(name)")
+      .eq("id", authId)
+      .maybeSingle();
+
+    if (!error) {
+      if (!data) return null;
+      const embedded = (data as { students?: { name?: string } | { name?: string }[] | null }).students;
+      const student = Array.isArray(embedded) ? embedded[0] : embedded;
+      return {
+        studentId: data.student_id as string,
+        accountType: data.account_type as "student" | "guest",
+        studentName: student?.name ?? "",
+      };
+    }
+
+    // PGRST200: relationship not found, PGRST201: ambiguous relationship
+    if (error.code !== "PGRST200" && error.code !== "PGRST201") return null;
+    profileStudentEmbedSupported = false;
+  }
+
+  // Fallback: two sequential queries
+  const { data: profile } = await client
     .from("profiles")
     .select("student_id, account_type")
-    .eq("id", user.id)
+    .eq("id", authId)
     .single();
 
   if (!profile) return null;
 
-  const { data: student } = await userClient
-    .from("students")
-    .select("name")
-    .eq("id", profile.student_id)
-    .single();
+  const { data: student } = await client.from("students").select("name").eq("id", profile.student_id).single();
 
   return {
-    authId: user.id,
     studentId: profile.student_id as string,
-    studentName: student?.name ?? "",
     accountType: profile.account_type as "student" | "guest",
+    studentName: student?.name ?? "",
   };
+}
+
+/**
+ * Resolves the current session from the request.
+ * Returns null if unauthenticated.
+ */
+export async function getSession(request: Request): Promise<SessionUser | null> {
+  const token = getAccessTokenFromRequest(request);
+  if (!token) return null;
+
+  const cached = readCachedSession(token);
+  if (cached) return cached;
+
+  // Use the user's own auth client so auth.uid() resolves correctly for RLS
+  const userClient = createAuthClient(request);
+
+  // getClaims verifies the JWT locally against the project's (cached) JWKS
+  // when the project uses asymmetric signing keys; with the legacy shared
+  // secret it falls back to a getUser() call, i.e. the previous behaviour.
+  let authId: string | undefined;
+  let tokenExp: number | undefined;
+  try {
+    const { data, error } = await userClient.auth.getClaims(token);
+    if (error || !data) return null;
+    authId = data.claims.sub;
+    tokenExp = data.claims.exp;
+  } catch {
+    return null;
+  }
+  if (!authId) return null;
+
+  // Fetch profile using the user's authenticated client — RLS policy allows
+  // `id = auth.uid()` which resolves to this user's id via their JWT.
+  const profile = await loadProfile(userClient, authId);
+  if (!profile) return null;
+
+  const session: SessionUser = {
+    authId,
+    studentId: profile.studentId,
+    studentName: profile.studentName,
+    accountType: profile.accountType,
+  };
+  writeCachedSession(token, session, tokenExp);
+  return session;
 }
 
 /**

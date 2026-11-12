@@ -11,6 +11,14 @@ const BUCKET_NAME = "sources";
 const SOURCE_SELECT_FIELDS =
   "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, extracted_text, created_at";
 
+/**
+ * Columns for the sources list page. Same as SOURCE_SELECT_FIELDS minus
+ * `extracted_text` (the full extracted document text), which the list never
+ * shows and which can make the page payload very large.
+ */
+const SOURCE_LIST_SELECT_FIELDS =
+  "id, student_id, course_id, source_type, lecture_number, topic, language, upload_date, file_url, google_docs_url, content, metadata, vector_store_file_id, created_at";
+
 /** Fetch a single source by ID (must belong to the student). */
 export async function getSourceById(id: string, studentId: string, request?: Request): Promise<SourceRow | null> {
   const db = createServerClient(request);
@@ -48,12 +56,12 @@ export async function getSourcesByCourse(
   return (data ?? []) as SourceRow[];
 }
 
-/** Fetch all sources for a student. */
+/** Fetch all sources for a student (list view: without the extracted document text). */
 export async function getSources(studentId: string, request?: Request): Promise<SourceRow[]> {
   const db = createServerClient(request);
   const { data, error } = await db
     .from("sources")
-    .select(SOURCE_SELECT_FIELDS)
+    .select(SOURCE_LIST_SELECT_FIELDS)
     .eq("student_id", studentId)
     .order("created_at", { ascending: false });
 

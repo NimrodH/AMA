@@ -19,7 +19,7 @@ import {
   AlertDialogDescription,
   AlertDialogCancel,
 } from "~/components/ui/alert-dialog/alert-dialog";
-import { getStudentById, getActiveCourses } from "~/services/settings.service";
+import { getActiveCourses } from "~/services/settings.service";
 import { getSession, requireSession } from "~/lib/auth.server";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { getCards, addCard, updateCard, deleteCard, getNextCardNumber } from "~/services/cards.service";
@@ -35,8 +35,8 @@ export function meta({}: Route.MetaArgs) {
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
   if (!session) return { courses: [], cards: [] };
-  const student = await getStudentById(session.studentId, request);
-  if (!student) return { courses: [], cards: [] };
+  // The session already holds the student id and name — no need to query them again
+  const student = { id: session.studentId, name: session.studentName };
   const [courses, cards] = await Promise.all([getActiveCourses(student.id, request), getCards(student.id, request)]);
   return { courses, cards };
 }
