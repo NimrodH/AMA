@@ -1,48 +1,37 @@
+import type OpenAI from "openai";
 import type { Route } from "./+types/api.generate-exam-from-course";
 import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
+import { getCourseName } from "~/services/settings.service";
 import { saveExam } from "~/services/exams.service";
+import { getCachedPastExam } from "~/services/past-exam.service";
 import { sanitizeAnswerKey } from "~/lib/exam-answer-key.server";
 import { parseModelJson } from "~/lib/model-json.server";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-interface ParsedQuestion {
-  type: "multiple_choice" | "true_false" | "open";
-  points: number;
-}
-
-interface ParsedExam {
-  questions?: ParsedQuestion[];
-}
-
-interface ExamStructure {
-  /** Human-readable name of the source past exam */
-  topic: string;
-  multiple_choice: number;
-  true_false: number;
-  open: number;
-  /** Points per question for each type (first occurrence wins) */
-  points_per_type: { multiple_choice?: number; true_false?: number; open?: number };
-  total_questions: number;
-}
+import {
+  describeStructure,
+  extractOutputText,
+  fitExamToSlots,
+  slotsFromExam,
+  type ExamData,
+  type ExamSlot,
+} from "~/lib/exam-ai.server";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת:
-1. מבנה מדויק של מבחן עבר (מספר שאלות מכל סוג וניקוד לכל שאלה) — אלה נתונים קשיחים שחייבים להישמר בדיוק
+1. מבנה מדויק של מבחן עבר (סדר השאלות, סוג כל שאלה וניקוד כל שאלה) — אלה נתונים קשיחים שחייבים להישמר בדיוק
 2. חומרי הלימוד של הקורס (הרצאות ומאמרים) — בנה מהם שאלות חדשות לחלוטין
 
 המשימה שלך: לבנות מבחן חדש שמשמר את אותו מבנה בדיוק, אך השאלות עצמן שונות לחלוטין ומבוססות אך ורק על חומרי הלימוד.
 
 חוקים:
-- מספר השאלות מכל סוג הוא קבוע ומחייב — אסור לשנות אותו
-- הניקוד לכל שאלה הוא קבוע ומחייב — אסור לשנות אותו
-- השאלות עצמן חייבות להיות שונות לחלוטין מהמבחן המקורי
+- מספר השאלות מכל סוג, סדרן והניקוד של כל שאלה הם קבועים ומחייבים — אסור לשנות אותם
+- השאלות עצמן חייבות להיות שונות לחלוטין ממבחני העבר
 - כל השאלות מבוססות אך ורק על חומרי הלימוד (הרצאות ומאמרים) שסופקו
+- פזר את השאלות על פני כל חומרי הלימוד — אל תתרכז במקור אחד
 - כתוב בעברית
 
 מפתח תשובות (חובה):
@@ -50,7 +39,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - רק אפשרות אחת נכונה בכל שאלה
 - לכל שאלה פתוחה (open) כלול "model_answer" — תשובה לדוגמה קצרה ומלאה המבוססת על חומרי הלימוד, שתשמש לבדיקה
 
-השתמש בכלי file_search כדי לאחזר את תוכן ההרצאות והמאמרים של הקורס ולבנות מהם שאלות חדשות.
+השתמש בכלי file_search כדי לאחזר את תוכן ההרצאות והמאמרים של הקורס. בצע חיפוש נפרד לכל הרצאה ולכל מאמר ברשימה, כדי שהשאלות יכסו את כל החומר.
 
 החזר את המבחן בפורמט JSON כאשר השאלות מוצגות באופן הבא:
 {
@@ -85,102 +74,18 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.`;
 
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Pull the final text content from a Responses API response object. */
-function extractOutputText(response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> }): string {
-  // Primary: output_text convenience accessor
-  if (response.output_text?.trim()) return response.output_text.trim();
-  // Fallback: walk the output array for message items
-  if (Array.isArray(response.output)) {
-    for (const item of response.output) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const part of item.content) {
-          if (part.type === "output_text" && part.text?.trim()) return part.text.trim();
-        }
-      }
-    }
-  }
-  return "";
-}
-
-/**
- * Parse the cached exam JSON from a source's `content` field and return
- * the exact question structure (counts + points per type).
- */
-function parsePastExamStructure(content: string | null | undefined, topic: string): ExamStructure | null {
-  if (!content) return null;
-  try {
-    const parsed = JSON.parse(content) as ParsedExam;
-    const questions = parsed.questions;
-    if (!Array.isArray(questions) || questions.length === 0) return null;
-
-    const structure: ExamStructure = {
-      topic,
-      multiple_choice: 0,
-      true_false: 0,
-      open: 0,
-      points_per_type: {},
-      total_questions: questions.length,
-    };
-
-    for (const q of questions) {
-      const type = q.type;
-      const pts = Number(q.points) || 0;
-      if (type === "multiple_choice") {
-        structure.multiple_choice++;
-        if (!structure.points_per_type.multiple_choice) structure.points_per_type.multiple_choice = pts;
-      } else if (type === "true_false") {
-        structure.true_false++;
-        if (!structure.points_per_type.true_false) structure.points_per_type.true_false = pts;
-      } else if (type === "open") {
-        structure.open++;
-        if (!structure.points_per_type.open) structure.points_per_type.open = pts;
-      }
-    }
-
-    return structure;
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Build a human-readable, hard-constraint description of the exam structure
- * so the model cannot miscount or guess.
- */
-function buildStructureBlock(structures: ExamStructure[]): string {
-  if (structures.length === 0) return "";
-
-  // Use the first successfully parsed past exam as the reference structure
-  const ref = structures[0];
-
-  const lines: string[] = [
-    `=== מבנה מחייב של המבחן (חייב להישמר בדיוק) ===`,
-    `מבוסס על: ${ref.topic}`,
-    `סה"כ שאלות: ${ref.total_questions}`,
-    ``,
-  ];
-
-  if (ref.multiple_choice > 0) {
-    lines.push(`• שאלות אמריקאיות (multiple_choice): ${ref.multiple_choice} שאלות × ${ref.points_per_type.multiple_choice ?? "?"} נקודות כל אחת`);
-  }
-  if (ref.true_false > 0) {
-    lines.push(`• שאלות נכון/לא נכון (true_false): ${ref.true_false} שאלות × ${ref.points_per_type.true_false ?? "?"} נקודות כל אחת`);
-  }
-  if (ref.open > 0) {
-    lines.push(`• שאלות פתוחות (open): ${ref.open} שאלות × ${ref.points_per_type.open ?? "?"} נקודות כל אחת`);
-  }
-
-  lines.push(``);
-  lines.push(`חובה: צור בדיוק ${ref.multiple_choice} שאלות multiple_choice, ${ref.true_false} שאלות true_false, ו-${ref.open} שאלות open. אין לשנות את המספרים האלה.`);
-  lines.push(`=== סוף הגדרת מבנה מחייב ===`);
-
-  return lines.join("\n");
-}
-
 // ─── Action ───────────────────────────────────────────────────────────────────
 
+/**
+ * Generates a new practice exam from the course's lectures and articles, in
+ * the exact structure of a parsed past exam.
+ *
+ * If no past exam of the course has been parsed yet, responds with
+ * `{ ok: false, needsPastExamParse: <sourceId> }` (409). The client then
+ * parses that past exam (/api/generate-exam-from-source with parseOnly) and
+ * calls again. Doing it in two requests keeps each one short enough for the
+ * serverless function time limit.
+ */
 export async function action({ request }: Route.ActionArgs) {
   const { courseId } = (await request.json()) as { courseId: string };
 
@@ -191,11 +96,12 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
   const student = { id: session.studentId };
 
-  // ── 1. Verify sources exist ──────────────────────────────────────────────
-  const [pastExams, lectures, articles] = await Promise.all([
+  // ── 1. Sources and course name ──────────────────────────────────────────
+  const [pastExams, lectures, articles, courseName] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Past exam", request),
     getSourcesByCourse(student.id, courseId, "Lecture", request),
     getSourcesByCourse(student.id, courseId, "Article", request),
+    getCourseName(student.id, courseId, request),
   ]);
 
   if (pastExams.length === 0) {
@@ -212,87 +118,74 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Extract the exact past exam structure from cached parsed content ───
-  //
-  // Each past exam that has been viewed via "הצג כבחינה" has its parsed JSON
-  // cached in source.content. We read it here directly to get hard counts
-  // instead of relying on the AI to guess the structure from raw file text.
-  const parsedStructures = pastExams
-    .map((s) => parsePastExamStructure(s.content as string | null, s.topic))
-    .filter((s): s is ExamStructure => s !== null);
+  // ── 2. Required structure: the first parsed past exam ───────────────────
+  const reference = pastExams
+    .map((source) => ({ source, slots: slotsFromExam(getCachedPastExam(source)) }))
+    .find((r) => r.slots.length > 0);
 
-  const structureBlock = buildStructureBlock(parsedStructures);
+  if (!reference) {
+    const parsable = pastExams.find((s) => s.file_url);
+    if (parsable) {
+      return Response.json({ ok: false, needsPastExamParse: parsable.id }, { status: 409 });
+    }
+  }
 
-  // ── 3. Collect vector store file IDs of the content sources ──────────────
-  // Only lectures and articles: the search is limited to them (see the
-  // file_search filter), so the model can't copy past exam questions.
-  const contentSources = [...lectures, ...articles];
-  const vectorStoreFileIds = contentSources
+  const slots: ExamSlot[] = reference?.slots ?? [];
+  const structureBlock = reference
+    ? describeStructure(slots, reference.source.topic)
+    : `מבנה מבחני העבר אינו זמין. בנה מבחן מאוזן בן 10 עד 15 שאלות שמשלב שאלות אמריקאיות (multiple_choice), נכון/לא נכון (true_false) ושאלות פתוחות (open), בסך הכול 100 נקודות.`;
+
+  // ── 3. Content files (lectures and articles only) ───────────────────────
+  // The search is limited to them (see the file_search filter), so the model
+  // can't copy past exam questions.
+  const vectorStoreFileIds = [...lectures, ...articles]
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
 
-  // ── 4. Build the user prompt with the explicit structure constraint ───────
-  const pastExamList = pastExams
-    .map((s) => `• ${s.topic}${s.content ? " (מבנה מנותח ✓)" : " (מבנה לא נותח)"}`)
-    .join("\n");
-
+  // ── 4. Prompt ───────────────────────────────────────────────────────────
   const lectureList = lectures
-    .map((s) => {
-      const label = s.lecture_number
-        ? `הרצאה ${s.lecture_number} — ${s.topic}`
-        : `${s.topic} (כלל הקורס)`;
-      return `• ${label}`;
-    })
+    .map((s) => `• ${s.lecture_number ? `הרצאה ${s.lecture_number} — ${s.topic}` : `${s.topic} (כלל הקורס)`}`)
     .join("\n");
-
   const articleList = articles.map((s) => `• מאמר — ${s.topic}`).join("\n");
   const contentList = [lectureList, articleList].filter(Boolean).join("\n");
 
-  // Past exam files are not searchable here (so their questions can't be
-  // copied). Without a parsed structure, ask for a balanced exam instead.
-  const userPrompt = `קורס: ${courseId}
+  const userPrompt = `קורס: ${courseName}
 
-${
-  structureBlock
-    ? `${structureBlock}\n\nמבחני העבר (אל תעתיק שאלות — השתמש במבנה לעיל בלבד):\n${pastExamList}`
-    : `מבחני עבר זמינים:\n${pastExamList}\n\nמבנה מבחני העבר לא נותח עדיין. בנה מבחן מאוזן בן 10 עד 15 שאלות שמשלב שאלות אמריקאיות (multiple_choice), נכון/לא נכון (true_false) ושאלות פתוחות (open), בסך הכול 100 נקודות.`
-}
+${structureBlock}
 
 חומרי הלימוד הזמינים (בנה מהם את השאלות החדשות):
 ${contentList}
 
-בצע חיפוש רחב בכל ההרצאות והמאמרים באמצעות file_search כדי לאחזר את התוכן, ולאחר מכן בנה מבחן אימון חדש לפי המבנה שהוגדר לעיל. כסה נושאים מכל חומרי הלימוד.`;
+אחזר את התוכן של כל אחד מחומרי הלימוד באמצעות file_search, ולאחר מכן בנה מבחן אימון חדש לפי המבנה שהוגדר לעיל.`;
 
-  // ── 5. Call OpenAI with file_search ──────────────────────────────────────
+  // ── 5. Call OpenAI ──────────────────────────────────────────────────────
   const client = getOpenAIClient();
   const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
-  let rawText: string;
+  const fileSearchTool: OpenAI.Responses.FileSearchTool = {
+    type: "file_search",
+    vector_store_ids: [vectorStoreId],
+    max_num_results: 50,
+    // Lectures and articles only — never past exams or summary cards
+    filters: courseContentFilter(student.id, courseId),
+  };
 
+  let rawText: string;
   try {
     if (vectorStoreFileIds.length > 0) {
       const response = await client.responses.create({
         model: "gpt-4o",
         text: { format: { type: "json_object" } },
-        tools: [
-          {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId],
-            max_num_results: 20,
-            // Lectures and articles only — never past exams or summary cards
-            filters: courseContentFilter(student.id, courseId),
-          },
-        ],
+        tools: [fileSearchTool],
         input: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
       });
-
       rawText = extractOutputText(response);
     } else {
-      // No vector store files — fall back to chat completion without RAG
+      // No indexed files — fall back to a plain chat completion
       console.warn("[generate-exam-from-course] No vector store file IDs found, using plain chat");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
@@ -309,43 +202,50 @@ ${contentList}
     }
   } catch (err) {
     console.error("[generate-exam-from-course] OpenAI error:", err);
-    return Response.json(
-      { ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" },
-      { status: 502 }
-    );
+    return Response.json({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" }, { status: 502 });
   }
 
-  if (!rawText) {
-    return Response.json(
-      { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-      { status: 500 }
-    );
-  }
-
-  // ── 6. Parse and return ───────────────────────────────────────────────────
-  const examData = parseModelJson(rawText);
-  if (examData === undefined) {
+  // ── 6. Parse, check the answer key and the structure ────────────────────
+  const parsed = rawText ? parseModelJson(rawText) : undefined;
+  if (parsed === undefined) {
     console.error("[generate-exam-from-course] Failed to parse JSON:", rawText);
-    return Response.json(
-      { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
-      { status: 500 }
-    );
+    return Response.json({ ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" }, { status: 500 });
+  }
+  sanitizeAnswerKey(parsed);
+
+  let exam = parsed as ExamData;
+  if (slots.length > 0) {
+    // Same order, types and points as the past exam; extra questions are
+    // dropped and missing ones requested once more.
+    const fitted = await fitExamToSlots(parsed, slots, {
+      client,
+      fileSearchTool,
+      systemPrompt: SYSTEM_PROMPT,
+    });
+    exam = fitted.exam;
+    if (fitted.missing > 0) {
+      console.warn(`[generate-exam-from-course] ${fitted.missing} question(s) still missing after retry`);
+    }
   }
 
-  // Drop answer keys that don't match one of the options, so those questions
-  // are graded by the AI instead of being marked wrong
-  sanitizeAnswerKey(examData);
+  if (!Array.isArray(exam.questions) || exam.questions.length === 0) {
+    return Response.json({ ok: false, error: "המבחן שנוצר ריק — נסה שוב" }, { status: 500 });
+  }
 
-  // ── 7. Save exam to DB (fire-and-forget) ────────────────────────────────
-  const examObj = examData as { title?: string };
-  saveExam({
-    studentId: student.id,
-    courseId,
-    title: examObj?.title ?? "מבחן אימון",
-    examType: "ai",
-    examContent: examData as object,
-    request,
-  }).catch((err) => console.warn("[generate-exam-from-course] save exam failed:", err));
+  // ── 7. Save to the exams list (awaited, so it isn't lost when the
+  // serverless function ends) ─────────────────────────────────────────────
+  try {
+    await saveExam({
+      studentId: student.id,
+      courseId,
+      title: exam.title ?? `${courseName} — מבחן אימון`,
+      examType: "ai",
+      examContent: exam as object,
+      request,
+    });
+  } catch (err) {
+    console.warn("[generate-exam-from-course] save exam failed:", err);
+  }
 
-  return Response.json({ ok: true, exam: examData });
+  return Response.json({ ok: true, exam });
 }

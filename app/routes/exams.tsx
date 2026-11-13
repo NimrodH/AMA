@@ -90,6 +90,61 @@ clientLoader.hydrate = true;
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
+/**
+ * Read an /api/* JSON response. When the server didn't answer with JSON — for
+ * example the hosting platform cut the request off for taking too long —
+ * return an error the student can act on instead of a generic network error.
+ */
+async function readApiJson<T extends { ok: boolean; error?: string }>(res: Response): Promise<T> {
+  try {
+    return (await res.json()) as T;
+  } catch {
+    const timedOut = res.status === 502 || res.status === 504 || res.status === 408;
+    return {
+      ok: false,
+      error: timedOut
+        ? "השרת לא הספיק לסיים את הבקשה בזמן. נסה שוב, או בחר מבחן קצר יותר."
+        : `שגיאה לא צפויה מהשרת (${res.status}) — נסה שוב`,
+    } as T;
+  }
+}
+
+/** Points of the closed questions graded in the browser */
+type LocalGrade = GradingResult["question_grades"][number];
+
+function hasAnswerKey(q: Question): boolean {
+  return (q.type === "multiple_choice" || q.type === "true_false") && q.correct_answer != null && q.correct_answer !== "";
+}
+
+function gradeClosedQuestion(q: Question, answer: string | undefined): LocalGrade {
+  const isCorrect = (answer ?? "") === q.correct_answer;
+  return {
+    question_id: q.id,
+    grade: isCorrect ? q.points : 0,
+    max_points: q.points,
+    feedback: isCorrect ? "✓ תשובה נכונה" : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
+    correct_answer: q.correct_answer,
+  };
+}
+
+function defaultFeedback(pct: number, earned: number, total: number): { overall: string; recommendations: string[] } {
+  if (pct >= 90) return { overall: `מצוין! קיבלת ${pct}% (${earned}/${total} נקודות). שליטה מעולה בחומר.`, recommendations: [] };
+  if (pct >= 70)
+    return {
+      overall: `טוב! קיבלת ${pct}% (${earned}/${total} נקודות). יש מקום לשיפור.`,
+      recommendations: ["חזור על הנושאים שבהם טעית"],
+    };
+  if (pct >= 50)
+    return {
+      overall: `יש מקום לשיפור — קיבלת ${pct}% (${earned}/${total} נקודות).`,
+      recommendations: ["חזור על חומרי הקורס", "שים לב לנושאים שבהם טעית"],
+    };
+  return {
+    overall: `ציון נמוך — ${pct}% (${earned}/${total} נקודות). מומלץ לעבור שוב על החומר.`,
+    recommendations: ["קרא מחדש את חומרי הקורס", "בקש עזרה מהמרצה אם נדרש"],
+  };
+}
+
 function formatExamDate(dateStr: string | null): string {
   if (!dateStr) return "";
   const d = new Date(dateStr);
@@ -189,7 +244,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         body: JSON.stringify({ sourceId }),
       });
 
-      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+      const data = await readApiJson<{ ok: boolean; exam?: ExamData; error?: string }>(res);
 
       if (!data.ok || !data.exam) {
         setGenerateError(data.error ?? "שגיאה בייצור המבחן");
@@ -217,14 +272,31 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setResults(null);
     setShowMcOptions(false);
 
-    try {
-      const res = await authFetch("/api/generate-exam-from-course", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId: selectedCourse }),
-      });
+    type GenerateResponse = { ok: boolean; exam?: ExamData; error?: string; needsPastExamParse?: string };
+    const requestExam = async () =>
+      readApiJson<GenerateResponse>(
+        await authFetch("/api/generate-exam-from-course", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ courseId: selectedCourse }),
+        })
+      );
 
-      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+    try {
+      let data = await requestExam();
+
+      // No past exam of this course has been parsed yet: parse one (its
+      // structure is the exam's template) in its own request, then retry.
+      if (!data.ok && data.needsPastExamParse) {
+        const parsed = await readApiJson<{ ok: boolean; error?: string }>(
+          await authFetch("/api/generate-exam-from-source", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ sourceId: data.needsPastExamParse, parseOnly: true }),
+          })
+        );
+        data = parsed.ok ? await requestExam() : { ok: false, error: parsed.error };
+      }
 
       if (!data.ok || !data.exam) {
         setGenerateError(data.error ?? "שגיאה בייצור המבחן");
@@ -259,7 +331,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
         body: JSON.stringify({ courseId: selectedCourse, questionCount: mcQuestionCount }),
       });
 
-      const data = (await res.json()) as { ok: boolean; exam?: ExamData; error?: string };
+      const data = await readApiJson<{ ok: boolean; exam?: ExamData; error?: string }>(res);
 
       if (!data.ok || !data.exam) {
         setGenerateError(data.error ?? "שגיאה בייצור המבחן");
@@ -292,44 +364,6 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     } catch {
       setGenerateError("לא ניתן לטעון את המבחן — הנתון פגום");
     }
-  };
-
-  const gradeMcExamLocally = (): GradingResult => {
-    if (!exam) throw new Error("No exam");
-
-    const question_grades = exam.questions.map((q) => {
-      const selected = answers[q.id] ?? "";
-      const isCorrect = selected === q.correct_answer;
-      return {
-        question_id: q.id,
-        grade: isCorrect ? q.points : 0,
-        max_points: q.points,
-        feedback: isCorrect ? "✓ תשובה נכונה" : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
-        correct_answer: q.correct_answer,
-      };
-    });
-
-    const earned = question_grades.reduce((sum, g) => sum + g.grade, 0);
-    const total = question_grades.reduce((sum, g) => sum + g.max_points, 0);
-    const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
-
-    let overall_feedback: string;
-    let recommendations: string[] = [];
-
-    if (pct >= 90) {
-      overall_feedback = `מצוין! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). שליטה מעולה בחומר.`;
-    } else if (pct >= 70) {
-      overall_feedback = `טוב! ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). יש מקום לשיפור בנושאים שנכשלת בהם.`;
-      recommendations = ["חזור על הנושאים שבהם טעית", "למד מחדש את ההרצאות הרלוונטיות"];
-    } else if (pct >= 50) {
-      overall_feedback = `יש מקום לשיפור — ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). מומלץ לחזור על חומר הקורס.`;
-      recommendations = ["חזור על כל חומרי הקורס", "שים לב לנושאים שבהם טעית", "נסה שוב לאחר חזרה"];
-    } else {
-      overall_feedback = `ציון נמוך — ענית נכון על ${earned} מתוך ${total} שאלות (${pct}%). מומלץ לעבור מחדש על כל ההרצאות.`;
-      recommendations = ["קרא מחדש את כל הרצאות הקורס", "השתמש בכרטיסיות הלמידה", "פנה לעזרה מהמרצה אם נדרש"];
-    }
-
-    return { total_grade: pct, question_grades, overall_feedback, recommendations };
   };
 
   /**
@@ -398,99 +432,33 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       return;
     }
 
-    if (exam.isMcExam) {
-      const localResults = gradeMcExamLocally();
-      setResults(localResults);
-      return;
-    }
+    // Closed questions with an answer key are graded here. Only the rest (open
+    // questions, or closed ones without a key, e.g. older saved AI exams) go
+    // to the AI. The server also records the score in the course stats.
+    const localQuestions = exam.questions.filter(hasAnswerKey);
+    const aiQuestions = exam.questions.filter((q) => !hasAnswerKey(q));
+    const localGrades = localQuestions.map((q) => gradeClosedQuestion(q, answers[q.id]));
+    const localScore = {
+      earned: localGrades.reduce((s, g) => s + g.grade, 0),
+      max: localGrades.reduce((s, g) => s + g.max_points, 0),
+    };
 
-    // Past exams and AI exams carry an answer key: closed questions that have
-    // a correct_answer are graded here, and only the rest (open questions, or
-    // closed ones without a key, e.g. older saved AI exams) go to the AI.
-    if (examType === "past" || examType === "ai") {
-      setIsGrading(true);
-      setGradeError(null);
+    const showResults = (aiGrades: LocalGrade[], aiFeedback = "", aiRecommendations: string[] = []) => {
+      const allGrades = [...localGrades, ...aiGrades].sort((a, b) => a.question_id - b.question_id);
+      const earned = allGrades.reduce((s, g) => s + g.grade, 0);
+      const total = allGrades.reduce((s, g) => s + g.max_points, 0);
+      const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
+      const fallback = defaultFeedback(pct, earned, total);
+      setResults({
+        total_grade: pct,
+        question_grades: allGrades,
+        overall_feedback: aiFeedback || fallback.overall,
+        recommendations: aiRecommendations.length > 0 ? aiRecommendations : fallback.recommendations,
+      });
+    };
 
-      try {
-        const hasAnswerKey = (q: Question) =>
-          (q.type === "multiple_choice" || q.type === "true_false") &&
-          q.correct_answer != null &&
-          q.correct_answer !== "";
-        const closedQuestions = exam.questions.filter(hasAnswerKey);
-        const openQuestions = exam.questions.filter((q) => !hasAnswerKey(q));
-
-        const closedGrades = closedQuestions.map((q) => {
-          const selected = answers[q.id] ?? "";
-          const isCorrect = selected === q.correct_answer;
-          return {
-            question_id: q.id,
-            grade: isCorrect ? q.points : 0,
-            max_points: q.points,
-            feedback: isCorrect
-              ? "✓ תשובה נכונה"
-              : `✗ תשובה שגויה — התשובה הנכונה היא: ${q.correct_answer ?? ""}`,
-            correct_answer: q.correct_answer,
-          };
-        });
-
-        let openGrades: GradingResult["question_grades"] = [];
-        let aiOverallFeedback = "";
-        let aiRecommendations: string[] = [];
-
-        if (openQuestions.length > 0) {
-          const res = await authFetch("/api/grade-exam", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              exam,
-              answers,
-              courseId: examCourseId || selectedCourse,
-              examType,
-              questionsSubset: openQuestions.map((q) => q.id),
-            }),
-          });
-          const data = (await res.json()) as { ok: boolean; results?: GradingResult; error?: string };
-
-          if (!data.ok || !data.results) {
-            setGradeError(data.error ?? "שגיאה בבדיקת השאלות הפתוחות");
-            return;
-          }
-
-          openGrades = data.results.question_grades;
-          aiOverallFeedback = data.results.overall_feedback;
-          aiRecommendations = data.results.recommendations ?? [];
-        }
-
-        const allGrades = [...closedGrades, ...openGrades].sort(
-          (a, b) => a.question_id - b.question_id
-        );
-
-        const earned = allGrades.reduce((s, g) => s + g.grade, 0);
-        const total = allGrades.reduce((s, g) => s + g.max_points, 0);
-        const pct = total > 0 ? Math.round((earned / total) * 100) : 0;
-
-        let overall_feedback = aiOverallFeedback;
-        if (!overall_feedback) {
-          if (pct >= 90) overall_feedback = `מצוין! קיבלת ${pct}% (${earned}/${total} נקודות). שליטה מעולה בחומר.`;
-          else if (pct >= 70) overall_feedback = `טוב! קיבלת ${pct}% (${earned}/${total} נקודות). יש מקום לשיפור.`;
-          else if (pct >= 50) overall_feedback = `יש מקום לשיפור — קיבלת ${pct}% (${earned}/${total} נקודות).`;
-          else overall_feedback = `ציון נמוך — ${pct}% (${earned}/${total} נקודות). מומלץ לעבור שוב על החומר.`;
-        }
-
-        setResults({ total_grade: pct, question_grades: allGrades, overall_feedback, recommendations: aiRecommendations });
-      } catch {
-        setGradeError("שגיאת רשת — נסה שוב");
-      } finally {
-        setIsGrading(false);
-      }
-      return;
-    }
-
-    setIsGrading(true);
-    setGradeError(null);
-
-    try {
-      const res = await authFetch("/api/grade-exam", {
+    const gradeRequest = () =>
+      authFetch("/api/grade-exam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -498,16 +466,28 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
           answers,
           courseId: examCourseId || selectedCourse,
           examType,
+          questionsSubset: aiQuestions.map((q) => q.id),
+          localScore,
         }),
       });
-      const data = (await res.json()) as { ok: boolean; results?: GradingResult; error?: string };
 
+    // Everything was graded here: show the results right away and only record
+    // the score in the background.
+    if (aiQuestions.length === 0) {
+      showResults([]);
+      gradeRequest().catch(() => {});
+      return;
+    }
+
+    setIsGrading(true);
+    setGradeError(null);
+    try {
+      const data = await readApiJson<{ ok: boolean; results?: GradingResult; error?: string }>(await gradeRequest());
       if (!data.ok || !data.results) {
         setGradeError(data.error ?? "שגיאה בבדיקת המבחן");
         return;
       }
-
-      setResults(data.results);
+      showResults(data.results.question_grades, data.results.overall_feedback, data.results.recommendations ?? []);
     } catch {
       setGradeError("שגיאת רשת — נסה שוב");
     } finally {

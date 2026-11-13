@@ -59,7 +59,7 @@ npm install
 | `article_analysis_questions` / `article_analysis_answers` | שאלות ותשובות לניתוח מאמרים |
 | `app_config` | הגדרות מערכת (למשל מזהה ה-Vector Store של OpenAI) |
 
-פונקציות RPC נדרשות: `create_guest_user`, `delete_guest_user`, `list_guest_users`, `increment_course_stat`.
+פונקציות RPC נדרשות: `create_guest_user`, `delete_guest_user`, `list_guest_users`.
 
 כל הטבלאות מוגנות ב-RLS לפי המשתמש המחובר. המבנה המדויק של הטבלאות נמצא בפרויקט ה-Supabase; הטיפוסים בקוד נמצאים ב-`app/lib/supabase.ts`.
 

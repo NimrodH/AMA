@@ -84,6 +84,18 @@ export async function getActiveCourses(studentId: string, request?: Request): Pr
   return (data ?? []) as CourseRow[];
 }
 
+/** The display name of a student's course, or the course id when not found. */
+export async function getCourseName(studentId: string, courseId: string, request?: Request): Promise<string> {
+  const db = createServerClient(request);
+  const { data } = await db
+    .from("courses")
+    .select("course_name")
+    .eq("student_id", studentId)
+    .eq("course_id", courseId)
+    .maybeSingle();
+  return (data as { course_name?: string } | null)?.course_name || courseId;
+}
+
 /** Add a new course. */
 export async function addCourse(
   studentId: string,

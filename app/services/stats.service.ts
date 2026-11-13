@@ -13,32 +13,13 @@ export interface CourseStats {
 type IncrementField = "learn_sessions" | "past_exam_attempts" | "ai_exam_attempts";
 
 /**
- * Upsert a row for (student_id, course_id) and atomically increment one counter.
- */
-export async function incrementCourseStat(
-  studentId: string,
-  courseId: string,
-  field: IncrementField,
-  request?: Request
-): Promise<void> {
-  const db = createServerClient(request);
-
-  // Upsert with conflict target — insert defaults if row doesn't exist,
-  // then add 1 to the target field in both cases.
-  const { error } = await db.rpc("increment_course_stat", {
-    p_student_id: studentId,
-    p_course_id: courseId,
-    p_field: field,
-  });
-
-  if (error) {
-    console.error(`[stats] incrementCourseStat(${field}) error:`, error);
-  }
-}
-
-/**
  * Record the result of a completed & graded exam.
  * Also increments the appropriate attempt counter.
+ *
+ * The row is created only when it doesn't exist yet (`ignoreDuplicates`), the
+ * same way /api/track-learn-session does it. (A plain upsert with zeroed
+ * counters used to run here, which reset all of the course's other counters
+ * on every graded exam.)
  */
 export async function recordExamResult(
   studentId: string,
@@ -48,27 +29,21 @@ export async function recordExamResult(
   request?: Request
 ): Promise<void> {
   const db = createServerClient(request);
-  const field: IncrementField =
-    examType === "past" ? "past_exam_attempts" : "ai_exam_attempts";
+  const field: IncrementField = examType === "past" ? "past_exam_attempts" : "ai_exam_attempts";
 
-  // First ensure the row exists with zeroed counters
-  await db
-    .from("course_stats")
-    .upsert(
-      {
-        student_id: studentId,
-        course_id: courseId,
-        learn_sessions: 0,
-        past_exam_attempts: 0,
-        ai_exam_attempts: 0,
-        last_exam_grade: grade,
-        last_exam_date: new Date().toISOString(),
-        last_exam_type: examType,
-      },
-      { onConflict: "student_id,course_id", ignoreDuplicates: false }
-    );
+  // Ensure the row exists, without touching an existing one
+  await db.from("course_stats").upsert(
+    {
+      student_id: studentId,
+      course_id: courseId,
+      learn_sessions: 0,
+      past_exam_attempts: 0,
+      ai_exam_attempts: 0,
+    },
+    { onConflict: "student_id,course_id", ignoreDuplicates: true }
+  );
 
-  // Then read the current counter value and increment it
+  // Read the current counter and increment it, together with the last result
   const { data: existing } = await db
     .from("course_stats")
     .select(field)
@@ -78,7 +53,7 @@ export async function recordExamResult(
 
   const currentVal = (existing as Record<string, number> | null)?.[field] ?? 0;
 
-  await db
+  const { error } = await db
     .from("course_stats")
     .update({
       [field]: currentVal + 1,
@@ -88,6 +63,8 @@ export async function recordExamResult(
     })
     .eq("student_id", studentId)
     .eq("course_id", courseId);
+
+  if (error) console.error("[stats] recordExamResult update error:", error);
 }
 
 /**

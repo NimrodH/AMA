@@ -1,11 +1,14 @@
+import type OpenAI from "openai";
 import type { Route } from "./+types/api.generate-mc-exam";
 import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
+import { getCourseName } from "~/services/settings.service";
 import { saveExam } from "~/services/exams.service";
 import { sanitizeAnswerKey } from "~/lib/exam-answer-key.server";
 import { parseModelJson } from "~/lib/model-json.server";
+import { extractOutputText, fitExamToSlots, type ExamSlot } from "~/lib/exam-ai.server";
 
 // ─── System prompt ────────────────────────────────────────────────────────────
 
@@ -24,7 +27,7 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 - כל שאלה שווה נקודה אחת (points: 1)
 - כתוב בעברית בלבד
 
-חשוב מאוד: השתמש בכלי file_search כדי לאחזר את תוכן ההרצאות והמאמרים של הקורס לפני שאתה כותב שאלות. בסס כל שאלה על חומר ספציפי שמצאת בהם.
+חשוב מאוד: השתמש בכלי file_search כדי לאחזר את תוכן ההרצאות והמאמרים של הקורס לפני שאתה כותב שאלות. בצע חיפוש נפרד לכל הרצאה ולכל מאמר ברשימה, ובסס כל שאלה על חומר ספציפי שמצאת בהם.
 
 החזר פלט בפורמט JSON טהור בלבד, ללא בלוקים של קוד (ללא markdown), וללא תגיות json וללא כל טקסט מקדים או עוקב.
 {
@@ -41,23 +44,6 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
     }
   ]
 }`;
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Pull the final text content from a Responses API response object. */
-function extractOutputText(response: { output_text?: string; output?: Array<{ type: string; content?: Array<{ type: string; text?: string }> }> }): string {
-  if (response.output_text?.trim()) return response.output_text.trim();
-  if (Array.isArray(response.output)) {
-    for (const item of response.output) {
-      if (item.type === "message" && Array.isArray(item.content)) {
-        for (const part of item.content) {
-          if (part.type === "output_text" && part.text?.trim()) return part.text.trim();
-        }
-      }
-    }
-  }
-  return "";
-}
 
 // ─── Action ───────────────────────────────────────────────────────────────────
 
@@ -76,10 +62,11 @@ export async function action({ request }: Route.ActionArgs) {
   const session = await requireSession(request);
   const student = { id: session.studentId };
 
-  // ── 1. Fetch the content sources (lectures and articles) of this course ──
-  const [lectures, articles] = await Promise.all([
+  // ── 1. Content sources (lectures and articles) and course name ─────────
+  const [lectures, articles, courseName] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Lecture", request),
     getSourcesByCourse(student.id, courseId, "Article", request),
+    getCourseName(student.id, courseId, request),
   ]);
 
   if (lectures.length === 0 && articles.length === 0) {
@@ -89,61 +76,52 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  // ── 2. Collect vector store file IDs ─────────────────────────────────────
   const vectorStoreFileIds = [...lectures, ...articles]
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
 
-  // ── 3. Build the user prompt listing the available sources ───────────────
+  // ── 2. Prompt ───────────────────────────────────────────────────────────
   const lectureList = lectures
-    .map((s) => {
-      const label = s.lecture_number
-        ? `הרצאה ${s.lecture_number} — ${s.topic}`
-        : `${s.topic} (כלל הקורס)`;
-      return `• ${label}`;
-    })
+    .map((s) => `• ${s.lecture_number ? `הרצאה ${s.lecture_number} — ${s.topic}` : `${s.topic} (כלל הקורס)`}`)
     .join("\n");
   const articleList = articles.map((s) => `• מאמר — ${s.topic}`).join("\n");
 
-  const userPrompt = `קורס: ${courseId}
-מספר שאלות נדרש: ${count}
+  const userPrompt = `קורס: ${courseName}
+מספר שאלות נדרש: בדיוק ${count}
 
 חומרי הלימוד הזמינים (בנה מהם את השאלות):
 ${[lectureList, articleList].filter(Boolean).join("\n")}
 
-בצע חיפוש רחב בכל ההרצאות והמאמרים באמצעות file_search כדי לאחזר את התוכן, ולאחר מכן בנה מבחן אמריקאי עם ${count} שאלות המכסות את כלל החומר.`;
+אחזר את התוכן של כל אחד מחומרי הלימוד באמצעות file_search, ולאחר מכן בנה מבחן אמריקאי עם בדיוק ${count} שאלות המכסות את כלל החומר.`;
 
-  // ── 4. Call OpenAI with file_search against the vector store ─────────────
+  // ── 3. Call OpenAI ──────────────────────────────────────────────────────
   const client = getOpenAIClient();
   const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
-  let rawText: string;
+  const fileSearchTool: OpenAI.Responses.FileSearchTool = {
+    type: "file_search",
+    vector_store_ids: [vectorStoreId],
+    max_num_results: 50,
+    // Lectures and articles only — never past exams or summary cards
+    filters: courseContentFilter(student.id, courseId),
+  };
 
+  let rawText: string;
   try {
     if (vectorStoreFileIds.length > 0) {
-      // Use file_search — identical pattern to generate-exam-from-course
       const response = await client.responses.create({
         model: "gpt-4o",
         text: { format: { type: "json_object" } },
-        tools: [
-          {
-            type: "file_search",
-            vector_store_ids: [vectorStoreId],
-            max_num_results: 20,
-            // Lectures and articles only — never past exams or summary cards
-            filters: courseContentFilter(student.id, courseId),
-          },
-        ],
+        tools: [fileSearchTool],
         input: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: userPrompt },
         ],
       });
-
       rawText = extractOutputText(response);
     } else {
-      // No indexed files yet — fall back to topic-list only (edge case)
+      // No indexed files yet — fall back to the topic list only (edge case)
       console.warn("[generate-mc-exam] No vector store file IDs found, falling back to topic list");
       const response = await client.chat.completions.create({
         model: "gpt-4o",
@@ -160,42 +138,44 @@ ${[lectureList, articleList].filter(Boolean).join("\n")}
     }
   } catch (err) {
     console.error("[generate-mc-exam] OpenAI error:", err);
-    return Response.json(
-      { ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" },
-      { status: 502 }
-    );
+    return Response.json({ ok: false, error: "שגיאה בתקשורת עם OpenAI — נסה שוב" }, { status: 502 });
   }
 
-  if (!rawText) {
-    return Response.json(
-      { ok: false, error: "OpenAI לא החזיר תוכן — נסה שוב" },
-      { status: 500 }
-    );
-  }
-
-  // ── 5. Parse and return ───────────────────────────────────────────────────
-  const examData = parseModelJson(rawText);
-  if (examData === undefined) {
+  // ── 4. Parse, check the answer key and the question count ───────────────
+  const parsed = rawText ? parseModelJson(rawText) : undefined;
+  if (parsed === undefined) {
     console.error("[generate-mc-exam] Failed to parse JSON:", rawText);
-    return Response.json(
-      { ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" },
-      { status: 500 }
-    );
+    return Response.json({ ok: false, error: "לא ניתן לפרסר את המבחן — נסה שוב" }, { status: 500 });
+  }
+  sanitizeAnswerKey(parsed);
+
+  // Exactly `count` questions of 1 point; extras dropped, missing requested once more
+  const slots: ExamSlot[] = Array.from({ length: count }, () => ({ type: "multiple_choice", points: 1 }));
+  const { exam, missing } = await fitExamToSlots(parsed, slots, {
+    client,
+    fileSearchTool,
+    systemPrompt: SYSTEM_PROMPT,
+  });
+  if (missing > 0) console.warn(`[generate-mc-exam] ${missing} question(s) still missing after retry`);
+
+  if (exam.questions.length === 0) {
+    return Response.json({ ok: false, error: "המבחן שנוצר ריק — נסה שוב" }, { status: 500 });
   }
 
-  // Keep only answer keys that match one of the options exactly
-  sanitizeAnswerKey(examData);
+  // ── 5. Save to the exams list (awaited, so it isn't lost when the
+  // serverless function ends) ─────────────────────────────────────────────
+  try {
+    await saveExam({
+      studentId: student.id,
+      courseId,
+      title: exam.title ?? `${courseName} — מבחן אמריקאי`,
+      examType: "mc",
+      examContent: exam as object,
+      request,
+    });
+  } catch (err) {
+    console.warn("[generate-mc-exam] save exam failed:", err);
+  }
 
-  // 		6. Save exam to DB (fire-and-forget)																																
-  const examObj = examData as { title?: string };
-  saveExam({
-    studentId: student.id,
-    courseId,
-    title: examObj?.title ?? `${courseId} — מבחן אמריקאי`,
-    examType: "mc",
-    examContent: examData as object,
-    request,
-  }).catch((err) => console.warn("[generate-mc-exam] save exam failed:", err));
-
-  return Response.json({ ok: true, exam: examData });
+  return Response.json({ ok: true, exam });
 }
