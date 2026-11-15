@@ -20,6 +20,11 @@
   z-index: 5;
   display: grid;
   transform: translate(-50%, -50%);
+  width: calc(100vw - 2 * var(--space-4));
+  max-width: 32rem;
+  max-height: calc(100dvh - 2 * var(--space-4));
+  overflow-y: auto;
+  box-sizing: border-box;
   gap: var(--space-4);
   border: var(--border-size-1) solid var(--color-neutral-6);
   background: var(--color-neutral-3);

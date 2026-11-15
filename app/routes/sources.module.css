@@ -28,7 +28,8 @@
   gap: var(--space-4);
 }
 
-.uploadDialog {
+.uploadDialog.uploadDialog {
+  /* doubled class beats the base dialog's max-width regardless of CSS load order */
   max-width: 600px;
 }
 

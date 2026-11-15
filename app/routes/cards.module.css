@@ -203,7 +203,7 @@
 
 .cardsList {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(320px, 100%), 1fr));
   gap: var(--space-4);
 }
 
@@ -224,6 +224,7 @@
   width: 100%;
   font-family: inherit;
   box-sizing: border-box;
+  min-width: 0;
 }
 
 .savedCard:hover {
@@ -336,6 +337,12 @@
   padding: var(--space-3) var(--space-4);
 }
 
+/* Must stay before the mobile media query so the phone override wins */
+.headerCourseSelect {
+  min-width: 200px;
+  max-width: 280px;
+}
+
 @media (max-width: 768px) {
   .editor {
     padding: var(--space-4);
@@ -343,6 +350,15 @@
 
   .editorHeader {
     flex-wrap: wrap;
+  }
+
+  .sectionHeader {
+    flex-wrap: wrap;
+  }
+
+  .sectionTitle {
+    flex-wrap: wrap;
+    white-space: nowrap;
   }
 
   .editorActions {
@@ -359,7 +375,8 @@
   }
 
   .cardsList {
-    grid-template-columns: 1fr;
+    /* minmax(0, …) stops a long nowrap card title from widening the column past the screen */
+    grid-template-columns: minmax(0, 1fr);
   }
 
   .feedbackSection {
@@ -385,11 +402,6 @@
 
 .richEditor {
   min-height: 280px;
-}
-
-.headerCourseSelect {
-  min-width: 200px;
-  max-width: 280px;
 }
 
 .newCardBtn {

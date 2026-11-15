@@ -48,7 +48,8 @@
 .content {
   position: relative;
   z-index: 50;
-  max-height: 384px;
+  max-height: min(384px, var(--radix-select-content-available-height, 384px));
+  max-width: var(--radix-select-content-available-width, calc(100vw - 2 * var(--space-4)));
   overflow: hidden;
   border-radius: var(--radius-2);
   background: var(--color-neutral-1);
