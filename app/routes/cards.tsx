@@ -569,7 +569,7 @@ export default function Cards({ loaderData }: Route.ComponentProps) {
                 disabled={isExporting}
               >
                 <FileText style={{ marginLeft: "var(--space-2)" }} />
-                {isExporting ? "מייצא..." : "כרטיסים להרצאה"}
+                {isExporting ? "מייצא..." : "העתק הכרטיסים כהרצאה"}
               </Button>
             )}
           </div>
