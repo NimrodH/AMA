@@ -16,6 +16,8 @@ import {
 } from "~/lib/reminder-utils";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader } from "~/lib/client-auth-loader";
+import { useInitialDataPending } from "~/hooks/use-initial-data-pending";
+import { Skeleton } from "~/components/ui/skeleton/skeleton";
 import styles from "./home.module.css";
 
 export function meta({}: Route.MetaArgs) {
@@ -162,6 +164,7 @@ type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   const {
+    studentId,
     studentName,
     guestName,
     accountType,
@@ -171,6 +174,11 @@ export default function Home({ loaderData }: Route.ComponentProps) {
   } = loaderData as LoaderData;
 
   const isGuest = accountType === "guest";
+
+  // The server rendered without a valid session and the client is still
+  // reloading the data: show a loading state instead of the fallback name.
+  const initialDataPending = useInitialDataPending();
+  const isLoading = initialDataPending && !studentId;
 
   // Selected course — persisted in localStorage
   const [selectedCourse, setSelectedCourse] = React.useState<string>(() => readSelectedCourse());
@@ -201,6 +209,16 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     return addPendingReminders(todayIds, stored);
   });
 
+  // When the first data was reloaded on the client, the reminders arrive after
+  // mount, so add today's due ones once the student is known. Keyed on the
+  // student only, so a later revalidation doesn't bring back dismissed ones.
+  React.useEffect(() => {
+    if (!studentId) return;
+    const todayIds = activeReminders.filter((r) => isReminderDueToday(r.reminder_time)).map((r) => r.id);
+    setPending((prev) => (todayIds.every((id) => prev.has(id)) ? prev : addPendingReminders(todayIds, prev)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studentId]);
+
   // Show banners for reminders that are in the pending set
   const visibleReminders = activeReminders.filter((r) => pending.has(r.id));
 
@@ -214,11 +232,18 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         <div className={styles.welcome}>
           <div className={styles.welcomeTop}>
             <div>
-              <h1 className={styles.welcomeTitle}>
-                {isGuest
-                  ? `שלום, ${guestName ?? "אורח"}, אורח/ת של ${studentName ?? "סטודנט"}!`
-                  : `שלום, ${studentName ?? "סטודנט"}!`}
-              </h1>
+              {isLoading ? (
+                <h1 className={styles.welcomeTitle} aria-busy="true">
+                  <span className={styles.visuallyHidden}>טוען...</span>
+                  <Skeleton className={styles.welcomeTitleSkeleton} aria-hidden="true" />
+                </h1>
+              ) : (
+                <h1 className={styles.welcomeTitle}>
+                  {isGuest
+                    ? `שלום, ${guestName ?? "אורח"}, אורח/ת של ${studentName ?? "סטודנט"}!`
+                    : `שלום, ${studentName ?? "סטודנט"}!`}
+                </h1>
+              )}
               <p className={styles.welcomeText}>ברוך הבא למערכת ניהול הלימודים החכמה שלך</p>
             </div>
             {courses.length > 0 && (

@@ -26,6 +26,21 @@
   margin: 0 0 var(--space-3) 0;
 }
 
+.welcomeTitleSkeleton {
+  width: min(16rem, 70%);
+  height: 1.2em;
+  background: var(--color-accent-5);
+}
+
+.visuallyHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
 .welcomeText {
   font: var(--font-subheading);
   color: var(--color-accent-11);

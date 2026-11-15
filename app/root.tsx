@@ -26,7 +26,7 @@ import "./styles/error-boundary.css";
 import { useColorScheme } from "@dazl/color-scheme/react";
 import favicon from "/favicon.svg";
 import { syncTokenToCookie, getValidToken, getToken } from "~/lib/auth.client";
-import { consumeStaleInitialData } from "~/lib/client-auth-loader";
+import { consumeStaleInitialData, markInitialDataSettled } from "~/lib/client-auth-loader";
 
 export const links: Route.LinksFunction = () => [
   { rel: "preconnect", href: "https://fonts.googleapis.com" },
@@ -97,11 +97,12 @@ export default function App() {
 
   // If the first page was server-rendered with an expired token, its data is
   // the empty signed-out fallback. Once the client has refreshed the token,
-  // reload the data. Runs after every render but acts at most once.
+  // reload the data. Runs after every render but acts at most once. Pages
+  // show a loading state (useInitialDataPending) until the reload finishes.
   const revalidator = useRevalidator();
   React.useEffect(() => {
     if (revalidator.state === "idle" && consumeStaleInitialData()) {
-      void revalidator.revalidate();
+      void revalidator.revalidate().finally(markInitialDataSettled);
     }
   });
 

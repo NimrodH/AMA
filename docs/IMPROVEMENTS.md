@@ -25,11 +25,6 @@ Context: the original speed plan had four phases. Phase 1 (session/query fixes),
 - **What:** a thin top progress bar while a navigation is pending (`useNavigation().state !== "idle"`), so a slow page change gives instant feedback instead of looking stuck.
 - **Where:** a new component under `app/components/`, rendered once in `app/routes/app-shell.tsx`.
 
-### P2-3. Replace the brief "שלום, סטודנט" flash with a loading state
-
-- **What:** when the first page is server-rendered with an expired token, the data is empty until the client refreshes the token and reloads it, so the home page briefly shows "שלום, סטודנט!" and then the real name. Show a skeleton or loading state instead of the fallback text while that reload is pending.
-- **Where:** `app/lib/client-auth-loader.ts` (`staleInitialData`), `app/root.tsx` (revalidation), `app/routes/home.tsx` (greeting).
-
 ### P3-1. Remove supabase-js from the client bundle
 
 - **What:** `auth.client` is the biggest chunk loaded on every page (about 177 KB). It pulls in the whole Supabase client only for sign-in and token refresh. Replace it with direct `fetch` calls to the Supabase Auth REST endpoints (`/auth/v1/token?grant_type=password` and `?grant_type=refresh_token`), or move sign-in and refresh to the server.

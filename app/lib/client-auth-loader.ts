@@ -17,7 +17,7 @@
  */
 
 import { redirect } from "react-router";
-import { getToken, getValidToken, isTokenExpiring } from "~/lib/auth.client";
+import { getValidToken, isTokenExpiring } from "~/lib/auth.client";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type AnyFn = (...args: any[]) => any;
@@ -76,6 +76,17 @@ async function withAuthFetch<T>(token: string, fn: () => Promise<T>): Promise<T>
 let isInitialLoad = true;
 
 /**
+ * The token the server saw when it rendered the first page: the
+ * `auth_token` cookie as it was when the document was requested. Read at
+ * module load, before the app can refresh or re-sync the cookie.
+ */
+const serverRenderToken: string | null = (() => {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(/(?:^|;\s*)auth_token=([^;]*)/);
+  return match ? decodeURIComponent(match[1]) || null : null;
+})();
+
+/**
  * Set when the server rendered the first page with an expired (or missing)
  * token, so its loader data is the empty signed-out fallback. During
  * hydration `serverLoader()` returns that server-rendered data instead of
@@ -90,6 +101,30 @@ export function consumeStaleInitialData(): boolean {
   return stale;
 }
 
+/**
+ * False until the first page's data is known to be final: either the first
+ * client loader found the server-rendered data valid, or the reload of stale
+ * data has finished. Pages use it (via `useInitialDataPending`) to show a
+ * loading state instead of the signed-out fallback.
+ */
+let initialDataSettled = false;
+const settledListeners = new Set<() => void>();
+
+export function markInitialDataSettled(): void {
+  if (initialDataSettled) return;
+  initialDataSettled = true;
+  settledListeners.forEach((listener) => listener());
+}
+
+export function subscribeInitialDataSettled(listener: () => void): () => void {
+  settledListeners.add(listener);
+  return () => settledListeners.delete(listener);
+}
+
+export function isInitialDataSettled(): boolean {
+  return initialDataSettled;
+}
+
 export function makeClientLoader<TLoader extends AnyFn>() {
   const clientLoader = async ({
     serverLoader,
@@ -99,7 +134,6 @@ export function makeClientLoader<TLoader extends AnyFn>() {
     const firstLoad = isInitialLoad;
     isInitialLoad = false;
 
-    const storedToken = getToken();
     // Refreshes the token first when it is expired or about to expire
     const token = await getValidToken();
 
@@ -107,10 +141,14 @@ export function makeClientLoader<TLoader extends AnyFn>() {
       throw redirect("/login");
     }
 
-    // The server render used the stored (cookie) token. If that token had
+    // The server render used the cookie token. If it was missing or had
     // already expired, the server returned empty signed-out data.
-    if (firstLoad && token !== storedToken && (!storedToken || isTokenExpiring(storedToken, 0))) {
-      staleInitialData = true;
+    if (firstLoad) {
+      if (!serverRenderToken || isTokenExpiring(serverRenderToken, 0)) {
+        staleInitialData = true;
+      } else {
+        markInitialDataSettled();
+      }
     }
 
     return withAuthFetch(token, serverLoader);
