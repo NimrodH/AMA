@@ -45,6 +45,10 @@ Dev-only route: `/dev/components` shows the UI component gallery (`*.example.tsx
 
 **Client state:** the selected course persists in localStorage (`app/hooks/use-selected-course.ts`). Card and summary content is stored as serialized Lexical JSON or plain text; `app/lib/lexical-utils.ts` converts between them.
 
+## Pending improvements
+
+`docs/IMPROVEMENTS.md` lists proposed improvements and fixes that are not implemented yet (speed, AI exams, other issues), each with an ID such as `P2-1` or `E-3`. Read it whenever the user asks to implement one of them, refers to one by ID or description, or asks what is left to improve. When an item is done, remove it from that file in the same change; when a new improvement is proposed but not done, add it there.
+
 ## Conventions
 
 - Kebab-case file and folder names; one component per file, with a `component-name.module.css` next to it that the component imports.
