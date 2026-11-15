@@ -1,5 +1,3 @@
-import { createClient } from "@supabase/supabase-js";
-
 const TOKEN_KEY = "auth_token";
 const REFRESH_TOKEN_KEY = "auth_refresh_token";
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 30; // 30 days
@@ -94,33 +92,84 @@ export async function restoreSession(): Promise<string | null> {
   }
 }
 
-async function doRefresh(refreshToken: string): Promise<string | null> {
+/** Tokens returned by the Supabase Auth `/token` endpoint. */
+interface AuthTokens {
+  access_token: string;
+  refresh_token: string;
+}
+
+type TokenResult =
+  | { ok: true; tokens: AuthTokens }
+  | { ok: false; status: number }; // status 0 = network error / not configured
+
+/**
+ * Call the Supabase Auth REST endpoint `/auth/v1/token` directly, so the client
+ * bundle does not need `@supabase/supabase-js` just for sign-in and refresh.
+ */
+async function requestToken(
+  grantType: "password" | "refresh_token",
+  body: Record<string, string>,
+): Promise<TokenResult> {
+  const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
+  const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
+  if (!supabaseUrl || !supabaseKey) return { ok: false, status: 0 };
+
+  let res: Response;
   try {
-    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined;
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined;
-
-    if (!supabaseUrl || !supabaseKey) return null;
-
-    const client = createClient(supabaseUrl, supabaseKey, {
-      auth: { autoRefreshToken: false, persistSession: false },
+    res = await fetch(`${supabaseUrl.replace(/\/+$/, "")}/auth/v1/token?grant_type=${grantType}`, {
+      method: "POST",
+      headers: {
+        apikey: supabaseKey,
+        Authorization: `Bearer ${supabaseKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(body),
     });
-
-    const { data, error } = await client.auth.refreshSession({ refresh_token: refreshToken });
-
-    if (error || !data.session) {
-      // Refresh token is invalid — clear everything
-      clearToken();
-      return null;
-    }
-
-    // Store the fresh tokens
-    saveToken(data.session.access_token);
-    saveRefreshToken(data.session.refresh_token);
-
-    return data.session.access_token;
   } catch {
+    return { ok: false, status: 0 };
+  }
+
+  if (!res.ok) return { ok: false, status: res.status };
+  try {
+    const data = (await res.json()) as Partial<AuthTokens>;
+    if (!data.access_token || !data.refresh_token) return { ok: false, status: res.status };
+    return { ok: true, tokens: { access_token: data.access_token, refresh_token: data.refresh_token } };
+  } catch {
+    return { ok: false, status: res.status };
+  }
+}
+
+export type SignInResult = { ok: true } | { ok: false; reason: "invalid" | "error" };
+
+/**
+ * Sign in with email and password. On success the tokens are saved
+ * (localStorage + cookie). `invalid` means wrong credentials; `error` means
+ * a network or server problem.
+ */
+export async function signInWithPassword(email: string, password: string): Promise<SignInResult> {
+  const result = await requestToken("password", { email, password });
+  if (!result.ok) {
+    return { ok: false, reason: result.status >= 400 && result.status < 500 ? "invalid" : "error" };
+  }
+  saveToken(result.tokens.access_token);
+  saveRefreshToken(result.tokens.refresh_token);
+  return { ok: true };
+}
+
+async function doRefresh(refreshToken: string): Promise<string | null> {
+  const result = await requestToken("refresh_token", { refresh_token: refreshToken });
+
+  if (!result.ok) {
+    // Auth rejected the refresh token (4xx, not rate limiting): clear everything.
+    // Network/server errors keep the stored tokens so a later attempt can succeed.
+    if (result.status >= 400 && result.status < 500 && result.status !== 429) clearToken();
     return null;
   }
+
+  // Store the fresh tokens
+  saveToken(result.tokens.access_token);
+  saveRefreshToken(result.tokens.refresh_token);
+  return result.tokens.access_token;
 }
 
 /** Refresh the access token when it has less than this many seconds left. */

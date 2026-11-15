@@ -25,11 +25,6 @@ Context: the original speed plan had four phases. Phase 1 (session/query fixes),
 - **What:** a thin top progress bar while a navigation is pending (`useNavigation().state !== "idle"`), so a slow page change gives instant feedback instead of looking stuck.
 - **Where:** a new component under `app/components/`, rendered once in `app/routes/app-shell.tsx`.
 
-### P3-1. Remove supabase-js from the client bundle
-
-- **What:** `auth.client` is the biggest chunk loaded on every page (about 177 KB). It pulls in the whole Supabase client only for sign-in and token refresh. Replace it with direct `fetch` calls to the Supabase Auth REST endpoints (`/auth/v1/token?grant_type=password` and `?grant_type=refresh_token`), or move sign-in and refresh to the server.
-- **Where:** `app/lib/auth.client.ts`, `app/routes/login.tsx`, and anything else that imports supabase-js on the client.
-
 ### P3-2. Lazy-load the Lexical code-highlighting module (Prism)
 
 - **What:** `LexicalCodePrism` is about 245 KB and is bundled with the rich text editor. Load it only when a code block is used, or drop code highlighting if it isn't needed.
