@@ -1,5 +1,6 @@
 import * as React from "react";
 import { LogOut } from "lucide-react";
+import { useLocation } from "react-router";
 import { SidebarTrigger } from "~/components/ui/sidebar/sidebar";
 import { ColorSchemeToggle } from "~/components/ui/color-scheme-toggle/color-scheme-toggle";
 import { useLogout } from "./app-sidebar";
@@ -29,21 +30,24 @@ interface AppLayoutProps {
  */
 export function AppLayout({ children, title = "מערכת ניהול לימודים", headerExtra }: AppLayoutProps) {
   const logout = useLogout();
+  const isHome = useLocation().pathname === "/";
 
   return (
     <main className={styles.main}>
       <header className={styles.header}>
         <div className={styles.headerActions}>
-          <button type="button" onClick={logout} className={styles.headerLogoutBtn} title="יציאה">
-            <LogOut size={18} />
-          </button>
+          <SidebarTrigger className={styles.headerMenuBtn} title="תפריט" />
           <ColorSchemeToggle />
-          <SidebarTrigger />
         </div>
         <div className={styles.headerTitleRow}>
           <h1 className={styles.headerTitle}>{title}</h1>
           {headerExtra && <div className={styles.headerExtra}>{headerExtra}</div>}
         </div>
+        {isHome && (
+          <button type="button" onClick={logout} className={styles.headerLogoutBtn} title="יציאה">
+            <LogOut size={18} />
+          </button>
+        )}
       </header>
       <div className={styles.content}>{children}</div>
     </main>

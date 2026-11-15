@@ -71,6 +71,32 @@
   transition: color 0.15s, background 0.15s, border-color 0.15s;
 }
 
+/* Same rectangle as the logout button; the extra class beats the sidebar's own .trigger size */
+.headerActions .headerMenuBtn {
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  border: 1px solid var(--color-neutral-6);
+  border-radius: var(--radius-2);
+  color: var(--color-neutral-10);
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.headerActions .headerMenuBtn svg {
+  width: 20px;
+  height: 20px;
+}
+
+.headerActions .headerMenuBtn:hover {
+  color: var(--color-neutral-12);
+  background: var(--color-neutral-3);
+  border-color: var(--color-neutral-7);
+}
+
+.headerLogoutBtn {
+  flex-shrink: 0;
+}
+
 .headerLogoutBtn:hover {
   color: var(--color-error-11);
   background: var(--color-error-2);
@@ -113,6 +139,10 @@
   .headerTitleRow {
     flex-wrap: wrap;
     min-width: 0;
+  }
+
+  /* Only a title row with extra content (e.g. a course selector) needs its own line */
+  .headerTitleRow:has(.headerExtra) {
     width: 100%;
   }
 
