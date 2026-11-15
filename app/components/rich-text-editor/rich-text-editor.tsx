@@ -9,7 +9,9 @@ import { LexicalErrorBoundary } from "@lexical/react/LexicalErrorBoundary";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { HeadingNode, QuoteNode } from "@lexical/rich-text";
 import { ListItemNode, ListNode } from "@lexical/list";
-import { CodeNode } from "@lexical/code";
+// Only the node classes (no Prism highlighter): the app never creates code blocks,
+// but saved content may contain them and must still load.
+import { CodeHighlightNode, CodeNode } from "@lexical/code-core";
 import { type EditorState, $getSelection, $isRangeSelection, SELECTION_CHANGE_COMMAND, COMMAND_PRIORITY_LOW } from "lexical";
 import {
   FORMAT_TEXT_COMMAND,
@@ -187,7 +189,7 @@ function makeEditorConfig(key: string) {
         underlineStrikethrough: styles.textUnderlineStrikethrough,
       },
     },
-    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode],
+    nodes: [HeadingNode, QuoteNode, ListNode, ListItemNode, CodeNode, CodeHighlightNode],
     onError(error: Error) {
       console.error("Lexical editor error:", error);
     },

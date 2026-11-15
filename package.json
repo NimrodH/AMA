@@ -12,7 +12,7 @@
     "@dazl/color-scheme": "^1.2.1",
     "@google/genai": "^1.44.0",
     "@hookform/resolvers": "^5.2.2",
-    "@lexical/code": "^0.42.0",
+    "@lexical/code-core": "^0.42.0",
     "@lexical/history": "^0.42.0",
     "@lexical/link": "^0.42.0",
     "@lexical/list": "^0.42.0",

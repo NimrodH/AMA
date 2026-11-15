@@ -25,11 +25,6 @@ Context: the original speed plan had four phases. Phase 1 (session/query fixes),
 - **What:** a thin top progress bar while a navigation is pending (`useNavigation().state !== "idle"`), so a slow page change gives instant feedback instead of looking stuck.
 - **Where:** a new component under `app/components/`, rendered once in `app/routes/app-shell.tsx`.
 
-### P3-2. Lazy-load the Lexical code-highlighting module (Prism)
-
-- **What:** `LexicalCodePrism` is about 245 KB and is bundled with the rich text editor. Load it only when a code block is used, or drop code highlighting if it isn't needed.
-- **Where:** `app/components/rich-text-editor/`.
-
 ### P3-3. Self-host the fonts
 
 - **What:** Rubik and Heebo come from Google Fonts, which adds a connection to two more domains before the text renders. Serve them from `public/` with `font-display: swap` and preload the main weight.
