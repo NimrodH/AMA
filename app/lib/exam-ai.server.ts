@@ -21,6 +21,8 @@ export interface ExamQuestion {
 export interface ExamData {
   title?: string;
   instructions?: string;
+  /** The lectures and articles the exam was built from, as display labels */
+  sources?: string[];
   questions: ExamQuestion[];
 }
 

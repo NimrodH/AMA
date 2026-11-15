@@ -15,19 +15,68 @@ const VECTOR_STORE_CONFIG_KEY = "openai_vector_store_id";
  */
 export const COURSE_CONTENT_SOURCE_TYPES = ["Lecture", "Article"] as const;
 
+export type CourseContentSourceType = (typeof COURSE_CONTENT_SOURCE_TYPES)[number];
+
+/** Narrows a course content search to some source types or to specific sources. */
+export interface CourseContentScope {
+  /** Only these source types (each must be a course content type). */
+  sourceTypes?: CourseContentSourceType[];
+  /**
+   * Only these sources. Their vector store files must carry a `source_id`
+   * attribute (see `ensureSourceIdAttributes`).
+   */
+  sourceIds?: string[];
+}
+
 /**
  * file_search filter for a course's content files (lectures and articles) of
- * one student.
+ * one student, optionally narrowed to some source types or sources.
  */
-export function courseContentFilter(studentId: string, courseId: string) {
-  return {
-    type: "and" as const,
-    filters: [
-      { type: "eq" as const, key: "student_id", value: studentId },
-      { type: "eq" as const, key: "course_id", value: courseId },
-      { type: "in" as const, key: "source_type", value: [...COURSE_CONTENT_SOURCE_TYPES] },
-    ],
-  };
+export function courseContentFilter(studentId: string, courseId: string, scope: CourseContentScope = {}) {
+  const sourceTypes = scope.sourceTypes?.length ? scope.sourceTypes : [...COURSE_CONTENT_SOURCE_TYPES];
+  const filters: { type: "eq" | "in"; key: string; value: string | string[] }[] = [
+    { type: "eq", key: "student_id", value: studentId },
+    { type: "eq", key: "course_id", value: courseId },
+    { type: "in", key: "source_type", value: sourceTypes },
+  ];
+  if (scope.sourceIds?.length) {
+    filters.push({ type: "in", key: "source_id", value: scope.sourceIds });
+  }
+  return { type: "and" as const, filters };
+}
+
+/**
+ * Makes sure the vector store files of the given sources carry a `source_id`
+ * attribute, so a file_search can be limited to them. Files uploaded before
+ * this attribute existed are updated in place (their other attributes are
+ * kept). Files that can't be read are skipped and logged.
+ */
+export async function ensureSourceIdAttributes(
+  db: SupabaseClient,
+  sources: { id: string; vector_store_file_id?: string | null }[]
+): Promise<void> {
+  const withFiles = sources.filter((s) => s.vector_store_file_id);
+  if (withFiles.length === 0) return;
+
+  const client = getOpenAIClient();
+  const vectorStoreId = await getOrCreateVectorStore(db);
+
+  await Promise.all(
+    withFiles.map(async (source) => {
+      const fileId = source.vector_store_file_id as string;
+      try {
+        const file = await client.vectorStores.files.retrieve(fileId, { vector_store_id: vectorStoreId });
+        const attributes = file.attributes ?? {};
+        if (attributes.source_id === source.id) return;
+        await client.vectorStores.files.update(fileId, {
+          vector_store_id: vectorStoreId,
+          attributes: { ...attributes, source_id: source.id },
+        });
+      } catch (err) {
+        console.warn(`[ensureSourceIdAttributes] could not tag file ${fileId} of source ${source.id}:`, err);
+      }
+    })
+  );
 }
 
 /**
@@ -106,9 +155,25 @@ interface UploadToVectorStoreParams {
   metadata: Record<string, string>;
 }
 
+/** Runs `fn`, and once more after a short pause if it throws. */
+async function withOneRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  try {
+    return await fn();
+  } catch (err) {
+    console.warn(`[uploadToVectorStore] ${label} failed, retrying once:`, err);
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return fn();
+  }
+}
+
 /**
  * Uploads a file to the OpenAI vector store with metadata attributes.
  * Returns the vector store file ID for reference.
+ *
+ * Each step is retried once, so a passing network or API error doesn't leave
+ * a source out of the AI's search. Throws if a step still fails; callers save
+ * the source anyway, and the sources page then marks it as not available to
+ * the AI (the "סנכרן" button indexes it again).
  */
 export async function uploadToVectorStore({
   db,
@@ -120,17 +185,20 @@ export async function uploadToVectorStore({
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   // 1. Upload the file to OpenAI's file storage
-  const blob = new Blob([new Uint8Array(fileBuffer)]);
-  const file = await client.files.create({
-    file: new File([blob], fileName),
-    purpose: "assistants",
-  });
+  const file = await withOneRetry("file upload", () =>
+    client.files.create({
+      file: new File([new Uint8Array(fileBuffer)], fileName),
+      purpose: "assistants",
+    })
+  );
 
   // 2. Attach the file to the vector store with metadata attributes
-  const vectorStoreFile = await client.vectorStores.files.create(vectorStoreId, {
-    file_id: file.id,
-    attributes: metadata,
-  });
+  const vectorStoreFile = await withOneRetry("vector store attach", () =>
+    client.vectorStores.files.create(vectorStoreId, {
+      file_id: file.id,
+      attributes: metadata,
+    })
+  );
 
   return vectorStoreFile.id;
 }

@@ -67,11 +67,6 @@ Context: the high- and medium-priority fixes from the exam review are done (grad
 - **Where:** `app/routes/api.generate-exam-from-course.ts`, `api.generate-mc-exam.ts`, `api.grade-exam.ts`, `app/services/past-exam.service.ts`, `app/lib/exam-ai.server.ts`.
 - **Notes:** check that strict schemas work together with the `file_search` tool for the model used.
 
-### E-4. Let the student choose the exam's sources
-
-- **What:** an option on the exams page to build the exam from lectures, articles or both, or from selected sources only, instead of always all of the course's lectures and articles.
-- **Where:** `app/routes/exams.tsx` (UI), the generation routes, `courseContentFilter` in `app/lib/openai.server.ts` (an extra filter on source ids or types).
-
 ### E-5. Source citation for each question
 
 - **What:** ask the model to add the lecture or article each question is based on (for example a `source` field), and show it with the results. It helps the student review, and makes wrong questions easy to trace.
@@ -102,3 +97,9 @@ Context: the high- and medium-priority fixes from the exam review are done (grad
 ### O-3. Requests to /favicon.ico fail
 
 - **What:** browsers request `/favicon.ico`, which has no route, so the server logs an error for every request. Add a `public/favicon.ico` (or a redirect to `favicon.svg`).
+
+### O-4. Find why adding sources stopped indexing them on the live site
+
+- **What:** every source added from about 2026-06-20 on was saved without a `vector_store_file_id`, so the AI can't search it (exams, card feedback). The same files index fine from a local run, and uploads now retry once and mark unindexed sources on the sources page and in the exam source picker. The cause on the live site is still unknown. Check the Netlify function logs for `OpenAI vector store upload error` while adding a source, and the `OPENAI_API_KEY` set on Netlify.
+- **Where:** Netlify function logs; `uploadToVectorStore` in `app/lib/openai.server.ts`, called from `app/services/sources.service.ts`.
+- **Notes:** the sources that are already unindexed can be fixed with the "סנכרן" button on each source card.

@@ -56,6 +56,41 @@ export async function getSourcesByCourse(
   return (data ?? []) as SourceRow[];
 }
 
+/** A lecture or article an AI exam can be built from (for the exams page picker). */
+export interface ExamContentSource {
+  id: string;
+  course_id: string;
+  source_type: "Lecture" | "Article";
+  lecture_number: number | null;
+  topic: string | null;
+  /** In the AI's search index (false when indexing failed on upload) */
+  indexed: boolean;
+}
+
+/** Lectures and articles of the given courses, ordered by lecture number then upload time. */
+export async function getExamContentSources(
+  studentId: string,
+  courseIds: string[],
+  request?: Request
+): Promise<ExamContentSource[]> {
+  if (courseIds.length === 0) return [];
+  const db = createServerClient(request);
+  const { data, error } = await db
+    .from("sources")
+    .select("id, course_id, source_type, lecture_number, topic, vector_store_file_id")
+    .eq("student_id", studentId)
+    .in("course_id", courseIds)
+    .in("source_type", ["Lecture", "Article"])
+    .order("lecture_number", { ascending: true, nullsFirst: false })
+    .order("created_at", { ascending: true });
+
+  if (error) return [];
+  return (data ?? []).map(({ vector_store_file_id, ...s }) => ({
+    ...(s as Omit<ExamContentSource, "indexed">),
+    indexed: !!vector_store_file_id,
+  }));
+}
+
 /** Fetch all sources for a student (list view: without the extracted document text). */
 export async function getSources(studentId: string, request?: Request): Promise<SourceRow[]> {
   const db = createServerClient(request);

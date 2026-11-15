@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import type { Route } from "./+types/api.generate-mc-exam";
-import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { examSourceLabels, readSourceIds, selectExamContent } from "~/lib/exam-sources.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
@@ -14,7 +15,7 @@ import { extractOutputText, fitExamToSlots, type ExamSlot } from "~/lib/exam-ai.
 
 const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצועי.
 קיבלת גישה לחומרי הלימוד של הקורס (הרצאות ומאמרים).
-המשימה שלך: לבנות מבחן אמריקאי (multiple choice) המכסה את כלל חומרי הקורס באופן מאוזן.
+המשימה שלך: לבנות מבחן אמריקאי (multiple choice) המכסה את כלל חומרי הלימוד שסופקו באופן מאוזן.
 
 חוקים:
 - כל שאלה חייבת להיות בעברית
@@ -48,10 +49,13 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 // ─── Action ───────────────────────────────────────────────────────────────────
 
 export async function action({ request }: Route.ActionArgs) {
-  const { courseId, questionCount } = (await request.json()) as {
+  const { courseId, questionCount, sourceIds: rawSourceIds } = (await request.json()) as {
     courseId: string;
     questionCount: number;
+    /** Optional: build the exam only from these lectures and articles */
+    sourceIds?: unknown;
   };
+  const sourceIds = readSourceIds(rawSourceIds);
 
   if (!courseId) {
     return Response.json({ ok: false, error: "courseId is required" }, { status: 400 });
@@ -63,18 +67,33 @@ export async function action({ request }: Route.ActionArgs) {
   const student = { id: session.studentId };
 
   // ── 1. Content sources (lectures and articles) and course name ─────────
-  const [lectures, articles, courseName] = await Promise.all([
+  const [allLectures, allArticles, courseName] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Lecture", request),
     getSourcesByCourse(student.id, courseId, "Article", request),
     getCourseName(student.id, courseId, request),
   ]);
 
-  if (lectures.length === 0 && articles.length === 0) {
+  if (allLectures.length === 0 && allArticles.length === 0) {
     return Response.json(
       { ok: false, error: "לא נמצאו הרצאות או מאמרים לקורס זה. העלה חומרי לימוד כדי שה-AI יוכל לבנות שאלות מהתוכן." },
       { status: 422 }
     );
   }
+
+  const client = getOpenAIClient();
+  const db = createServerClient(request);
+  const selection = await selectExamContent({
+    db,
+    studentId: student.id,
+    courseId,
+    lectures: allLectures,
+    articles: allArticles,
+    sourceIds,
+  });
+  if (!selection.ok) {
+    return Response.json({ ok: false, error: selection.error }, { status: 422 });
+  }
+  const { lectures, articles } = selection;
 
   const vectorStoreFileIds = [...lectures, ...articles]
     .map((s) => s.vector_store_file_id)
@@ -95,16 +114,14 @@ ${[lectureList, articleList].filter(Boolean).join("\n")}
 אחזר את התוכן של כל אחד מחומרי הלימוד באמצעות file_search, ולאחר מכן בנה מבחן אמריקאי עם בדיוק ${count} שאלות המכסות את כלל החומר.`;
 
   // ── 3. Call OpenAI ──────────────────────────────────────────────────────
-  const client = getOpenAIClient();
-  const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   const fileSearchTool: OpenAI.Responses.FileSearchTool = {
     type: "file_search",
     vector_store_ids: [vectorStoreId],
     max_num_results: 50,
-    // Lectures and articles only — never past exams or summary cards
-    filters: courseContentFilter(student.id, courseId),
+    // The selected lectures and articles only — never past exams or summary cards
+    filters: selection.filter,
   };
 
   let rawText: string;
@@ -161,6 +178,8 @@ ${[lectureList, articleList].filter(Boolean).join("\n")}
   if (exam.questions.length === 0) {
     return Response.json({ ok: false, error: "המבחן שנוצר ריק — נסה שוב" }, { status: 500 });
   }
+
+  exam.sources = examSourceLabels(lectures, articles);
 
   // ── 5. Save to the exams list (awaited, so it isn't lost when the
   // serverless function ends) ─────────────────────────────────────────────

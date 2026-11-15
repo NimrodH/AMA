@@ -212,6 +212,14 @@ export function SourceCard({ source, studentId, className, isGuest = false }: So
         </div>
       )}
 
+      {/* ── Not in the AI's search index (indexing failed when it was added) ── */}
+      {!isGuest && !source.vector_store_file_id && !activeResult?.newVectorStoreFileId && !isAnyLoading && (
+        <div className={classNames(styles.reuploadStatus, styles.reuploadErr)}>
+          <AlertCircle style={{ width: 13, height: 13, flexShrink: 0 }} />
+          המקור לא זמין לחיפוש של ה-AI (מבחנים, משוב על כרטיסים). לחץ על &quot;סנכרן&quot; כדי להוסיף אותו.
+        </div>
+      )}
+
       {/* ── Operation status banner ── */}
       {activeResult && (
         <div

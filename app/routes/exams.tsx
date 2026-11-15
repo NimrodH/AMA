@@ -26,6 +26,8 @@ import { Badge } from "~/components/ui/badge/badge";
 import { getActiveCourses } from "~/services/settings.service";
 import { getSession } from "~/lib/auth.server";
 import { getExamsForCourses, type ExamListRow } from "~/services/exams.service";
+import { getExamContentSources, type ExamContentSource } from "~/services/sources.service";
+import { ExamSourcePicker } from "~/components/exam-source-picker/exam-source-picker";
 import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-course";
 import { makeClientLoader } from "~/lib/client-auth-loader";
 import { authFetch } from "~/lib/auth-fetch";
@@ -51,6 +53,8 @@ interface Question {
 interface ExamData {
   title: string;
   instructions: string;
+  /** Lectures and articles the exam was built from (AI exams created after this was added) */
+  sources?: string[];
   questions: Question[];
   isMcExam?: boolean;
 }
@@ -72,17 +76,31 @@ interface GradingResult {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const session = await getSession(request);
-  if (!session) return { courses: [] as Awaited<ReturnType<typeof getActiveCourses>>, savedExams: [] as ExamListRow[], studentId: "", accountType: "student" as const };
+  if (!session)
+    return {
+      courses: [] as Awaited<ReturnType<typeof getActiveCourses>>,
+      savedExams: [] as ExamListRow[],
+      contentSources: [] as ExamContentSource[],
+      studentId: "",
+      accountType: "student" as const,
+    };
   // The session already holds the student id and name — no need to query them again
   const student = { id: session.studentId, name: session.studentName };
   const courses = await getActiveCourses(student.id, request);
-  // Load exams for all courses in one query (we'll filter client-side by selected course)
-  const savedExams = await getExamsForCourses(
-    student.id,
-    courses.map((c) => c.course_id),
-    request
-  );
-  return { courses, savedExams, studentId: student.id, accountType: session.accountType as "student" | "guest" };
+  const courseIds = courses.map((c) => c.course_id);
+  // Exams and exam sources for all courses in one query each (filtered client-side by selected course).
+  // Guests can't generate exams, so they don't need the sources.
+  const [savedExams, contentSources] = await Promise.all([
+    getExamsForCourses(student.id, courseIds, request),
+    session.accountType === "guest" ? Promise.resolve([]) : getExamContentSources(student.id, courseIds, request),
+  ]);
+  return {
+    courses,
+    savedExams,
+    contentSources,
+    studentId: student.id,
+    accountType: session.accountType as "student" | "guest",
+  };
 }
 
 export const clientLoader = makeClientLoader<typeof loader>();
@@ -171,7 +189,7 @@ function examTypeBadgeVariant(type: string | null): "default" | "secondary" | "o
 type LoaderData = Awaited<ReturnType<typeof loader>>;
 
 export default function Exams({ loaderData }: Route.ComponentProps) {
-  const { courses, savedExams, accountType } = loaderData as LoaderData;
+  const { courses, savedExams, contentSources, accountType } = loaderData as LoaderData;
   const isGuest = accountType === "guest";
   const [searchParams] = useSearchParams();
   const sourceIdParam = searchParams.get("sourceId");
@@ -214,6 +232,25 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
   const [mcQuestionCount, setMcQuestionCount] = React.useState(10);
   const [deletingExamId, setDeletingExamId] = React.useState<string | null>(null);
   const [deletedExamIds, setDeletedExamIds] = React.useState<Set<string>>(new Set());
+
+  // Lectures and articles of the selected course, and the ones the exam is built from (default: all)
+  const courseSources = React.useMemo(
+    () => contentSources.filter((s) => s.course_id === selectedCourse),
+    [contentSources, selectedCourse]
+  );
+  const [selectedSourceIds, setSelectedSourceIds] = React.useState<Set<string>>(
+    () => new Set(courseSources.map((s) => s.id))
+  );
+  React.useEffect(() => {
+    setSelectedSourceIds(new Set(courseSources.map((s) => s.id)));
+  }, [courseSources]);
+  const selectedSourceCount = courseSources.filter((s) => selectedSourceIds.has(s.id)).length;
+  const noSourcesSelected = courseSources.length > 0 && selectedSourceCount === 0;
+  /** `sourceIds` for the generation request; omitted when the whole course is selected */
+  const sourceIdsForRequest = (): string[] | undefined =>
+    selectedSourceCount === courseSources.length
+      ? undefined
+      : courseSources.filter((s) => selectedSourceIds.has(s.id)).map((s) => s.id);
 
   // Saved exams filtered by selected course, excluding optimistically deleted ones
   const courseExams = React.useMemo(
@@ -272,13 +309,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
     setResults(null);
     setShowMcOptions(false);
 
+    const sourceIds = sourceIdsForRequest();
     type GenerateResponse = { ok: boolean; exam?: ExamData; error?: string; needsPastExamParse?: string };
     const requestExam = async () =>
       readApiJson<GenerateResponse>(
         await authFetch("/api/generate-exam-from-course", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ courseId: selectedCourse }),
+          body: JSON.stringify({ courseId: selectedCourse, sourceIds }),
         })
       );
 
@@ -328,7 +366,11 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
       const res = await authFetch("/api/generate-mc-exam", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ courseId: selectedCourse, questionCount: mcQuestionCount }),
+        body: JSON.stringify({
+          courseId: selectedCourse,
+          questionCount: mcQuestionCount,
+          sourceIds: sourceIdsForRequest(),
+        }),
       });
 
       const data = await readApiJson<{ ok: boolean; exam?: ExamData; error?: string }>(res);
@@ -605,23 +647,20 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                   </Select>
                 </div>
 
-                <div>
-                  <Label htmlFor="examTopic">נושאים (אופציונלי)</Label>
-                  <Select>
-                    <SelectTrigger id="examTopic">
-                      <SelectValue placeholder="כל הנושאים" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">כל הנושאים</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                {selectedCourse !== "_empty" && (
+                  <ExamSourcePicker
+                    sources={courseSources}
+                    selected={selectedSourceIds}
+                    onChange={setSelectedSourceIds}
+                    disabled={isGenerating}
+                  />
+                )}
 
                 <div className={styles.examButtons}>
                   <Button
                     type="button"
                     onClick={handleGenerateExam}
-                    disabled={isGenerating || selectedCourse === "_empty"}
+                    disabled={isGenerating || selectedCourse === "_empty" || noSourcesSelected}
                     size="lg"
                     variant="outline"
                   >
@@ -633,7 +672,7 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                     <Button
                       type="button"
                       onClick={() => setShowMcOptions((v) => !v)}
-                      disabled={isGenerating || selectedCourse === "_empty"}
+                      disabled={isGenerating || selectedCourse === "_empty" || noSourcesSelected}
                       size="lg"
                     >
                       <ListChecks style={{ marginLeft: "var(--space-2)" }} />
@@ -663,14 +702,14 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
                           <Button
                             type="button"
                             onClick={handleGenerateMcExam}
-                            disabled={isGenerating || selectedCourse === "_empty"}
+                            disabled={isGenerating || selectedCourse === "_empty" || noSourcesSelected}
                             size="lg"
                           >
                             <Sparkles style={{ marginLeft: "var(--space-2)" }} />
                             בנה מבחן
                           </Button>
                         </div>
-                        <p className={styles.mcHint}>5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל ההרצאות</p>
+                        <p className={styles.mcHint}>5–50 שאלות • 4 תשובות לכל שאלה • מכסה את כל החומר שנבחר</p>
                       </div>
                     )}
                   </div>
@@ -774,6 +813,18 @@ export default function Exams({ loaderData }: Route.ComponentProps) {
             <div className={styles.exam}>
               <div className={styles.examHeader}>
                 <h1 className={styles.examTitle}>{exam.title}</h1>
+                {exam.sources && exam.sources.length > 0 && (
+                  <div className={styles.examSources}>
+                    <span className={styles.examSourcesLabel}>חומרי הלימוד במבחן:</span>
+                    <ul className={styles.examSourcesList}>
+                      {exam.sources.map((label, i) => (
+                        <li key={i} className={styles.examSourceChip}>
+                          {label}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
                 {exam.isMcExam && (
                   <span className={styles.mcBadge}>
                     <ListChecks style={{ width: 14, height: 14 }} />

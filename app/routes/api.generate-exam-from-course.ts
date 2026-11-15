@@ -1,6 +1,7 @@
 import type OpenAI from "openai";
 import type { Route } from "./+types/api.generate-exam-from-course";
-import { courseContentFilter, getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { getOpenAIClient, getOrCreateVectorStore } from "~/lib/openai.server";
+import { examSourceLabels, readSourceIds, selectExamContent } from "~/lib/exam-sources.server";
 import { createServerClient } from "~/lib/supabase";
 import { requireSession } from "~/lib/auth.server";
 import { getSourcesByCourse } from "~/services/sources.service";
@@ -78,7 +79,8 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
 
 /**
  * Generates a new practice exam from the course's lectures and articles, in
- * the exact structure of a parsed past exam.
+ * the exact structure of a parsed past exam. An optional `sourceIds` limits the
+ * exam to the chosen lectures and articles.
  *
  * If no past exam of the course has been parsed yet, responds with
  * `{ ok: false, needsPastExamParse: <sourceId> }` (409). The client then
@@ -87,7 +89,9 @@ const SYSTEM_PROMPT = `אתה מחולל מבחנים אקדמיים מקצוע�
  * serverless function time limit.
  */
 export async function action({ request }: Route.ActionArgs) {
-  const { courseId } = (await request.json()) as { courseId: string };
+  const body = (await request.json()) as { courseId: string; sourceIds?: unknown };
+  const courseId = body.courseId;
+  const sourceIds = readSourceIds(body.sourceIds);
 
   if (!courseId) {
     return Response.json({ ok: false, error: "courseId is required" }, { status: 400 });
@@ -97,7 +101,7 @@ export async function action({ request }: Route.ActionArgs) {
   const student = { id: session.studentId };
 
   // ── 1. Sources and course name ──────────────────────────────────────────
-  const [pastExams, lectures, articles, courseName] = await Promise.all([
+  const [pastExams, allLectures, allArticles, courseName] = await Promise.all([
     getSourcesByCourse(student.id, courseId, "Past exam", request),
     getSourcesByCourse(student.id, courseId, "Lecture", request),
     getSourcesByCourse(student.id, courseId, "Article", request),
@@ -111,7 +115,7 @@ export async function action({ request }: Route.ActionArgs) {
     );
   }
 
-  if (lectures.length === 0 && articles.length === 0) {
+  if (allLectures.length === 0 && allArticles.length === 0) {
     return Response.json(
       { ok: false, error: "לא נמצאו הרצאות או מאמרים לקורס זה. העלה חומרי לימוד כדי שה-AI יוכל לבנות שאלות מהתוכן." },
       { status: 422 }
@@ -135,9 +139,24 @@ export async function action({ request }: Route.ActionArgs) {
     ? describeStructure(slots, reference.source.topic)
     : `מבנה מבחני העבר אינו זמין. בנה מבחן מאוזן בן 10 עד 15 שאלות שמשלב שאלות אמריקאיות (multiple_choice), נכון/לא נכון (true_false) ושאלות פתוחות (open), בסך הכול 100 נקודות.`;
 
-  // ── 3. Content files (lectures and articles only) ───────────────────────
+  // ── 3. Content files (the selected lectures and articles only) ──────────
   // The search is limited to them (see the file_search filter), so the model
   // can't copy past exam questions.
+  const client = getOpenAIClient();
+  const db = createServerClient(request);
+  const selection = await selectExamContent({
+    db,
+    studentId: student.id,
+    courseId,
+    lectures: allLectures,
+    articles: allArticles,
+    sourceIds,
+  });
+  if (!selection.ok) {
+    return Response.json({ ok: false, error: selection.error }, { status: 422 });
+  }
+  const { lectures, articles } = selection;
+
   const vectorStoreFileIds = [...lectures, ...articles]
     .map((s) => s.vector_store_file_id)
     .filter(Boolean) as string[];
@@ -159,16 +178,14 @@ ${contentList}
 אחזר את התוכן של כל אחד מחומרי הלימוד באמצעות file_search, ולאחר מכן בנה מבחן אימון חדש לפי המבנה שהוגדר לעיל.`;
 
   // ── 5. Call OpenAI ──────────────────────────────────────────────────────
-  const client = getOpenAIClient();
-  const db = createServerClient(request);
   const vectorStoreId = await getOrCreateVectorStore(db);
 
   const fileSearchTool: OpenAI.Responses.FileSearchTool = {
     type: "file_search",
     vector_store_ids: [vectorStoreId],
     max_num_results: 50,
-    // Lectures and articles only — never past exams or summary cards
-    filters: courseContentFilter(student.id, courseId),
+    // The selected lectures and articles only — never past exams or summary cards
+    filters: selection.filter,
   };
 
   let rawText: string;
@@ -231,6 +248,8 @@ ${contentList}
   if (!Array.isArray(exam.questions) || exam.questions.length === 0) {
     return Response.json({ ok: false, error: "המבחן שנוצר ריק — נסה שוב" }, { status: 500 });
   }
+
+  exam.sources = examSourceLabels(lectures, articles);
 
   // ── 7. Save to the exams list (awaited, so it isn't lost when the
   // serverless function ends) ─────────────────────────────────────────────

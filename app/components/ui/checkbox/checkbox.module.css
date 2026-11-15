@@ -19,12 +19,14 @@
   color: var(--color-neutral-10);
 }
 
-.root[data-state="checked"] {
+.root[data-state="checked"],
+.root[data-state="indeterminate"] {
   background: var(--color-accent-9);
   color: var(--color-accent-contrast);
 }
 
-.root[data-state="checked"]:disabled {
+.root[data-state="checked"]:disabled,
+.root[data-state="indeterminate"]:disabled {
   background-color: var(--color-accent-3);
   color: var(--color-neutral-10);
 }

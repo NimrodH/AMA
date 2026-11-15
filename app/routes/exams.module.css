@@ -63,6 +63,39 @@
   margin: 0 0 var(--space-2) 0;
 }
 
+.examSources {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0 0 var(--space-3) 0;
+}
+
+.examSourcesLabel {
+  font: var(--font-caption);
+  color: var(--color-neutral-10);
+}
+
+.examSourcesList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-2);
+}
+
+.examSourceChip {
+  font: var(--font-caption);
+  color: var(--color-accent-11);
+  background: var(--color-accent-3);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-2);
+  padding: 2px var(--space-2);
+  overflow-wrap: anywhere;
+}
+
 .examInstructions {
   font: var(--font-body);
   color: var(--color-neutral-11);
@@ -109,6 +142,23 @@
   background: var(--color-neutral-3);
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-2);
+  white-space: nowrap;
+}
+
+/* Phones: number and points on the first row, the question text below them at full width */
+@media (max-width: 480px) {
+  .questionHeader {
+    flex-wrap: wrap;
+  }
+
+  .questionPoints {
+    margin-inline-start: auto;
+  }
+
+  .questionText {
+    order: 1;
+    flex-basis: 100%;
+  }
 }
 
 .options {
@@ -472,6 +522,7 @@
 }
 
 .savedExamTitle {
+  min-width: 0;
   font: var(--font-body);
   font-weight: 600;
   color: var(--color-neutral-12);
@@ -515,7 +566,11 @@
 @media (max-width: 480px) {
   .savedExamCard {
     flex-direction: column;
-    align-items: flex-start;
+    align-items: stretch;
+  }
+  .savedExamTitle {
+    white-space: normal;
+    overflow-wrap: anywhere;
   }
   .savedExams {
     padding: var(--space-4);
