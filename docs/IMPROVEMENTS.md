@@ -72,6 +72,14 @@ Context: the high- and medium-priority fixes from the exam review are done (grad
 - **What:** generation takes 20–40 s behind a static "בונה מבחן..." message. Show steps (searching the material, writing questions, checking) or stream the response.
 - **Where:** `app/routes/exams.tsx` and the generation routes.
 
+## Features
+
+### F-1. Count a study session when the round is finished, not when it starts
+
+- **What:** the card study page adds one to the course's study-session count (`course_stats.learn_sessions`) each time the student presses "אתחול". Count it instead when the last card is removed from the temporary list (the moment "כל הכבוד סיימת שינון כל הכרטיסים" is shown), so the home page's "שינון כרטיסים" column counts completed rounds only.
+- **Where:** `startRound` and `studyLater` in `app/routes/learn.tsx` (the call to `/api/track-learn-session`); update the "What is and isn't saved" part of the card study section in `docs/FUNCTIONALITY.md`.
+- **Notes:** keep skipping "כל הקורסים" and guest accounts. Rounds that are restarted or left unfinished will no longer be counted at all.
+
 ## Other issues noticed
 
 ### O-1. Hydration mismatch on the home page course picker
