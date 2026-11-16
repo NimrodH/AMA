@@ -1,5 +1,5 @@
 import * as React from "react";
-import { Shuffle, Eye, Layers, ArrowRight } from "lucide-react";
+import { Shuffle, Eye, Layers, ArrowRight, RotateCcw, Repeat, CalendarClock, Trophy } from "lucide-react";
 import type { Route } from "./+types/learn";
 import { AppLayout } from "~/components/layout/app-layout";
 import { Button } from "~/components/ui/button/button";
@@ -10,6 +10,7 @@ import { readSelectedCourse, writeSelectedCourse } from "~/hooks/use-selected-co
 import { getCards } from "~/services/cards.service";
 import type { CardRow } from "~/services/cards.service";
 import { makeClientLoader } from "~/lib/client-auth-loader";
+import { authFetch } from "~/lib/auth-fetch";
 import { RichTextViewer } from "~/components/rich-text-viewer/rich-text-viewer";
 import { toEditorState } from "~/lib/lexical-utils";
 import styles from "./learn.module.css";
@@ -42,32 +43,44 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
     if (stored && courses.some((c) => c.course_id === stored)) return stored;
     return "__all__";
   });
-  const [currentCard, setCurrentCard] = React.useState<CardRow | null>(null);
-  const [showContent, setShowContent] = React.useState(false);
   const [orderMode, setOrderMode] = React.useState<"random" | "ordered">("random");
-  const [orderedIndex, setOrderedIndex] = React.useState(0);
+  // Temporary study list: null = not started yet, [] = finished, otherwise the first card is the current one
+  const [queue, setQueue] = React.useState<CardRow[] | null>(null);
+  const [showContent, setShowContent] = React.useState(false);
+  const [totalInRound, setTotalInRound] = React.useState(0);
+
+  const currentCard = queue && queue.length > 0 ? queue[0] : null;
+  const finished = queue !== null && queue.length === 0;
 
   const filteredCards = React.useMemo(
     () => (selectedCourse === "__all__" ? cards : cards.filter((c) => c.course_id === selectedCourse)),
     [selectedCourse, cards],
   );
 
-  const sortedCards = React.useMemo(() => {
-    if (orderMode !== "ordered") return filteredCards;
-    return [...filteredCards].sort((a, b) => {
-      if (a.card_number == null && b.card_number == null) return 0;
-      if (a.card_number == null) return 1;
-      if (b.card_number == null) return -1;
-      return Number(a.card_number) - Number(b.card_number);
-    });
-  }, [filteredCards, orderMode]);
+  const buildQueue = (): CardRow[] => {
+    if (orderMode === "ordered") {
+      return [...filteredCards].sort((a, b) => {
+        if (a.card_number == null && b.card_number == null) return 0;
+        if (a.card_number == null) return 1;
+        if (b.card_number == null) return -1;
+        return Number(a.card_number) - Number(b.card_number);
+      });
+    }
+    // Fisher-Yates shuffle
+    const shuffled = [...filteredCards];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
 
-  const pickNextCard = () => {
+  const startRound = () => {
     if (filteredCards.length === 0) return;
 
     // Track the session for the selected course (skip "all courses" mode and guest users)
     if (selectedCourse !== "__all__" && !isGuest) {
-      fetch("/api/track-learn-session", {
+      authFetch("/api/track-learn-session", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ courseId: selectedCourse }),
@@ -76,19 +89,9 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
       });
     }
 
-    if (orderMode === "ordered") {
-      const nextIndex = orderedIndex % sortedCards.length;
-      setCurrentCard(sortedCards[nextIndex]);
-      setOrderedIndex(nextIndex + 1);
-    } else {
-      // Avoid picking the same card twice in a row if possible
-      let pool = filteredCards;
-      if (pool.length > 1 && currentCard) {
-        pool = pool.filter((c) => c.id !== currentCard.id);
-      }
-      const randomIndex = Math.floor(Math.random() * pool.length);
-      setCurrentCard(pool[randomIndex]);
-    }
+    const next = buildQueue();
+    setQueue(next);
+    setTotalInRound(next.length);
     setShowContent(false);
   };
 
@@ -96,20 +99,34 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
     setShowContent(true);
   };
 
+  // "לשינון חוזר": move the current card to the end of the list
+  const studyAgain = () => {
+    setQueue((q) => (q && q.length > 0 ? [...q.slice(1), q[0]] : q));
+    setShowContent(false);
+  };
+
+  // "שינון בעתיד": remove the current card from the list
+  const studyLater = () => {
+    setQueue((q) => (q && q.length > 0 ? q.slice(1) : q));
+    setShowContent(false);
+  };
+
+  const resetRound = () => {
+    setQueue(null);
+    setShowContent(false);
+    setTotalInRound(0);
+  };
+
   const handleCourseChange = (value: string) => {
     setSelectedCourse(value);
     if (value !== "__all__") writeSelectedCourse(value);
-    setCurrentCard(null);
-    setShowContent(false);
-    setOrderedIndex(0);
+    resetRound();
     if (value === "__all__") setOrderMode("random");
   };
 
   const handleOrderModeChange = (value: "random" | "ordered") => {
     setOrderMode(value);
-    setCurrentCard(null);
-    setShowContent(false);
-    setOrderedIndex(0);
+    resetRound();
   };
 
   const courseName = React.useMemo(() => {
@@ -164,22 +181,47 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
             </div>
           )}
 
+          <Button
+            onClick={startRound}
+            disabled={filteredCards.length === 0}
+            variant={currentCard ? "outline" : "default"}
+            size="sm"
+            className={styles.startBtn}
+          >
+            <RotateCcw size={14} />
+            אתחול
+          </Button>
+
           <span className={styles.counter}>
-            {filteredCards.length > 0 ? `${filteredCards.length} כרטיסים זמינים` : "אין כרטיסים"}
+            {currentCard
+              ? `נותרו ${queue!.length} מתוך ${totalInRound} כרטיסים`
+              : filteredCards.length > 0
+                ? `${filteredCards.length} כרטיסים זמינים`
+                : "אין כרטיסים"}
           </span>
         </div>
 
-        {!currentCard ? (
+        {finished ? (
+          <div className={styles.doneState} role="status">
+            <div className={styles.confetti} aria-hidden="true">
+              {Array.from({ length: 24 }, (_, i) => (
+                <span key={i} className={styles.confettiPiece} style={{ "--i": i } as React.CSSProperties} />
+              ))}
+            </div>
+            <Trophy size={56} className={styles.doneIcon} />
+            <p className={styles.doneText}>כל הכבוד סיימת שינון כל הכרטיסים</p>
+          </div>
+        ) : !currentCard ? (
           <div className={styles.emptyState}>
             <Layers size={48} className={styles.emptyIcon} />
             <p className={styles.emptyText}>
               {filteredCards.length === 0
                 ? "אין כרטיסים זמינים — צור כרטיסים בעמוד כרטיסי סיכום"
-                : 'לחץ על "הצג כותרת" כדי להתחיל לתרגל'}
+                : 'לחץ על "אתחול" כדי להתחיל לשנן'}
             </p>
           </div>
         ) : (
-          <div className={styles.cardDisplay}>
+          <div key={`${currentCard.id}-${queue!.length}`} className={styles.cardDisplay}>
             <div className={styles.cardMeta}>
               {courseName && <span className={styles.metaChip}>{courseName}</span>}
               {currentCard.topic && <span className={styles.metaChip}>{currentCard.topic}</span>}
@@ -206,28 +248,24 @@ export default function Learn({ loaderData }: Route.ComponentProps) {
         )}
       </div>
       <div className={classNames(styles.myFooter, styles.div2)}>
-        <Button onClick={revealContent} disabled={!currentCard || showContent} className={styles.showContentBtn}>
-          <Eye size={16} />
-          הצג תוכן
-        </Button>
-        <Button
-          onClick={pickNextCard}
-          disabled={filteredCards.length === 0}
-          variant="outline"
-          className={styles.showTitleBtn}
-        >
-          {orderMode === "ordered" ? (
-            <>
-              <ArrowRight size={16} />
-              הבא
-            </>
-          ) : (
-            <>
-              <Shuffle size={16} />
-              הצג כותרת
-            </>
-          )}
-        </Button>
+        {currentCard && !showContent && (
+          <Button onClick={revealContent} className={styles.footerBtn}>
+            <Eye size={16} />
+            הצג תוכן
+          </Button>
+        )}
+        {currentCard && showContent && (
+          <>
+            <Button onClick={studyAgain} variant="outline" className={styles.footerBtn}>
+              <Repeat size={16} />
+              לשינון חוזר
+            </Button>
+            <Button onClick={studyLater} className={styles.footerBtn}>
+              <CalendarClock size={16} />
+              שינון בעתיד
+            </Button>
+          </>
+        )}
       </div>
     </AppLayout>
   );

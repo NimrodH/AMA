@@ -16,8 +16,13 @@
   min-width: 200px;
 }
 
-.showTitleBtn,
-.showContentBtn {
+.startBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.footerBtn {
   display: inline-flex;
   align-items: center;
   gap: var(--space-2);
@@ -194,4 +199,102 @@
   place-items: center;
   margin-bottom: var(--space-1);
   margin-top: var(--space-4);
+}
+
+.footerBtn + .footerBtn {
+  margin-right: 0;
+}
+
+/* Finished all cards */
+.doneState {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 260px;
+  padding: var(--space-6);
+  border: 1px solid var(--color-accent-6);
+  border-radius: var(--radius-4);
+  background: var(--color-accent-2);
+}
+
+.doneIcon {
+  color: var(--color-accent-10);
+  animation: done-pop 0.7s var(--ease-bounce-in-out, ease-out) both;
+}
+
+.doneText {
+  font: var(--font-heading);
+  color: var(--color-accent-11);
+  text-align: center;
+  margin: 0;
+  animation: done-rise 0.5s 0.3s var(--ease) both;
+}
+
+.confetti {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.confettiPiece {
+  position: absolute;
+  top: -12px;
+  left: calc(var(--i) * 4.1% + 1%);
+  width: 8px;
+  height: 14px;
+  border-radius: 2px;
+  opacity: 0;
+  background: hsl(calc(var(--i) * 47deg) 80% 60%);
+  animation: confetti-fall 1.8s calc(var(--i) * 0.05s) ease-in forwards;
+}
+
+@keyframes done-pop {
+  0% {
+    transform: scale(0) rotate(-30deg);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.25) rotate(10deg);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1) rotate(0);
+  }
+}
+
+@keyframes done-rise {
+  from {
+    transform: translateY(12px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0);
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(300px) rotate(calc(var(--i) * 70deg + 360deg));
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .doneIcon,
+  .doneText,
+  .confettiPiece {
+    animation: none;
+  }
+  .confettiPiece {
+    display: none;
+  }
 }
