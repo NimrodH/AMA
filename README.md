@@ -2,6 +2,11 @@
 - גרסה מפורסמת (`main`): https://acmaa.netlify.app/
 - גרסת פיתוח (`develop`): https://develop--acmaa.netlify.app/
 
+**מסמכים נוספים (`docs/`):**
+- [FUNCTIONALITY.md](docs/FUNCTIONALITY.md) – איך התכונות עובדות מנקודת המבט של הסטודנט
+- [IMPROVEMENTS.md](docs/IMPROVEMENTS.md) – שיפורים ותיקונים שהוצעו ועדיין לא בוצעו
+- [BACKUP.md](docs/BACKUP.md) – גיבוי לילי של Supabase ושחזור
+
 # מערכת ניהול לימודים עם בינה מלאכותית
 
 מערכת מתקדמת לניהול חומרי לימוד, כרטיסי סיכום ומבחנים עם תמיכה מלאה ב-AI.
